@@ -14,6 +14,7 @@ SETTING_SPECS генерируется из её полей, диапазоны 
 GuildSettings — она ловит кросс-полевые инварианты (пороги ↔ имена ролей,
 интервал находок min ≤ max, эксклюзивный порог)."""
 
+import json
 import logging
 from dataclasses import dataclass
 
@@ -32,9 +33,9 @@ from src.infrastructure.db.models.guild import GuildSettingModel
 
 logger = logging.getLogger(__name__)
 
-# сложные типы (списки/словари) через текстовый /config пока не редактируются —
-# им нужен отдельный UX (Шаг 6); скаляры доступны сразу
+# скаляры хранятся как str(value); списки/словари — как JSON
 _SCALAR_KINDS = frozenset({"int", "float", "bool", "channel"})
+_COMPLEX_KINDS = frozenset({"list", "dict"})
 
 # человекочитаемые подписи и единицы для /config; ключей без записи здесь нет,
 # но на всякий случай fallback — сам ключ
@@ -177,12 +178,15 @@ class GuildSettingsService(ISettingsProvider):
         async with self._session_factory() as session:
             rows = (await session.execute(select(GuildSettingModel))).scalars().all()
         for row in rows:
-            spec = SETTING_SPECS.get(row.key)
-            if spec is None:
-                continue  # ключ убрали из реестра / не скалярный — игнор
+            kind = KEY_KINDS.get(row.key)
+            if kind is None:
+                continue  # ключ убрали из реестра — игнор
             try:
-                value = spec.parse(row.value)
-            except ValueError:
+                if kind in _COMPLEX_KINDS:
+                    value = json.loads(row.value)  # списки/словари — JSON
+                else:
+                    value = SETTING_SPECS[row.key].parse(row.value)
+            except (ValueError, json.JSONDecodeError):
                 logger.warning("Некорректное значение настройки в БД", extra={"key": row.key})
                 continue
             self._cache.setdefault(row.guild_id, {})[row.key] = value
@@ -243,6 +247,33 @@ class GuildSettingsService(ISettingsProvider):
         self._resolved.pop(guild_id, None)
         return value
 
+    async def set_many(self, guild_id: int, values: dict[str, object]) -> None:
+        """Атомарно задаёт несколько переопределений (в т.ч. списки/словари).
+        Значения уже типизированы (list[int], list[str], dict...). Полная модель
+        валидируется целиком ОДИН раз — так связанные ключи (пороги ↔ имена
+        ролей) меняются согласованно; ValueError — если инвариант нарушен и
+        тогда ничего не сохраняется."""
+        merged = {**self._cache.get(guild_id, {}), **values}
+        self._build(merged)  # бросит ValueError на нарушении инварианта
+        async with self._session_factory() as session:
+            for key, value in values.items():
+                existing = (
+                    await session.execute(
+                        select(GuildSettingModel).where(
+                            GuildSettingModel.guild_id == guild_id,
+                            GuildSettingModel.key == key,
+                        )
+                    )
+                ).scalar_one_or_none()
+                raw = _serialize(key, value)
+                if existing is None:
+                    session.add(GuildSettingModel(guild_id=guild_id, key=key, value=raw))
+                else:
+                    existing.value = raw
+            await session.commit()
+        self._cache.setdefault(guild_id, {}).update(values)
+        self._resolved.pop(guild_id, None)
+
     async def reset(self, guild_id: int, key: str) -> bool:
         """Убирает переопределение — вернётся глобальный дефолт. False — его и не было."""
         async with self._session_factory() as session:
@@ -267,6 +298,13 @@ class GuildSettingsService(ISettingsProvider):
             return GuildSettings(**{**base, **overrides})
         except ValidationError as exc:
             raise ValueError(_first_error(exc)) from None
+
+
+def _serialize(key: str, value: object) -> str:
+    """Значение -> строка для БД: скаляры как str(), списки/словари как JSON."""
+    if KEY_KINDS.get(key) in _COMPLEX_KINDS:
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
 def _first_error(exc: ValidationError) -> str:

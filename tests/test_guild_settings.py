@@ -160,3 +160,48 @@ async def test_resolved_memoized_until_write(service):
     assert service.resolved(10) is first  # тот же объект (мемоизация)
     await service.set(10, "warn_threshold", "9")
     assert service.resolved(10) is not first  # сброшено после записи
+
+
+# --- set_many: списки/словари ----------------------------------------------
+
+
+async def test_set_many_lists_roundtrip(service, session_factory):
+    await service.load_all()
+    await service.set_many(
+        10,
+        {
+            "relationship_role_thresholds": [50, 150],
+            "relationship_role_names": ["a", "b", "c"],
+        },
+    )
+    assert service.resolved(10).points_policy().thresholds == (50, 150)
+    assert service.resolved(10).relationship_role_names == ["a", "b", "c"]
+    # переживает перезагрузку кэша (лежит в БД как JSON)
+    fresh = GuildSettingsService(make_settings(), session_factory)
+    await fresh.load_all()
+    assert fresh.resolved(10).points_policy().thresholds == (50, 150)
+    assert fresh.resolved(10).relationship_role_names == ["a", "b", "c"]
+
+
+async def test_set_many_dict_roundtrip(service, session_factory):
+    await service.load_all()
+    limits = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7}
+    await service.set_many(10, {"ai_rate_limits_by_level": limits})
+    fresh = GuildSettingsService(make_settings(), session_factory)
+    await fresh.load_all()
+    assert fresh.resolved(10).ai_rate_limits_by_level == limits
+
+
+async def test_set_many_atomic_reject_on_invariant(service):
+    await service.load_all()
+    # 2 порога требуют 3 имени; даём 2 — вся операция откатывается
+    with pytest.raises(ValueError, match="имён ролей"):
+        await service.set_many(
+            10,
+            {
+                "relationship_role_thresholds": [50, 150],
+                "relationship_role_names": ["a", "b"],
+            },
+        )
+    assert service.is_override(10, "relationship_role_thresholds") is False
+    assert service.is_override(10, "relationship_role_names") is False
