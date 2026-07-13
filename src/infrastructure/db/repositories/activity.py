@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ class SqlAlchemyMemberActivityRepository(IMemberActivityRepository):
         row = await self._session.get(MemberActivityModel, (user_id, guild_id))
         if row is None:
             return None
-        return row.last_message_at.replace(tzinfo=timezone.utc)
+        return row.last_message_at.replace(tzinfo=UTC)
 
     async def set_last_message(self, user_id: int, guild_id: int, at: datetime) -> None:
         naive = at.replace(tzinfo=None)
@@ -68,7 +68,7 @@ class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
     async def save_many(
         self, progress: dict[tuple[int, int], float], accrued_minutes: float = 0.0
     ) -> None:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         for (guild_id, user_id), minutes in progress.items():
             row = await self._session.get(VoiceProgressModel, (guild_id, user_id))
             if row is None:
@@ -115,7 +115,7 @@ class SqlAlchemyReminderRepository(IReminderRepository):
                 user_id=row.user_id,
                 guild_id=row.guild_id,
                 text=row.text,
-                due_at=row.due_at.replace(tzinfo=timezone.utc),
+                due_at=row.due_at.replace(tzinfo=UTC),
             )
             for row in rows
         ]

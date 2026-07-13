@@ -1,9 +1,7 @@
 """Прямые тесты SQL-репозиториев киноклуба на SQLite: вотчлист, голоса 👍/👎,
 ранжирование, киновечера с опросом, оценки 1–10 и агрегаты."""
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from src.domain.cinema.entities import MovieEntry, MovieNight
 from src.infrastructure.db.repositories.cinema import (
@@ -12,7 +10,7 @@ from src.infrastructure.db.repositories.cinema import (
     SqlAlchemyMovieRatingRepository,
 )
 
-NOW = datetime(2026, 7, 11, 20, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 20, 0, tzinfo=UTC)
 
 
 def make_entry(title, **over):

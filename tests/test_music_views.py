@@ -4,8 +4,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from src.domain.music.entities import LikedTrack, Track
 from src.infrastructure.discord.cogs.music.views import (
     LikedListView,

@@ -63,11 +63,11 @@ def build_root_container(settings: Settings) -> RootContainer:
         GetLeaderboardUseCase,
         GetRankUseCase,
         GetSecretCodeUseCase,
-        RecordDeepDialogUseCase,
-        SetBirthdayUseCase,
         IssueSecretCodeUseCase,
         PopExpiredSecretRoomsUseCase,
+        RecordDeepDialogUseCase,
         RegisterSecretRoomUseCase,
+        SetBirthdayUseCase,
         SetPointsUseCase,
         SetSurveyChoiceUseCase,
         ToggleFreezeUseCase,
@@ -161,10 +161,13 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
 
     # --- ai_chat (Groq) ---
+    from src.application.interfaces.ai_provider import IAIProvider
     from src.infrastructure.ai.circuit_breaker import CircuitBreakerAIProvider
     from src.infrastructure.ai.resilient import FallbackAIProvider, ResilientAIProvider
 
-    ai_provider = None
+    # тип по интерфейсу: переменную по очереди оборачивают retry -> fallback ->
+    # circuit breaker, каждый снова IAIProvider
+    ai_provider: IAIProvider | None = None
     chat_service = None
     if settings.groq_api_key:
         prompt_path = Path(settings.ai_prompt_path)
@@ -231,7 +234,6 @@ def build_root_container(settings: Settings) -> RootContainer:
         SavePlaylistUseCase,
         ToggleLikeUseCase,
     )
-
     from src.infrastructure.audio.cache import AudioCache
 
     audio_cache = (

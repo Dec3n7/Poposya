@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord.ext import commands
@@ -110,7 +110,7 @@ class ActivityCog(commands.Cog):
                 text = await self.chat.freeform_remark(
                     f"На сервер пришёл новый участник — {member.display_name}. "
                     "Поприветствуй его в своём стиле: сдержанно, с лёгкой иронией, без сюсюканья.",
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     mood=self.mood.get(member.guild.id),
                 )
             except Exception:
@@ -128,7 +128,7 @@ class ActivityCog(commands.Cog):
                 text = await self.chat.freeform_remark(
                     f"Участник {member.display_name} покинул сервер. "
                     "Попрощайся одной фразой в своём стиле — сухо, без драмы.",
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     mood=self.mood.get(member.guild.id),
                 )
             except Exception:
@@ -161,7 +161,7 @@ class ActivityCog(commands.Cog):
 
         try:
             touch = await self.container.touch_activity.execute(
-                message.author.id, message.guild.id, datetime.now(timezone.utc)
+                message.author.id, message.guild.id, datetime.now(UTC)
             )
         except Exception:
             logger.exception("Не удалось обновить активность участника")
@@ -177,7 +177,7 @@ class ActivityCog(commands.Cog):
                     f"Участник {message.author.display_name} впервые написал после "
                     f"{touch.days_absent} дней отсутствия. Отметь его возвращение одной "
                     "фразой в своём стиле: заметила, но без сцен.",
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     mood=self.mood.get(message.guild.id),
                 )
                 await message.channel.send(
@@ -227,9 +227,7 @@ class ActivityCog(commands.Cog):
             return
 
         # дедупликация в БД: одно сообщение — одна публикация, рестарт не обнуляет
-        if not await self.container.try_mark_album.execute(
-            guild.id, message.id, datetime.now(timezone.utc)
-        ):
+        if not await self.container.try_mark_album.execute(guild.id, message.id, datetime.now(UTC)):
             return
 
         caption = random.choice(_FALLBACK_ALBUM_CAPTIONS)
@@ -240,7 +238,7 @@ class ActivityCog(commands.Cog):
                     f"{max(counts)} реакций и попадает в твой «Альбом» — коллекцию лучших "
                     f"моментов сервера. Текст сообщения: «{message.content[:300]}». "
                     "Подпиши экспонат одной фразой в своём кураторском стиле.",
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     mood=self.mood.get(guild.id),
                 )
             except Exception:
@@ -311,7 +309,7 @@ class ActivityCog(commands.Cog):
             await asyncio.sleep(1800)
 
     async def _calendar_tick(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # праздник: объявление раз в день + подъём настроения
         holiday = self.calendar.holiday_name(now.date())
@@ -379,7 +377,7 @@ class ActivityCog(commands.Cog):
                     generated = await self.chat.freeform_remark(
                         f"Сегодня день рождения у участника {name}. Поздравь его в своём "
                         "стиле — тепло, но без пафоса и открыточных штампов.",
-                        datetime.now(timezone.utc),
+                        datetime.now(UTC),
                         mood=self.mood.get(guild_id),
                     )
                     text = f"🎂 <@{user_id}> — {generated}"
@@ -409,7 +407,7 @@ class ActivityCog(commands.Cog):
                 logger.exception("Ошибка начисления очков за войс")
 
     async def _voice_points_tick(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         changed: dict[tuple[int, int], float] = {}
         for guild in self.bot.guilds:
             per_hour = self._cfg(guild.id, "voice_points_per_hour")
@@ -472,7 +470,7 @@ class ActivityCog(commands.Cog):
                         f"В канале уже больше {lonely_hours} часов никто не пишет. "
                         "Напиши одну реплику в пустоту в своём стиле — тебе слегка не хватает "
                         "этих людей, но признаваться в этом прямо ты не станешь.",
-                        datetime.now(timezone.utc),
+                        datetime.now(UTC),
                         mood=self.mood.get(guild.id),
                     )
                     await self._send(self._main_channel(guild), text)
@@ -496,7 +494,7 @@ class ActivityCog(commands.Cog):
                         "Напиши одну случайную мысль или наблюдение в своём характере — "
                         "про дождь, кофе, работу над артом, игры, Токио. Как будто просто "
                         "захотелось сказать вслух. Без обращения к кому-то конкретному.",
-                        datetime.now(timezone.utc),
+                        datetime.now(UTC),
                         mood=self.mood.get(guild.id),
                     )
                     await self._send(self._main_channel(guild), text)

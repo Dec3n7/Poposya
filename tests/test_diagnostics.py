@@ -4,11 +4,9 @@
 import logging
 
 import aiohttp
-import pytest
 
 from src.config import Settings
 from src.infrastructure.diagnostics import (
-    ProbeResult,
     _db_label,
     log_boot_summary,
     probe_dependencies,

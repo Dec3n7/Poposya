@@ -3,7 +3,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
 from discord import app_commands
 
 from src.infrastructure.discord.error_handler import (

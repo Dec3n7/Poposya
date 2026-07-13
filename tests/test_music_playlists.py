@@ -1,7 +1,7 @@
 """Playlist use-cases поверх реального UoW+SQLite (покрывает и music-репозиторий)
 плюс доменные свойства Track/LikedTrack."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.application.music.use_cases import (
     DeletePlaylistUseCase,
@@ -11,7 +11,7 @@ from src.application.music.use_cases import (
 )
 from src.domain.music.entities import LikedTrack, Track
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def make_track(vid, title=None):

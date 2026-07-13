@@ -5,11 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 from aiohttp.test_utils import make_mocked_request
 
-from src.infrastructure.discord.voice import DiscordVoiceConnection
 from src.infrastructure.discord.role_sync import RoleSyncService
+from src.infrastructure.discord.voice import DiscordVoiceConnection
 from src.infrastructure.web.app import HealthChecker, create_web_app
 
 

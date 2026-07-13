@@ -2,7 +2,7 @@
 сообщения (ответ/оскорбление/ошибка) и комментарий к включённому треку."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock
 
@@ -15,9 +15,8 @@ from src.domain.ai_chat.exceptions import AIProviderError
 from src.domain.music.events import TrackStarted
 from src.infrastructure.discord.cogs.ai_chat import AIChatCog
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
-from tests.cog_fakes import forbidden
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 class Typing:

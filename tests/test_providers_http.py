@@ -4,16 +4,15 @@ LRCLIB, TMDB, Кинопоиск + фолбэк-поиск фильмов."""
 import aiohttp
 import pytest
 
-from tests.aiohttp_fakes import FakeResponse, FakeSession, patch_session
-
-from src.domain.ai_chat.exceptions import AIProviderError
 from src.application.interfaces.ai_provider import ChatMessage
+from src.domain.ai_chat.exceptions import AIProviderError
 from src.infrastructure.ai.groq_provider import GroqAIProvider
-from src.infrastructure.audio.spotify import SpotifyLinkResolver
 from src.infrastructure.audio.lyrics import LrclibLyricsClient
-from src.infrastructure.cinema.tmdb import TmdbClient
+from src.infrastructure.audio.spotify import SpotifyLinkResolver
 from src.infrastructure.cinema.kinopoisk import KinopoiskClient
 from src.infrastructure.cinema.provider import FallbackMovieSearch, MovieInfo
+from src.infrastructure.cinema.tmdb import TmdbClient
+from tests.aiohttp_fakes import FakeResponse, FakeSession, patch_session
 
 MSGS = [ChatMessage(role="user", content="привет")]
 

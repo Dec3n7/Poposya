@@ -1,11 +1,9 @@
 """FindsCog: хелперы, отслеживание активности, кнопка «Сходить туда» во всех
 исходах, команды /finds /collection /gift (+autocomplete) /walk."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-
-import pytest
 
 from src.application.ai_chat.mood import MoodTracker
 from src.application.finds.use_cases import (
@@ -16,11 +14,11 @@ from src.application.finds.use_cases import (
     WalkResult,
 )
 from src.domain.finds import catalog
-from src.domain.finds.entities import NightFind, Rarity
+from src.domain.finds.entities import NightFind
 from src.infrastructure.discord.cogs.finds import FindsCog, _ts
 from tests.cog_fakes import make_interaction
 
-NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 22, 0, tzinfo=UTC)
 COMMON = catalog.get_item("postcard_90s")  # COMMON
 LEGENDARY = catalog.get_item("unsent_letter")  # LEGENDARY
 
@@ -87,8 +85,9 @@ def test_announce_channel_by_name():
 
 
 def test_announce_channel_prefers_config_id():
-    import discord
     from unittest.mock import MagicMock as MM
+
+    import discord
 
     gs = MM()
     gs.get = MM(return_value=555)  # /config finds_channel_id

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -82,7 +82,7 @@ class CinemaCog(commands.Cog):
             old.cancel()
 
         async def run() -> None:
-            delay = (when - datetime.now(timezone.utc)).total_seconds()
+            delay = (when - datetime.now(UTC)).total_seconds()
             if delay > 0:
                 await asyncio.sleep(delay)
             try:
@@ -183,7 +183,7 @@ class CinemaCog(commands.Cog):
             guild_id=interaction.guild_id,
             title=info.title,
             added_by=interaction.user.id,
-            added_at=datetime.now(timezone.utc),
+            added_at=datetime.now(UTC),
             tmdb_id=info.tmdb_id or None,
             year=info.year,
             overview=info.overview,
@@ -319,7 +319,7 @@ class CinemaCog(commands.Cog):
         if not movie.isdigit():
             await interaction.followup.send("Выбери фильм из подсказок.", ephemeral=True)
             return
-        entry = await self.cinema.open_rating.execute(int(movie), datetime.now(timezone.utc))
+        entry = await self.cinema.open_rating.execute(int(movie), datetime.now(UTC))
         if entry is None:
             await interaction.followup.send(
                 "Этот фильм не в вотчлисте или уже оценивается.", ephemeral=True
@@ -381,7 +381,7 @@ class CinemaCog(commands.Cog):
             result += timedelta(days=1)  # «в 20:00», а уже вечер — значит завтра
         elif result <= now_local:
             return None
-        return result.astimezone(timezone.utc)
+        return result.astimezone(UTC)
 
     @night_group.command(name="start", description="Устроить киновечер: опрос по топу вотчлиста")
     @app_commands.describe(
@@ -393,7 +393,7 @@ class CinemaCog(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         when = self._parse_when(day, time)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if when is None or when < now + timedelta(minutes=15):
             await interaction.followup.send(
                 "Не поняла время. Форматы: `20:30`, `завтра 19:00`, `12.07 21:00`; "
@@ -469,7 +469,7 @@ class CinemaCog(commands.Cog):
             interaction.message.id,
             interaction.user.id,
             entry_id,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
         if status == "closed":
             await interaction.followup.send("Голосование уже закрыто.", ephemeral=True)
@@ -517,7 +517,7 @@ class CinemaCog(commands.Cog):
                     f"просмотра: «{winner.title}»"
                     + (f" ({winner.year})" if winner.year else "")
                     + ". Прокомментируй выбор одной-двумя фразами в своём стиле.",
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     mood=self.mood.get(night.guild_id),
                 )
             except Exception:
@@ -570,7 +570,7 @@ class CinemaCog(commands.Cog):
     async def handle_begin_rating(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         entry = await self.cinema.open_rating.execute_by_winner_message(
-            interaction.message.id, datetime.now(timezone.utc)
+            interaction.message.id, datetime.now(UTC)
         )
         if entry is None:
             await interaction.followup.send(
@@ -615,7 +615,7 @@ class CinemaCog(commands.Cog):
 
     async def handle_rate(self, interaction: discord.Interaction, score: int) -> None:
         await interaction.response.defer(ephemeral=True)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.cinema.rate_movie.execute(
             interaction.message.id, interaction.user.id, score, now
         )
@@ -646,7 +646,7 @@ class CinemaCog(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         result = await self.cinema.review_movie.execute(
-            rating_message_id, interaction.user.id, text, datetime.now(timezone.utc)
+            rating_message_id, interaction.user.id, text, datetime.now(UTC)
         )
         if result.status == "closed":
             await interaction.followup.send("Сбор оценок уже закрыт.", ephemeral=True)
@@ -674,7 +674,7 @@ class CinemaCog(commands.Cog):
                 + ". Ты тоже смотрела. Ответь СТРОГО в формате «N/10 — комментарий», "
                 "где N — твоя оценка от 1 до 10, а комментарий — одна колкая "
                 "фраза-рецензия в твоём стиле.",
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
                 mood=self.mood.get(guild_id),
             )
         except Exception:
@@ -691,7 +691,7 @@ class CinemaCog(commands.Cog):
         score, review = await self._poposya_verdict(entry, entry.guild_id)
         result = await self.cinema.finalize_rating.execute(
             entry_id,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
             poposya_score=score,
             poposya_review=review,
         )

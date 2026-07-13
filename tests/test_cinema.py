@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -21,7 +21,7 @@ from src.domain.cinema.repository import (
     IMovieRatingRepository,
 )
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def make_entry(title: str, guild_id: int = 10, tmdb_id: int | None = None) -> MovieEntry:

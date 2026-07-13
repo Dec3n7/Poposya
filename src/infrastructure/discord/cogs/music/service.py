@@ -53,7 +53,7 @@ class MusicPlayerService:
         self._empty_grace: dict[int, asyncio.Task] = {}  # таймеры выхода из пустого войса
         self._presence_name: str | None = None  # что сейчас в статусе бота
         # внедряется композицией (MusicCog) после создания:
-        self.radio: "RadioService | None" = None
+        self.radio: RadioService | None = None
         self.prefetch_lyrics: Callable[[Track], None] | None = None
         self.view_factory: Callable[[], discord.ui.View] | None = None
 

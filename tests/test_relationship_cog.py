@@ -4,8 +4,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from src.application.relationship.use_cases import LeaderboardEntry, RankInfo
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
 from src.infrastructure.discord.cogs.relationship import RelationshipCog

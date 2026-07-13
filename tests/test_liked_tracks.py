@@ -1,5 +1,4 @@
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -15,7 +14,7 @@ from src.domain.music.entities import LikedTrack, Track
 from src.domain.music.exceptions import TrackResolveError
 from src.domain.music.repository import ILikedTrackRepository
 
-NOW = datetime(2026, 7, 10, 22, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 10, 22, 0, tzinfo=UTC)
 
 
 def make_track(video_id: str, title: str = "Song") -> Track:

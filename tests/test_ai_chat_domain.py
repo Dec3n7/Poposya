@@ -7,7 +7,6 @@ from src.application.ai_chat.mood import MoodTracker
 from src.domain.ai_chat.exceptions import AIChatError, AIProviderError
 from src.domain.ai_chat.prompt import PromptTemplate
 
-
 # --- MoodTracker ------------------------------------------------------------
 
 

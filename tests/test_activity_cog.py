@@ -1,19 +1,17 @@
 """ActivityCog: каналы/отправка, приветствия/прощания, активность главного
 канала и возвращение, «Альбом», календарный и войс-тик."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
-from src.application.ai_chat.mood import MoodTracker
 from src.application.activity.use_cases import ActivityTouch
+from src.application.ai_chat.mood import MoodTracker
 from src.application.relationship.use_cases import BirthdayEvents, DecayResult, RankInfo, SurveyData
 from src.infrastructure.discord.cogs.activity import ActivityCog
 from tests.cog_fakes import make_member
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def make_settings(**over):
@@ -323,9 +321,6 @@ async def test_calendar_tick_announces_holiday():
     cog.bot.get_guild.return_value = guild
 
     # monkeypatch календарь на «сегодня праздник»
-    import src.infrastructure.discord.cogs.activity as mod
-
-    orig = cog.calendar.holiday_name
     cog.calendar = SimpleNamespace(holiday_name=lambda d: "Праздник")
     await cog._calendar_tick()
     main.send.assert_awaited()  # объявлен праздник

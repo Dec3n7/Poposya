@@ -1,7 +1,7 @@
 """Тесты сценариев модерации поверх реального UoW+SQLite: варны с порогом
 мута, temp-бан с заменой и истечением."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from src.application.moderation.use_cases import (
     ClearWarnsUseCase,
@@ -13,7 +13,7 @@ from src.application.moderation.use_cases import (
     WarnUserUseCase,
 )
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 async def test_warn_accumulates_and_lists(uow_factory):

@@ -1,18 +1,16 @@
 """FunCog: кости (одиночные/дуэль), монетка, тема, профиль (+витрина/бар/
 last_seen), день рождения, правила, статистика, /send, /remind."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-
-import pytest
 
 from src.application.relationship.use_cases import RankInfo, SurveyData
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.discord.cogs.fun import FunCog
 from tests.cog_fakes import forbidden, make_interaction, make_member
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def make_rank(**over):
@@ -144,9 +142,9 @@ def test_relationship_bar_partial():
 def test_last_seen_variants():
     cog = make_cog()
     assert "ни разу" in cog._last_seen(None)
-    assert "сегодня" in cog._last_seen(datetime.now(timezone.utc))
-    assert "вчера" in cog._last_seen(datetime.now(timezone.utc) - timedelta(days=1))
-    assert "3 дн" in cog._last_seen(datetime.now(timezone.utc) - timedelta(days=3))
+    assert "сегодня" in cog._last_seen(datetime.now(UTC))
+    assert "вчера" in cog._last_seen(datetime.now(UTC) - timedelta(days=1))
+    assert "3 дн" in cog._last_seen(datetime.now(UTC) - timedelta(days=3))
 
 
 # --- profile ----------------------------------------------------------------
@@ -186,7 +184,6 @@ async def test_profile_showcase_includes_voice_hours():
     activity = make_activity()
     activity.get_voice_hours.execute.return_value = 3.5
     cog = make_cog(activity=activity)
-    interaction = make_interaction()
     target = make_member(uid=1)
     target.display_avatar = SimpleNamespace(url="http://a")
     lines = await cog._build_showcase(10, 1)

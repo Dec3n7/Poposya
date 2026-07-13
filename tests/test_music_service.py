@@ -4,10 +4,8 @@ cleanup) и RadioService — с фейками discord/контейнера, б�
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from src.application.music.player import GuildPlayer
-from src.domain.music.entities import RepeatMode, Track
+from src.domain.music.entities import Track
 from src.infrastructure.discord.cogs.music.radio import RadioService
 from src.infrastructure.discord.cogs.music.service import MusicPlayerService
 from src.infrastructure.discord.cogs.music.session import GuildMusicSession

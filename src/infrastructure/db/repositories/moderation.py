@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ class SqlAlchemyWarnRepository(IWarnRepository):
                 user_id=row.user_id,
                 moderator_id=row.moderator_id,
                 reason=row.reason,
-                created_at=row.created_at.replace(tzinfo=timezone.utc),
+                created_at=row.created_at.replace(tzinfo=UTC),
             )
             for row in rows
         ]
@@ -63,7 +63,7 @@ def _ban_to_domain(row: TempBanModel) -> TempBan:
         user_id=row.user_id,
         moderator_id=row.moderator_id,
         reason=row.reason,
-        expires_at=row.expires_at.replace(tzinfo=timezone.utc),
+        expires_at=row.expires_at.replace(tzinfo=UTC),
     )
 
 

@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.domain.relationship.entities import RelationshipProfile
 from src.infrastructure.db.models.base import Base
 from src.infrastructure.db.repositories.relationship import SqlAlchemyRelationshipRepository
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -20,7 +19,7 @@ async def session_factory(tmp_path):
 
 
 async def test_roundtrip(session_factory):
-    now = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 8, 12, 0, tzinfo=UTC)
     async with session_factory() as session:
         repo = SqlAlchemyRelationshipRepository(session)
         profile = await repo.get_or_create(1, 10)
@@ -61,8 +60,9 @@ async def test_exclusive_holder_lookup(session_factory):
 
 
 async def test_uow_publishes_events_only_after_commit(session_factory):
-    from src.domain.events.base import DomainEvent
     from dataclasses import dataclass
+
+    from src.domain.events.base import DomainEvent
 
     @dataclass(frozen=True, kw_only=True)
     class Ping(DomainEvent):

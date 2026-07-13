@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import discord
 from discord import app_commands
@@ -20,7 +20,7 @@ _UNBAN_CHECK_INTERVAL = 30
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ModerationCog(commands.Cog):
@@ -457,7 +457,7 @@ class ModerationCog(commands.Cog):
                 await user.move_to(channel, reason="/rage")
                 await asyncio.sleep(1)
             await interaction.guild.kick(user, reason=f"/rage — {interaction.user}")
-            await interaction.channel.send(f"Вышвырнула. Пусть подумает о своём поведении. ✂️👁🖤")
+            await interaction.channel.send("Вышвырнула. Пусть подумает о своём поведении. ✂️👁🖤")
             await self._log(interaction.guild, f"😤 /rage: {user} кикнут — {interaction.user}")
         except discord.Forbidden:
             await interaction.channel.send(

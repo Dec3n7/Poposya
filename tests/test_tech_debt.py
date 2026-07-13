@@ -1,7 +1,7 @@
 """Техдолг: бэкап SQLite, Outbox критичных событий, персист войс-минут."""
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -21,7 +21,7 @@ from src.infrastructure.events.outbox import (
     serialize_event,
 )
 
-NOW = datetime(2026, 7, 10, 23, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 10, 23, 0, tzinfo=UTC)
 
 
 @pytest.fixture

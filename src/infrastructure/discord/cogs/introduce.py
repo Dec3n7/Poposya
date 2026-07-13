@@ -1,6 +1,6 @@
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord import app_commands
@@ -152,7 +152,7 @@ class SurveyView(discord.ui.View):
 
     async def _on_done(self, interaction: discord.Interaction) -> None:
         result = await self.container.complete_survey.execute(
-            interaction.user.id, interaction.guild_id, datetime.now(timezone.utc)
+            interaction.user.id, interaction.guild_id, datetime.now(UTC)
         )
         lines = [random.choice(_DONE_REPLIES)]
         survey = result.survey

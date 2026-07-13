@@ -2,20 +2,19 @@
 чистые функции lyrics (clean_track_title/build_queries/parse_lrc/group_blocks)."""
 
 import time
-from pathlib import Path
 
 import pytest
 
 from src.domain.music.entities import Track
 from src.domain.music.exceptions import TrackResolveError
 from src.infrastructure.audio.cache import AudioCache
-from src.infrastructure.audio.ytdlp_source import YtDlpAudioSource
 from src.infrastructure.audio.lyrics import (
     build_queries,
     clean_track_title,
     group_blocks,
     parse_lrc,
 )
+from src.infrastructure.audio.ytdlp_source import YtDlpAudioSource
 
 
 def make_track(video_id="abc", duration=180):

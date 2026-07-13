@@ -1,11 +1,9 @@
 """SecretRoomCog: /secret (показ/выдача/валидация ключа, создание комнаты) и
 выдача ключа при пересечении порога уровня."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-
-import pytest
 
 from src.application.relationship.use_cases import RankInfo, RedeemCheck
 from src.domain.relationship.entities import SecretCode
@@ -14,7 +12,7 @@ from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from tests.cog_fakes import forbidden, make_interaction
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def make_settings(**over):

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class SqliteBackupService:
         if self._db_path is None or not self._db_path.exists():
             return None
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         target = self.backup_dir / f"{self._db_path.stem}-{stamp}.db"
         source = sqlite3.connect(str(self._db_path))
         try:

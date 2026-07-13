@@ -4,8 +4,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from src.application.relationship.use_cases import SurveyCompleteResult, SurveyData
 from src.infrastructure.discord.cogs.introduce import IntroduceCog, SurveyView
 from tests.cog_fakes import make_interaction

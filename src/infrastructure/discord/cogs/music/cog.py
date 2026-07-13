@@ -4,7 +4,7 @@
 аргументов команд и ответы пользователю."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord import app_commands
@@ -573,7 +573,7 @@ class MusicCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         track = player.current
         status = await self.container.toggle_like.execute(
-            interaction.user.id, track, datetime.now(timezone.utc)
+            interaction.user.id, track, datetime.now(UTC)
         )
         replies = {
             "liked": f"❤️ В твоих лайках: **{trim(track.title, 100)}** — `/liked`",

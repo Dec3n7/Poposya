@@ -178,7 +178,7 @@ class StartMovieNightUseCase:
                     created_by=created_by,
                     scheduled_at=scheduled_at,
                     poll_ends_at=poll_ends,
-                    candidate_ids=[e.id for e in candidates],
+                    candidate_ids=[e.id for e in candidates if e.id is not None],
                 )
             )
             await uow.commit()

@@ -7,7 +7,6 @@ from src.config import Settings
 from src.infrastructure.guild_settings import (
     SETTING_SPECS,
     GuildSettingsService,
-    SettingSpec,
 )
 
 

@@ -1,14 +1,12 @@
 """Прямые тесты SQL-репозитория лайкнутых треков на SQLite (фейки в
 test_liked_tracks не задевают реальный репозиторий)."""
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from src.domain.music.entities import LikedTrack
 from src.infrastructure.db.repositories.music import SqlAlchemyLikedTrackRepository
 
-NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 22, 0, tzinfo=UTC)
 
 
 def make_liked(video_id, title="Song", at=NOW):

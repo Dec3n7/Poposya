@@ -2,22 +2,20 @@
 сборка системного/пользовательского промпта, комментарии на события, заметки."""
 
 import asyncio
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from src.application.ai_chat.service import (
+    _BRUSH_OFFS,
     AIQueue,
     ChatReply,
     ChatRequest,
     ChatService,
-    _BRUSH_OFFS,
 )
 from src.application.relationship.use_cases import AwardResult, RankInfo, SurveyData
 from src.domain.ai_chat.prompt import PromptTemplate
 from src.domain.shared.holidays import HolidayCalendar
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 ROLE_NAMES = ["Знакомый", "Приятель", "Друг", "Близкий", "Дорогой", "Особенный", "Единственный"]
 TEMPLATE = PromptTemplate(

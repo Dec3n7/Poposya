@@ -2,8 +2,6 @@
 
 import asyncio
 
-import pytest
-
 from src.domain.music.entities import Track
 from src.infrastructure.discord.cogs.music.formatting import (
     block_index,
@@ -13,7 +11,6 @@ from src.infrastructure.discord.cogs.music.formatting import (
 )
 from src.infrastructure.discord.cogs.music.lyrics import LyricsService
 from src.infrastructure.discord.cogs.music.session import GuildMusicSession
-
 
 # --- форматирование ---
 

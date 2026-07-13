@@ -1,7 +1,7 @@
 """Тесты активности поверх реального UoW+SQLite: возвращение после отсутствия,
 напоминания, войс-минуты, дедуп альбомных постов."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from src.application.activity.use_cases import (
     AddReminderUseCase,
@@ -13,7 +13,7 @@ from src.application.activity.use_cases import (
     TryMarkAlbumPostUseCase,
 )
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 async def test_first_touch_not_a_return(uow_factory):

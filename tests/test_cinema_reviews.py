@@ -1,14 +1,9 @@
 """Отзывы зрителей к фильмам: SQL-репозиторий (балл + текст, отзыв без балла)
 и use-cases ReviewMovie / GetMovieReviews поверх реального UoW."""
 
-from datetime import datetime, timezone
-
-import pytest
-
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from src.application.cinema.use_cases import (
-    GetMovieRatingsUseCase,
     GetMovieReviewsUseCase,
     OpenRatingUseCase,
     RateMovieUseCase,
@@ -16,11 +11,10 @@ from src.application.cinema.use_cases import (
 )
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.db.repositories.cinema import (
-    SqlAlchemyMovieEntryRepository,
     SqlAlchemyMovieRatingRepository,
 )
 
-NOW = datetime(2026, 7, 11, 20, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 20, 0, tzinfo=UTC)
 
 
 def make_entry(**over):
@@ -142,7 +136,7 @@ async def test_review_use_case_unknown_message(uow_factory):
 
 
 async def test_rate_result_reports_review_count(uow_factory):
-    entry = await _seed_rating_entry(uow_factory)
+    await _seed_rating_entry(uow_factory)
     await ReviewMovieUseCase(uow_factory).execute(500, 1, "отзыв", NOW)
     # оценка тем же сообщением видит и число отзывов
     rate = await RateMovieUseCase(uow_factory).execute(500, 2, 9, NOW)

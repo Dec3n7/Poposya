@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import time
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine
 
@@ -242,7 +241,6 @@ class LyricsService:
         refresh = float(max(5, self._settings.music_progress_interval))
         offset = self._settings.music_lyrics_offset
         ansi = self._ansi_enabled(guild_id)
-        last_edit = time.monotonic()  # стартовое сообщение только что отправлено
         try:
             while True:
                 session = self._get_session(guild_id)
@@ -274,7 +272,6 @@ class LyricsService:
                     # обновить сообщение в сессии — stop_karaoke удалит актуальное
                     if session is not None and session.karaoke_task is asyncio.current_task():
                         session.karaoke_message = message
-                    last_edit = time.monotonic()
                 index = block_index(blocks, player.elapsed_precise() + offset)
                 # правим сообщение ТОЛЬКО при смене абзаца — иначе чат дёргается
                 # от постоянных обновлений таймера (караоке про текст, не про часы)
@@ -290,7 +287,6 @@ class LyricsService:
                         return
                     except discord.HTTPException:
                         logger.warning("Караоке-сообщение не обновилось", exc_info=True)
-                    last_edit = time.monotonic()
                 if player.is_paused or index + 1 >= len(blocks):
                     delay = refresh
                 else:

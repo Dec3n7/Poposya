@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -22,7 +22,7 @@ from src.domain.relationship.entities import RelationshipProfile
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.domain.relationship.repository import IRelationshipRepository
 
-NOW = datetime(2026, 7, 10, 21, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 10, 21, 0, tzinfo=UTC)
 
 
 class ForcedRng(random.Random):

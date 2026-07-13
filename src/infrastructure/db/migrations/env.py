@@ -3,8 +3,6 @@ import asyncio
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from src.config import Settings
-from src.infrastructure.db.models.base import Base
 import src.infrastructure.db.models.activity  # noqa: F401 — регистрация моделей
 import src.infrastructure.db.models.cinema  # noqa: F401
 import src.infrastructure.db.models.finds  # noqa: F401
@@ -13,6 +11,8 @@ import src.infrastructure.db.models.moderation  # noqa: F401
 import src.infrastructure.db.models.music  # noqa: F401
 import src.infrastructure.db.models.outbox  # noqa: F401
 import src.infrastructure.db.models.relationship  # noqa: F401
+from src.config import Settings
+from src.infrastructure.db.models.base import Base
 
 target_metadata = Base.metadata
 

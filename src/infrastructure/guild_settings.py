@@ -48,7 +48,7 @@ class SettingSpec:
         try:
             value = int(raw)
         except ValueError:
-            raise ValueError("нужно целое число")
+            raise ValueError("нужно целое число") from None
         if self.min is not None and value < self.min:
             raise ValueError(f"минимум {self.min}")
         if self.max is not None and value > self.max:

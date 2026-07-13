@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord import app_commands
@@ -167,7 +167,7 @@ class FindsCog(commands.Cog):
     async def _restore_live_finds(self) -> None:
         """После рестарта: заново запланировать «протухание» живых находок."""
         try:
-            live = await self.finds.list_live_finds.execute(datetime.now(timezone.utc))
+            live = await self.finds.list_live_finds.execute(datetime.now(UTC))
             for find in live:
                 self._schedule_expiry(find)
         except Exception:
@@ -206,7 +206,7 @@ class FindsCog(commands.Cog):
         # плохое настроение — может и не поделиться находкой (форс игнорирует)
         if not force and mood <= 30 and self._rng.random() < 0.5:
             return None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         holiday = self._holiday_key(now)
         result = await self.finds.spawn_find.execute(
             guild.id,
@@ -256,10 +256,10 @@ class FindsCog(commands.Cog):
         task.add_done_callback(lambda _: self._expiry_tasks.pop(find.id, None))
 
     async def _expire_later(self, find: NightFind) -> None:
-        delay = (find.expires_at - datetime.now(timezone.utc)).total_seconds()
+        delay = (find.expires_at - datetime.now(UTC)).total_seconds()
         if delay > 0:
             await asyncio.sleep(delay)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         current = await self.finds.get_active_find.execute(find.guild_id, now)
         if current is not None and current.find.id == find.id:
             return  # ещё активна (не должна быть, но перестрахуемся)
@@ -288,7 +288,7 @@ class FindsCog(commands.Cog):
 
     async def handle_claim(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.finds.claim_find.execute(
             interaction.guild_id, interaction.user.id, interaction.message.id, now
         )
@@ -386,7 +386,7 @@ class FindsCog(commands.Cog):
                 ephemeral=True,
             )
             return
-        existing = await self.finds.get_active_find.execute(guild.id, datetime.now(timezone.utc))
+        existing = await self.finds.get_active_find.execute(guild.id, datetime.now(UTC))
         if existing is not None:
             await interaction.response.send_message(
                 "Активная находка уже висит — сначала заберите её.", ephemeral=True
@@ -406,9 +406,7 @@ class FindsCog(commands.Cog):
     @app_commands.command(name="finds", description="Активная ночная находка на сервере")
     @app_commands.guild_only()
     async def finds_command(self, interaction: discord.Interaction) -> None:
-        view = await self.finds.get_active_find.execute(
-            interaction.guild_id, datetime.now(timezone.utc)
-        )
+        view = await self.finds.get_active_find.execute(interaction.guild_id, datetime.now(UTC))
         if view is None:
             await interaction.response.send_message(
                 "Сейчас находок нет. Я хожу гулять, когда сама захочу.", ephemeral=True
@@ -466,7 +464,7 @@ class FindsCog(commands.Cog):
     async def gift_command(self, interaction: discord.Interaction, item: str) -> None:
         await interaction.response.defer()
         result = await self.finds.gift_item.execute(
-            interaction.guild_id, interaction.user.id, item, datetime.now(timezone.utc)
+            interaction.guild_id, interaction.user.id, item, datetime.now(UTC)
         )
         if result.status != "ok":
             await interaction.followup.send(
@@ -510,7 +508,7 @@ class FindsCog(commands.Cog):
     @app_commands.guild_only()
     async def walk_command(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.finds.special_walk.execute(
             interaction.guild_id,
             interaction.user.id,

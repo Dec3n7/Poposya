@@ -1,8 +1,6 @@
 """Composition root: build_root_container собирает все контейнеры и цепочку
 надёжности AI. Проверяем оба пути — без Groq и с Groq (+фолбэк)."""
 
-import pytest
-
 from src.application.di.root_container import RootContainer, build_root_container
 from src.config import Settings
 from src.infrastructure.ai.circuit_breaker import CircuitBreakerAIProvider

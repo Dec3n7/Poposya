@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord.ext import commands
@@ -65,7 +65,7 @@ class AIChatCog(commands.Cog):
         while True:
             await asyncio.sleep(_SWEEP_INTERVAL_SECONDS)
             try:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 for guild_id, user_id, display, exchanges in self.service.evict_stale_sessions(now):
                     self._spawn(
                         self.service.summarize_dialog(guild_id, user_id, display, exchanges, now)
@@ -99,7 +99,7 @@ class AIChatCog(commands.Cog):
         if any(word in lowered for word in self.settings.bot_insult_words):
             self.mood.bump(message.guild.id, -5)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         request = ChatRequest(
             guild_id=message.guild.id,
             channel_id=message.channel.id,
@@ -213,7 +213,7 @@ class AIChatCog(commands.Cog):
                 user_id=event.requested_by,
                 user_display=display,
                 instruction=f"{display} включил в голосовом канале трек «{event.title}».",
-                now=datetime.now(timezone.utc),
+                now=datetime.now(UTC),
             )
             await channel.send(comment[:2000], allowed_mentions=discord.AllowedMentions.none())
         except AIProviderError:

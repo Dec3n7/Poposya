@@ -1,21 +1,16 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.interfaces.unit_of_work import IUnitOfWork
 from src.domain.events.base import CriticalDomainEvent, DomainEvent
 from src.domain.events.bus import IEventBus
-from src.infrastructure.events.outbox import outbox_row_for
 from src.infrastructure.db.repositories.activity import (
     SqlAlchemyAlbumRepository,
     SqlAlchemyMemberActivityRepository,
     SqlAlchemyReminderRepository,
     SqlAlchemyVoiceProgressRepository,
-)
-from src.infrastructure.db.repositories.moderation import (
-    SqlAlchemyTempBanRepository,
-    SqlAlchemyWarnRepository,
 )
 from src.infrastructure.db.repositories.cinema import (
     SqlAlchemyMovieEntryRepository,
@@ -27,6 +22,10 @@ from src.infrastructure.db.repositories.finds import (
     SqlAlchemyFindAttemptRepository,
     SqlAlchemyNightFindRepository,
 )
+from src.infrastructure.db.repositories.moderation import (
+    SqlAlchemyTempBanRepository,
+    SqlAlchemyWarnRepository,
+)
 from src.infrastructure.db.repositories.music import (
     SqlAlchemyLikedTrackRepository,
     SqlAlchemyPlaylistRepository,
@@ -36,6 +35,7 @@ from src.infrastructure.db.repositories.relationship import (
     SqlAlchemyRelationshipRepository,
     SqlAlchemySecretRoomRepository,
 )
+from src.infrastructure.events.outbox import outbox_row_for
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
                 # критичное событие останется в outbox и будет доставлено позже
                 logger.exception("Публикация события упала", extra={"event_type": event.event_type})
         if outbox_rows:
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(UTC).replace(tzinfo=None)
             marked = False
             for row, event in outbox_rows:
                 if event.event_id in published_ids:

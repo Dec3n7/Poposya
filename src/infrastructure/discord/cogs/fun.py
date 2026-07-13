@@ -3,7 +3,7 @@ import logging
 import random
 import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import discord
@@ -231,7 +231,7 @@ class FunCog(commands.Cog):
     def _last_seen(last: datetime | None) -> str:
         if last is None:
             return "ещё ни разу не заговаривал со мной"
-        days = (datetime.now(timezone.utc) - last).days
+        days = (datetime.now(UTC) - last).days
         if days <= 0:
             return "говорил со мной сегодня"
         if days == 1:
@@ -487,7 +487,7 @@ class FunCog(commands.Cog):
         minutes: app_commands.Range[int, 1, 10080],
         text: str,
     ) -> None:
-        due_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        due_at = datetime.now(UTC) + timedelta(minutes=minutes)
         await self.activity.add_reminder.execute(
             interaction.user.id, interaction.guild_id, text[:500], due_at
         )
@@ -501,7 +501,7 @@ class FunCog(commands.Cog):
         await self.bot.wait_until_ready()
         while True:
             try:
-                due = await self.activity.pop_due_reminders.execute(datetime.now(timezone.utc))
+                due = await self.activity.pop_due_reminders.execute(datetime.now(UTC))
                 for reminder in due:
                     user = self.bot.get_user(reminder.user_id)
                     if user is None:

@@ -1,18 +1,17 @@
 """ModerationCog: вызываем callback'и слеш-команд напрямую с фейковыми
 Interaction/Member/container — проверяем ветвление, без живого Discord."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 
 from src.application.moderation.use_cases import WarnResult
 from src.domain.moderation.entities import TempBan, Warn
 from src.infrastructure.discord.cogs.moderation import ModerationCog
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 
 
 def forbidden():

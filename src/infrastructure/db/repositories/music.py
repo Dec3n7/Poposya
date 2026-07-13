@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,7 +89,7 @@ class SqlAlchemyPlaylistRepository(IPlaylistRepository):
             row = GuildPlaylistModel(
                 guild_id=playlist.guild_id,
                 name=playlist.name,
-                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                created_at=datetime.now(UTC).replace(tzinfo=None),
             )
             self._session.add(row)
         row.created_by = playlist.created_by
@@ -113,7 +113,7 @@ def _liked_to_domain(row: LikedTrackModel) -> LikedTrack:
         title=row.title,
         uploader=row.uploader,
         duration=row.duration,
-        liked_at=row.liked_at.replace(tzinfo=timezone.utc),
+        liked_at=row.liked_at.replace(tzinfo=UTC),
     )
 
 

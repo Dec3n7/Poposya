@@ -1,12 +1,11 @@
 """Сценарии отношений поверх реального UoW+SQLite: ранг, админ-коррекция,
 заморозка, заметки, ДР, лидерборд, угасание, анкета, секретные комнаты."""
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from src.application.relationship.use_cases import (
     AddDialogSummaryUseCase,
+    BirthdayTickUseCase,
     CompleteSurveyUseCase,
     DecayPointsUseCase,
     GetLeaderboardUseCase,
@@ -19,16 +18,15 @@ from src.application.relationship.use_cases import (
     SetBirthdayUseCase,
     SetPointsUseCase,
     SetSurveyChoiceUseCase,
-    BirthdayTickUseCase,
     ToggleFreezeUseCase,
     ToggleSurveyInterestUseCase,
     UpdateUserNotesUseCase,
     ValidateSecretCodeUseCase,
 )
-from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
+from src.domain.relationship.events import RelationshipRoleChanged
 from src.domain.relationship.policies import PointsToLevelPolicy
 
-NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
 POLICY = PointsToLevelPolicy()
 
 

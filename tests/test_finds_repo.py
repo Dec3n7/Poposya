@@ -1,9 +1,7 @@
 """Прямые тесты SQL-репозиториев модуля finds на SQLite: находки, коллекция,
 попытки/кулдаун, атомарный claim."""
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from src.domain.finds.entities import CollectionItem, FindAttempt, NightFind
 from src.infrastructure.db.repositories.finds import (
@@ -12,7 +10,7 @@ from src.infrastructure.db.repositories.finds import (
     SqlAlchemyNightFindRepository,
 )
 
-NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 22, 0, tzinfo=UTC)
 
 
 def make_find(**over):

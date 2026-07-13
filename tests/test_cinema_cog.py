@@ -1,12 +1,11 @@
 """CinemaCog: хелперы (_trim/_title_of/_ts/_parse_when), /movie add/list/remove/
 watched/top, голосование 👍/👎, кнопки оценок."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 
 from src.application.cinema.use_cases import (
     AddMovieResult,
@@ -19,15 +18,15 @@ from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import MovieInfo
 from src.infrastructure.discord.cogs.cinema import (
     CinemaCardView,
-    CinemaRatingView,
     CinemaCog,
+    CinemaRatingView,
     _title_of,
     _trim,
     _ts,
 )
 from tests.cog_fakes import make_interaction
 
-NOW = datetime(2026, 7, 11, 20, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 11, 20, 0, tzinfo=UTC)
 
 
 def make_entry(title="Фильм", **over):
@@ -110,7 +109,8 @@ def test_parse_when_tomorrow_and_auto_advance():
 
 
 def test_parse_when_explicit_date():
-    from datetime import date, timedelta, timezone as _tz
+    from datetime import timedelta
+    from datetime import timezone as _tz
 
     cog = make_cog()
     # завтрашняя дата в формате ДД.ММ — гарантированно в будущем

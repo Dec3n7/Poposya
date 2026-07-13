@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -98,7 +98,7 @@ class OutboxDispatcher:
             rows = (await session.execute(stmt)).scalars().all()
             if not rows:
                 return 0
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(UTC).replace(tzinfo=None)
             for row in rows:
                 event = deserialize_event(row.event_type, row.payload)
                 if event is None:
