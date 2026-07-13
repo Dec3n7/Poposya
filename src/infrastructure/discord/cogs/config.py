@@ -8,6 +8,7 @@
 Редактируемые ключи задаёт модель GuildSettings (реестр SETTING_SPECS)."""
 
 import logging
+import re
 
 import discord
 from discord import app_commands
@@ -27,6 +28,75 @@ def _fmt(spec, value) -> str:
     if spec.kind == "bool":
         return "вкл ✅" if value else "выкл ❌"
     return f"{value}{(' ' + spec.unit) if spec.unit else ''}"
+
+
+def _parse_int_list(text: str) -> list[int]:
+    """«100, 250 300» -> [100, 250, 300]. ValueError, если не только числа."""
+    parts = [p for p in re.split(r"[,\s]+", text.strip()) if p]
+    return [int(p) for p in parts]
+
+
+def _parse_str_list(text: str) -> list[str]:
+    """Имена по одному на строку; пустые строки отбрасываются."""
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _parse_level_limits(text: str) -> dict[int, int]:
+    """Строки «уровень: лимит» -> {уровень: лимит}. ValueError на кривой строке."""
+    result: dict[int, int] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        level_s, sep, limit_s = line.partition(":")
+        if not sep:
+            raise ValueError("нужен формат «уровень: лимит»")
+        result[int(level_s.strip())] = int(limit_s.strip())
+    return result
+
+
+class _RolesModal(discord.ui.Modal):
+    """Пороги и имена ролей редактируются вместе — их связывает инвариант
+    (имён = порогов + 1), поэтому одна форма и атомарное сохранение."""
+
+    def __init__(self, cog: "ConfigCog", thresholds_default: str, names_default: str):
+        super().__init__(title="Роли-статусы: пороги и имена")
+        self._cog = cog
+        self.thresholds = discord.ui.TextInput(
+            label="Пороги очков (через запятую, по возрастанию)",
+            default=thresholds_default,
+            style=discord.TextStyle.short,
+            max_length=400,
+        )
+        self.names = discord.ui.TextInput(
+            label="Имена ролей (по одному на строку, = порогов + 1)",
+            default=names_default,
+            style=discord.TextStyle.paragraph,
+            max_length=1000,
+        )
+        self.add_item(self.thresholds)
+        self.add_item(self.names)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._cog._apply_roles(interaction, self.thresholds.value, self.names.value)
+
+
+class _LimitsModal(discord.ui.Modal):
+    """Лимиты AI-реплик в час по уровню отношений (словарь)."""
+
+    def __init__(self, cog: "ConfigCog", limits_default: str):
+        super().__init__(title="Лимиты AI-реплик по уровням")
+        self._cog = cog
+        self.limits = discord.ui.TextInput(
+            label="Строки «уровень: лимит в час»",
+            default=limits_default,
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+        )
+        self.add_item(self.limits)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._cog._apply_limits(interaction, self.limits.value)
 
 
 class ConfigCog(commands.Cog):
@@ -194,6 +264,86 @@ class ConfigCog(commands.Cog):
         # осознанно уедет в парсер и вернёт понятную ошибку «нужно целое»
         raw = str(int(value)) if value.is_integer() else str(value)
         await self._apply(interaction, spec, raw)
+
+    # --- списки/словари: роли и лимиты (через модалку) ---
+
+    async def _apply_roles(
+        self, interaction: discord.Interaction, thresholds_text: str, names_text: str
+    ) -> None:
+        try:
+            thresholds = _parse_int_list(thresholds_text)
+            names = _parse_str_list(names_text)
+        except ValueError:
+            await interaction.response.send_message(
+                "Пороги — только целые числа через запятую/пробел.", ephemeral=True
+            )
+            return
+        try:
+            await self.settings.set_many(
+                interaction.guild_id,
+                {
+                    "relationship_role_thresholds": thresholds,
+                    "relationship_role_names": names,
+                },
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"✅ Роли обновлены: {len(thresholds)} порогов и {len(names)} имён "
+            "(для этого сервера).",
+            ephemeral=True,
+        )
+        logger.info(
+            "Роли-статусы изменены",
+            extra={"guild_id": interaction.guild_id, "by": interaction.user.id},
+        )
+
+    async def _apply_limits(self, interaction: discord.Interaction, limits_text: str) -> None:
+        try:
+            limits = _parse_level_limits(limits_text)
+        except ValueError as exc:
+            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            return
+        try:
+            await self.settings.set_many(interaction.guild_id, {"ai_rate_limits_by_level": limits})
+        except ValueError as exc:
+            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"✅ Лимиты реплик обновлены ({len(limits)} уровней, для этого сервера).",
+            ephemeral=True,
+        )
+
+    @config_group.command(name="roles", description="Пороги очков и имена ролей-статусов")
+    @app_commands.describe(reset="Вернуть пороги и имена к глобальным дефолтам")
+    async def config_roles(self, interaction: discord.Interaction, reset: bool = False) -> None:
+        gid = interaction.guild_id
+        if reset:
+            await self.settings.reset(gid, "relationship_role_thresholds")
+            await self.settings.reset(gid, "relationship_role_names")
+            await interaction.response.send_message(
+                "↩️ Пороги и имена ролей сброшены к дефолту.", ephemeral=True
+            )
+            return
+        gs = self.settings.resolved(gid)
+        thresholds_default = ", ".join(str(t) for t in gs.relationship_role_thresholds)
+        names_default = "\n".join(gs.relationship_role_names)
+        await interaction.response.send_modal(_RolesModal(self, thresholds_default, names_default))
+
+    @config_group.command(name="limits", description="Лимиты AI-реплик в час по уровню отношений")
+    @app_commands.describe(reset="Вернуть лимиты к глобальным дефолтам")
+    async def config_limits(self, interaction: discord.Interaction, reset: bool = False) -> None:
+        gid = interaction.guild_id
+        if reset:
+            await self.settings.reset(gid, "ai_rate_limits_by_level")
+            await interaction.response.send_message(
+                "↩️ Лимиты реплик сброшены к дефолту.", ephemeral=True
+            )
+            return
+        limits = self.settings.resolved(gid).ai_rate_limits_by_level
+        default = "\n".join(f"{lvl}: {lim}" for lvl, lim in sorted(limits.items()))
+        await interaction.response.send_modal(_LimitsModal(self, default))
 
     @config_group.command(name="reset", description="Вернуть настройку к глобальному дефолту")
     @app_commands.describe(key="Ключ настройки")

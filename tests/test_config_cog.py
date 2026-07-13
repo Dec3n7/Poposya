@@ -144,6 +144,57 @@ async def test_key_autocomplete_filters(service):
     assert "warn_threshold" not in values
 
 
+async def test_apply_roles_valid(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await cog._apply_roles(interaction, "50, 150", "a\nb\nc")
+    assert service.resolved(10).points_policy().thresholds == (50, 150)
+    assert service.resolved(10).relationship_role_names == ["a", "b", "c"]
+    assert "Роли обновлены" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_apply_roles_bad_thresholds(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await cog._apply_roles(interaction, "50, абв", "a\nb\nc")
+    assert "целые числа" in interaction.response.send_message.await_args.args[0]
+    assert service.is_override(10, "relationship_role_thresholds") is False
+
+
+async def test_apply_roles_invariant_rejected(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await cog._apply_roles(interaction, "50, 150", "a\nb")  # 2 имени на 2 порога — мало
+    assert "Не приняла" in interaction.response.send_message.await_args.args[0]
+    assert service.is_override(10, "relationship_role_names") is False
+
+
+async def test_apply_limits_valid(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await cog._apply_limits(interaction, "1: 3\n2: 7\n3: 9")
+    assert service.resolved(10).ai_rate_limits_by_level == {1: 3, 2: 7, 3: 9}
+
+
+async def test_apply_limits_bad_format(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await cog._apply_limits(interaction, "мусор без двоеточия")
+    assert "Не приняла" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_roles_reset(service):
+    cog = make_cog(service)
+    await service.set_many(
+        10, {"relationship_role_thresholds": [50, 150], "relationship_role_names": ["a", "b", "c"]}
+    )
+    interaction = make_interaction(guild_id=10)
+    await type(cog).config_roles.callback(cog, interaction, reset=True)
+    assert service.is_override(10, "relationship_role_thresholds") is False
+    assert service.is_override(10, "relationship_role_names") is False
+    assert "сброшены" in interaction.response.send_message.await_args.args[0]
+
+
 async def test_typed_autocomplete_filters_by_kind(service):
     cog = make_cog(service)
     interaction = make_interaction()
