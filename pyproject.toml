@@ -22,6 +22,25 @@ pytest-asyncio = "^0.24"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# длину строк держит `ruff format`; длинные комментарии/строки не караем линтом
+ignore = ["E501"]
+
+[tool.mypy]
+# строгая типизация только для ядра (domain + application); инфраструктуру
+# импортируем «молча», чтобы её ошибки не валили гейт ядра
+files = ["src/domain", "src/application"]
+follow_imports = "silent"
+python_version = "3.11"
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
