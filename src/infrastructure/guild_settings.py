@@ -1,36 +1,115 @@
-"""Пер-гильдийные настройки: реестр редактируемых ключей + сервис.
+"""Пер-гильдийные настройки: сервис поверх единой модели GuildSettings.
 
-Переопределения сервера лежат в таблице guild_settings и целиком грузятся
-в память при старте (load_all). Чтение (get/current) — синхронное, из кэша,
-без похода в БД: годится для горячих путей (антиспам, циклы). Запись
-(set/reset) идёт в БД и обновляет кэш.
+Что редактируемо — задаёт схема `GuildSettings` (application-слой): реестр
+SETTING_SPECS генерируется из её полей, диапазоны берутся из ограничений
+полей. Секреты (токен, ключи API, БД) в модель не входят по определению.
 
-Что редактируемо — задаёт SETTING_SPECS; изменить через /config можно только
-эти ключи, секреты (токен, ключи API, БД) сюда не входят по определению."""
+Переопределения сервера лежат в таблице guild_settings и целиком грузятся в
+память при старте (load_all). Чтение (get/current/resolved) — синхронное, из
+кэша, без похода в БД: годится для горячих путей. Запись (set/reset) идёт в БД,
+обновляет кэш и сбрасывает мемоизированную resolved-модель.
+
+Валидация двухуровневая: SettingSpec.parse проверяет тип и диапазон одного
+поля (понятные сообщения для /config), а перед сохранением собирается ПОЛНАЯ
+GuildSettings — она ловит кросс-полевые инварианты (пороги ↔ имена ролей,
+интервал находок min ≤ max, эксклюзивный порог)."""
 
 import logging
 from dataclasses import dataclass
 
+from pydantic import ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.application.guild_config.schema import (
+    KEY_KINDS,
+    SETTING_KEYS,
+    GuildSettings,
+)
 from src.application.interfaces.settings_provider import ISettingsProvider
 from src.config import Settings
 from src.infrastructure.db.models.guild import GuildSettingModel
 
 logger = logging.getLogger(__name__)
 
+# сложные типы (списки/словари) через текстовый /config пока не редактируются —
+# им нужен отдельный UX (Шаг 6); скаляры доступны сразу
+_SCALAR_KINDS = frozenset({"int", "float", "bool", "channel"})
+
+# человекочитаемые подписи и единицы для /config; ключей без записи здесь нет,
+# но на всякий случай fallback — сам ключ
+_LABELS: dict[str, tuple[str, str]] = {
+    # модерация
+    "warn_threshold": ("Варнов до мута", ""),
+    "warn_mute_minutes": ("Длительность мута по варнам", "мин"),
+    "spam_limit": ("Сообщений за окно = спам", ""),
+    "spam_window": ("Окно антиспама", "сек"),
+    "spam_mute_minutes": ("Мут за спам", "мин"),
+    # отношения и роли
+    "relationship_daily_point_cap": ("Дневной потолок очков", ""),
+    "relationship_decay_after_days": ("Дней тишины до угасания очков", "дн"),
+    "relationship_decay_every_days": ("Как часто списывать при угасании", "дн"),
+    "relationship_decay_points": ("Сколько очков списывать за раз", "очк"),
+    "relationship_exclusive_threshold": ("Порог «Единственного»", "очк"),
+    "relationship_absence_days": ("Дней отсутствия — сброс серии", "дн"),
+    "relationship_notes_max_chars": ("Лимит заметки о человеке", "симв"),
+    "secret_room_min_level": ("Уровень для тайной комнаты", ""),
+    "secret_room_hours": ("Время жизни тайной комнаты", "ч"),
+    "survey_bonus_points": ("Бонус за анкету", "очк"),
+    "birthday_remind_days": ("За сколько напоминать о ДР", "дн"),
+    "holiday_points_multiplier": ("Множитель очков в праздники", "x"),
+    # поведение AI
+    "ai_context_messages": ("Сообщений канала в контекст", ""),
+    "ai_notes_update_every": ("Обновлять заметку каждые N очков", "очк"),
+    "ai_dialog_gap_minutes": ("Пауза = конец диалога", "мин"),
+    "ai_dialog_min_exchanges": ("Мин. обменов для резюме", ""),
+    "ai_deep_dialog_exchanges": ("Обменов = «долгий диалог»", ""),
+    "ai_dialog_summary_keep": ("Сколько резюме хранить", ""),
+    "ai_event_comment_chance": ("Шанс реплики на событие (0..1)", ""),
+    "ai_event_comment_cooldown": ("Кулдаун реплик на события", "сек"),
+    # активность
+    "voice_points_per_hour": ("Очки за час в войсе (0=выкл)", ""),
+    "lonely_hours": ("Часов тишины до «скучаю»", "ч"),
+    "absent_days_threshold": ("Дней отсутствия до «с возвращением»", "дн"),
+    # киноклуб
+    "cinema_rating_hours": ("Сбор оценок после просмотра", "ч"),
+    "cinema_watchlist_max": ("Предел вотчлиста", ""),
+    "cinema_forum_channel": ("Форум «золотой фонд» (0=выкл)", ""),
+    # находки
+    "finds_channel_id": ("Канал находок (0 = по имени / MAIN)", ""),
+    "finds_min_interval_hours": ("Мин. интервал находок", "ч"),
+    "finds_max_interval_hours": ("Макс. интервал находок", "ч"),
+    "finds_fail_penalty": ("Штраф за провал похода", "очк"),
+    "finds_claim_cooldown_hours": ("Кулдаун похода", "ч"),
+    # музыка
+    "music_karaoke_ansi": ("Цветное караоке (ANSI)", ""),
+}
+
+
+def _field_range(key: str) -> tuple[int | float | None, int | float | None]:
+    """min/max ключа из ограничений поля модели (ge/gt, le/lt)."""
+    lo: int | float | None = None
+    hi: int | float | None = None
+    for meta in GuildSettings.model_fields[key].metadata:
+        for attr in ("ge", "gt"):
+            if hasattr(meta, attr):
+                lo = getattr(meta, attr)
+        for attr in ("le", "lt"):
+            if hasattr(meta, attr):
+                hi = getattr(meta, attr)
+    return lo, hi
+
 
 @dataclass(frozen=True)
 class SettingSpec:
     key: str
     label: str
-    kind: str  # "int" | "channel"
-    min: int | None = None
-    max: int | None = None
-    unit: str = ""  # для подсказки: «ч», «мин», «сек», «очков»…
+    kind: str  # "int" | "float" | "channel" | "bool"
+    min: int | float | None = None
+    max: int | float | None = None
+    unit: str = ""  # для подсказки: «ч», «мин», «сек», «очк»…
 
-    def parse(self, raw: str) -> int:
+    def parse(self, raw: str) -> int | float:
         """Текст из команды -> валидное значение или ValueError с понятным текстом."""
         raw = raw.strip()
         if self.kind == "bool":
@@ -45,10 +124,19 @@ class SettingSpec:
             if not digits.isdigit():
                 raise ValueError("нужен ID канала или упоминание (#канал), либо 0 — выключить")
             return int(digits)
+        if self.kind == "float":
+            try:
+                fvalue = float(raw.replace(",", "."))
+            except ValueError:
+                raise ValueError("нужно число") from None
+            return self._check_range(fvalue)
         try:
             value = int(raw)
         except ValueError:
             raise ValueError("нужно целое число") from None
+        return int(self._check_range(value))
+
+    def _check_range(self, value: int | float) -> int | float:
         if self.min is not None and value < self.min:
             raise ValueError(f"минимум {self.min}")
         if self.max is not None and value > self.max:
@@ -56,35 +144,20 @@ class SettingSpec:
         return value
 
 
-_SPECS: list[SettingSpec] = [
-    # --- модерация ---
-    SettingSpec("warn_threshold", "Варнов до мута", "int", 1, 20),
-    SettingSpec("warn_mute_minutes", "Длительность мута по варнам", "int", 1, 40320, "мин"),
-    SettingSpec("spam_limit", "Сообщений за окно = спам", "int", 2, 50),
-    SettingSpec("spam_window", "Окно антиспама", "int", 3, 120, "сек"),
-    SettingSpec("spam_mute_minutes", "Мут за спам", "int", 1, 1440, "мин"),
-    # --- киноклуб ---
-    SettingSpec("cinema_rating_hours", "Сбор оценок после просмотра", "int", 1, 336, "ч"),
-    SettingSpec("cinema_watchlist_max", "Предел вотчлиста", "int", 5, 500),
-    SettingSpec("cinema_forum_channel", "Форум «золотой фонд» (0=выкл)", "channel"),
-    # --- находки ---
-    SettingSpec("finds_channel_id", "Канал находок (0 = по имени / MAIN)", "channel"),
-    SettingSpec("finds_min_interval_hours", "Мин. интервал находок", "int", 1, 336, "ч"),
-    SettingSpec("finds_max_interval_hours", "Макс. интервал находок", "int", 1, 720, "ч"),
-    SettingSpec("finds_fail_penalty", "Штраф за провал похода", "int", 0, 500, "очков"),
-    SettingSpec("finds_claim_cooldown_hours", "Кулдаун похода", "int", 0, 168, "ч"),
-    # --- очки и активность ---
-    SettingSpec("voice_points_per_hour", "Очки за час в войсе (0=выкл)", "int", 0, 100),
-    SettingSpec("relationship_daily_point_cap", "Дневной потолок очков", "int", 1, 5000),
-    # --- музыка ---
-    SettingSpec("music_karaoke_ansi", "Цветное караоке (ANSI)", "bool"),
-    SettingSpec("lonely_hours", "Часов тишины до «скучаю»", "int", 1, 168, "ч"),
-    SettingSpec(
-        "absent_days_threshold", "Дней отсутствия до «с возвращением»", "int", 1, 365, "дн"
-    ),
-]
+def _build_specs() -> dict[str, SettingSpec]:
+    specs: dict[str, SettingSpec] = {}
+    for key in SETTING_KEYS:
+        kind = KEY_KINDS[key]
+        if kind not in _SCALAR_KINDS:
+            continue  # списки/словари — через отдельный UX (Шаг 6)
+        lo, hi = _field_range(key)
+        label, unit = _LABELS.get(key, (key, ""))
+        specs[key] = SettingSpec(key, label, kind, lo, hi, unit)
+    return specs
 
-SETTING_SPECS: dict[str, SettingSpec] = {s.key: s for s in _SPECS}
+
+# ключ -> спека; порядок как в модели (модерация → отношения → AI → …)
+SETTING_SPECS: dict[str, SettingSpec] = _build_specs()
 
 
 class GuildSettingsService(ISettingsProvider):
@@ -92,18 +165,21 @@ class GuildSettingsService(ISettingsProvider):
         self._settings = settings
         self._session_factory = session_factory
         # guild_id -> {key: parsed_value}
-        self._cache: dict[int, dict[str, int]] = {}
+        self._cache: dict[int, dict[str, object]] = {}
+        # guild_id -> собранная валидная модель (мемоизация; сбрасывается на set/reset)
+        self._resolved: dict[int, GuildSettings] = {}
 
     async def load_all(self) -> None:
         """Поднять все переопределения в память (вызывается при старте)."""
         self._cache = {}
+        self._resolved = {}
         loaded = 0
         async with self._session_factory() as session:
             rows = (await session.execute(select(GuildSettingModel))).scalars().all()
         for row in rows:
             spec = SETTING_SPECS.get(row.key)
             if spec is None:
-                continue  # ключ убрали из реестра — игнор
+                continue  # ключ убрали из реестра / не скалярный — игнор
             try:
                 value = spec.parse(row.value)
             except ValueError:
@@ -127,16 +203,28 @@ class GuildSettingsService(ISettingsProvider):
     def is_override(self, guild_id: int, key: str) -> bool:
         return key in self._cache.get(guild_id, {})
 
-    def overrides(self, guild_id: int) -> dict[str, int]:
+    def overrides(self, guild_id: int) -> dict[str, object]:
         return dict(self._cache.get(guild_id, {}))
+
+    def resolved(self, guild_id: int) -> GuildSettings:
+        """Полная валидная модель настроек сервера: глобальные дефолты из .env,
+        поверх — переопределения гильдии. Мемоизируется до следующей записи."""
+        cached = self._resolved.get(guild_id)
+        if cached is None:
+            cached = self._build(self._cache.get(guild_id, {}))
+            self._resolved[guild_id] = cached
+        return cached
 
     # --- запись (в БД + кэш) ---
 
-    async def set(self, guild_id: int, key: str, raw: str) -> int:
+    async def set(self, guild_id: int, key: str, raw: str) -> int | float:
         """Валидирует и сохраняет переопределение. Возвращает разобранное
-        значение; ValueError — если не прошло валидацию."""
+        значение; ValueError — если не прошло валидацию (поле или инвариант)."""
         spec = SETTING_SPECS[key]
         value = spec.parse(raw)
+        # кросс-полевая валидация: собрать полную модель с этим переопределением
+        candidate = {**self._cache.get(guild_id, {}), key: value}
+        self._build(candidate)  # бросит ValueError на нарушении инварианта
         async with self._session_factory() as session:
             existing = (
                 await session.execute(
@@ -152,6 +240,7 @@ class GuildSettingsService(ISettingsProvider):
                 existing.value = str(value)
             await session.commit()
         self._cache.setdefault(guild_id, {})[key] = value
+        self._resolved.pop(guild_id, None)
         return value
 
     async def reset(self, guild_id: int, key: str) -> bool:
@@ -165,4 +254,25 @@ class GuildSettingsService(ISettingsProvider):
             )
             await session.commit()
         self._cache.get(guild_id, {}).pop(key, None)
+        self._resolved.pop(guild_id, None)
         return result.rowcount > 0
+
+    # --- внутреннее ---
+
+    def _build(self, overrides: dict[str, object]) -> GuildSettings:
+        """Собрать GuildSettings: база из глобального Settings, поверх — overrides.
+        ValidationError переводится в ValueError с понятным текстом."""
+        base = {k: getattr(self._settings, k) for k in SETTING_KEYS}
+        try:
+            return GuildSettings(**{**base, **overrides})
+        except ValidationError as exc:
+            raise ValueError(_first_error(exc)) from None
+
+
+def _first_error(exc: ValidationError) -> str:
+    """Первое сообщение из ValidationError без служебного префикса pydantic."""
+    errors = exc.errors()
+    if not errors:
+        return "недопустимое значение"
+    msg = str(errors[0].get("msg", "недопустимое значение"))
+    return msg.removeprefix("Value error, ")

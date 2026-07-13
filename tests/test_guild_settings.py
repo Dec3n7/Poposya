@@ -113,3 +113,50 @@ async def test_channel_setting_roundtrip(service):
     await service.load_all()
     await service.set(10, "cinema_forum_channel", "<#555>")
     assert service.current(10, "cinema_forum_channel") == 555
+
+
+# --- модель: float, resolved, кросс-полевые инварианты ----------------------
+
+
+async def test_set_float_setting(service):
+    await service.load_all()
+    value = await service.set(10, "ai_event_comment_chance", "0,25")  # запятая тоже ок
+    assert value == 0.25
+    assert service.current(10, "ai_event_comment_chance") == 0.25
+    with pytest.raises(ValueError, match="максимум"):
+        await service.set(10, "ai_event_comment_chance", "1.5")
+
+
+async def test_resolved_merges_defaults_and_overrides(service):
+    await service.load_all()
+    await service.set(10, "warn_threshold", "7")
+    gs = service.resolved(10)
+    assert gs.warn_threshold == 7  # переопределение
+    assert gs.spam_limit == make_settings().spam_limit  # дефолт из Settings
+    # другой сервер — чистые дефолты
+    assert service.resolved(20).warn_threshold == make_settings().warn_threshold
+
+
+async def test_resolved_points_policy_per_guild(service):
+    await service.load_all()
+    await service.set(10, "relationship_exclusive_threshold", "2000")
+    assert service.resolved(10).points_policy().exclusive_threshold == 2000
+
+
+async def test_set_rejects_cross_field_invariant(service):
+    await service.load_all()
+    # эксклюзивный порог ниже последнего порога ролей (1200) — инвариант модели
+    with pytest.raises(ValueError, match="эксклюзивный порог"):
+        await service.set(10, "relationship_exclusive_threshold", "1000")
+    assert service.is_override(10, "relationship_exclusive_threshold") is False
+    # интервал находок: max < min
+    with pytest.raises(ValueError, match="интервал находок"):
+        await service.set(10, "finds_max_interval_hours", "6")
+
+
+async def test_resolved_memoized_until_write(service):
+    await service.load_all()
+    first = service.resolved(10)
+    assert service.resolved(10) is first  # тот же объект (мемоизация)
+    await service.set(10, "warn_threshold", "9")
+    assert service.resolved(10) is not first  # сброшено после записи
