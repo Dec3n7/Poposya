@@ -34,7 +34,11 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.moderation import ModerationCog
         from src.infrastructure.discord.cogs.music import MusicCog
         from src.infrastructure.discord.cogs.relationship import RelationshipCog
+        from src.infrastructure.discord.error_handler import setup_error_handler
         from src.infrastructure.discord.role_sync import RoleSyncService
+
+        # единая сеть безопасности для необработанных ошибок слеш-команд
+        setup_error_handler(self)
 
         role_sync = RoleSyncService(self, self.container.settings.relationship_role_names)
         mood = MoodTracker()
