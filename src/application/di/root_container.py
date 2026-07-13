@@ -226,6 +226,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             dialog_gap_minutes=settings.ai_dialog_gap_minutes,
             dialog_min_exchanges=settings.ai_dialog_min_exchanges,
             deep_dialog_exchanges=settings.ai_deep_dialog_exchanges,
+            settings_provider=guild_settings,
         )
     else:
         logger.warning("GROQ_API_KEY не задан — общение Попоси (ai_chat) отключено")

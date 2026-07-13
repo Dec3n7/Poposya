@@ -91,6 +91,7 @@ class ChatService:
         dialog_gap_minutes: int = 30,
         dialog_min_exchanges: int = 3,
         deep_dialog_exchanges: int = 5,
+        settings_provider=None,
     ):
         self._calendar = calendar
         self._add_summary = add_dialog_summary
@@ -98,6 +99,7 @@ class ChatService:
         self._dialog_gap = dialog_gap_minutes
         self._dialog_min_exchanges = dialog_min_exchanges
         self._deep_exchanges = deep_dialog_exchanges
+        self._settings = settings_provider
         # (guild_id, user_id) -> текущая сессия диалога (in-memory)
         self._sessions: dict[tuple[int, int], dict] = {}
         self._provider = provider
@@ -111,6 +113,13 @@ class ChatService:
         self._rate_limits = rate_limits_by_level
         self._notes_max_chars = notes_max_chars
 
+    # --- пер-серверные диалоговые параметры (override сервера или дефолт) ---
+
+    def _cfg(self, guild_id: int, key: str, fallback):
+        return (
+            self._settings.get(guild_id, key, fallback) if self._settings is not None else fallback
+        )
+
     # --- сессии диалогов (память) ---
 
     def _pop_stale_session(
@@ -123,10 +132,12 @@ class ChatService:
         if session is None:
             return None
         gap = (now - session["last"]).total_seconds()
-        if gap < self._dialog_gap * 60:
+        if gap < self._cfg(guild_id, "ai_dialog_gap_minutes", self._dialog_gap) * 60:
             return None
         exchanges = self._sessions.pop(key)["exchanges"]
-        if len(exchanges) >= self._dialog_min_exchanges:
+        if len(exchanges) >= self._cfg(
+            guild_id, "ai_dialog_min_exchanges", self._dialog_min_exchanges
+        ):
             return exchanges
         return None
 
@@ -154,15 +165,16 @@ class ChatService:
         Возвращает содержательные (>= min_exchanges) сессии — их фоновый цикл
         отправит на резюме, поэтому брошенный диалог тоже попадёт в память,
         а не только тот, к которому собеседник вернулся сам."""
-        gap_seconds = self._dialog_gap * 60
         due: list[tuple[int, int, str, list[tuple[str, str]]]] = []
         for key in list(self._sessions):
+            guild_id, user_id = key
             session = self._sessions[key]
+            gap_seconds = self._cfg(guild_id, "ai_dialog_gap_minutes", self._dialog_gap) * 60
             if (now - session["last"]).total_seconds() < gap_seconds:
                 continue
             session = self._sessions.pop(key)
-            if len(session["exchanges"]) >= self._dialog_min_exchanges:
-                guild_id, user_id = key
+            min_ex = self._cfg(guild_id, "ai_dialog_min_exchanges", self._dialog_min_exchanges)
+            if len(session["exchanges"]) >= min_ex:
                 display = session.get("display", "собеседник")
                 due.append((guild_id, user_id, display, session["exchanges"]))
         return due
@@ -190,7 +202,8 @@ class ChatService:
                 background=True,
             )
             await self._add_summary.execute(user_id, guild_id, summary, now)
-            if self._record_deep is not None and len(exchanges) >= self._deep_exchanges:
+            deep = self._cfg(guild_id, "ai_deep_dialog_exchanges", self._deep_exchanges)
+            if self._record_deep is not None and len(exchanges) >= deep:
                 await self._record_deep.execute(user_id, guild_id)
         except Exception:
             logger.warning("Резюме диалога не сохранилось", exc_info=True)
@@ -204,7 +217,8 @@ class ChatService:
             request.user_id, request.guild_id, request.channel_id, now
         )
 
-        limit = self._rate_limits.get(award.level, 5)
+        rate_limits = self._cfg(request.guild_id, "ai_rate_limits_by_level", self._rate_limits)
+        limit = rate_limits.get(award.level, 5)
         key = f"{request.guild_id}:{request.user_id}"
         if not self._limiter.try_acquire(key, limit):
             return ChatReply(

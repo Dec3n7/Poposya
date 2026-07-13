@@ -35,16 +35,23 @@ class AIChatCog(commands.Cog):
         role_sync: RoleSyncService,
         event_bus: IEventBus,
         mood: MoodTracker,
+        guild_settings=None,
     ):
         self.bot = bot
         self.service = service
         self.settings = settings
+        self.gs = guild_settings
         self.role_sync = role_sync
         self.mood = mood
         self._event_cooldowns: dict[int, float] = {}  # channel_id -> monotonic
         self._background: set[asyncio.Task] = set()
         self._sweep_task: asyncio.Task | None = None
         event_bus.subscribe(TrackStarted, self._on_track_started)
+
+    def _cfg(self, guild_id: int, key: str):
+        """Пер-серверное значение AI-настройки (override /config или глобальный дефолт)."""
+        default = getattr(self.settings, key)
+        return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
     def cog_unload(self) -> None:
         if self._sweep_task is not None:
@@ -148,7 +155,7 @@ class AIChatCog(commands.Cog):
         if (
             not reply.rate_limited
             and award.point_awarded
-            and award.points % self.settings.ai_notes_update_every == 0
+            and award.points % self._cfg(message.guild.id, "ai_notes_update_every") == 0
         ):
             self._spawn(self.service.refresh_notes(request, award, reply.text))
 
@@ -170,7 +177,7 @@ class AIChatCog(commands.Cog):
         history: list[tuple[str, str]] = []
         try:
             async for msg in message.channel.history(
-                limit=self.settings.ai_context_messages, before=message
+                limit=self._cfg(message.guild.id, "ai_context_messages"), before=message
             ):
                 text = msg.content.strip()
                 if text:
@@ -189,13 +196,13 @@ class AIChatCog(commands.Cog):
         rank = await self.service.get_rank(event.requested_by, event.guild_id)
         if rank.survey.contact == "quiet":
             return
-        chance = self.settings.ai_event_comment_chance
+        chance = self._cfg(event.guild_id, "ai_event_comment_chance")
         if rank.survey.contact == "attention":
             chance *= 2
         if random.random() > chance:
             return
         last = self._event_cooldowns.get(event.channel_id, 0.0)
-        if time.monotonic() - last < self.settings.ai_event_comment_cooldown:
+        if time.monotonic() - last < self._cfg(event.guild_id, "ai_event_comment_cooldown"):
             return
         self._event_cooldowns[event.channel_id] = time.monotonic()
 

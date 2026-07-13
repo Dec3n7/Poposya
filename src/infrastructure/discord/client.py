@@ -121,6 +121,7 @@ class PoposyaBot(commands.Bot):
                     role_sync,
                     self.container.event_bus,
                     mood,
+                    gs,
                 )
             )
         else:
