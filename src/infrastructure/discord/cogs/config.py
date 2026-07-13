@@ -1,5 +1,11 @@
-"""Админ-команды /config: тюнинг настроек сервера без правки .env и пересборки.
-Редактируемые ключи ограничены реестром SETTING_SPECS."""
+"""Админ-команды /config: пер-серверный тюнинг без правки .env и пересборки.
+
+Типизированные подкоманды с нативными пикерами Discord:
+  /config channel — настройки-каналы (пикер канала; без канала = выключить);
+  /config toggle  — булевы (вкл/выкл);
+  /config number  — числовые (int/float);
+  /config list · show · reset — обзор и сброс.
+Редактируемые ключи задаёт модель GuildSettings (реестр SETTING_SPECS)."""
 
 import logging
 
@@ -35,15 +41,66 @@ class ConfigCog(commands.Cog):
         guild_only=True,
     )
 
-    async def _key_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    # --- автодополнение ключей (общий фильтр + по типу) ---
+
+    def _choices(self, current: str, kinds: set[str]) -> list[app_commands.Choice[str]]:
         needle = current.lower()
         return [
             app_commands.Choice(name=f"{spec.key} — {spec.label}"[:100], value=spec.key)
             for spec in SETTING_SPECS.values()
-            if needle in spec.key.lower() or needle in spec.label.lower()
+            if spec.kind in kinds and (needle in spec.key.lower() or needle in spec.label.lower())
         ][:25]
+
+    async def _key_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return self._choices(current, {"int", "float", "bool", "channel"})
+
+    async def _channel_key_ac(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return self._choices(current, {"channel"})
+
+    async def _bool_key_ac(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return self._choices(current, {"bool"})
+
+    async def _number_key_ac(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return self._choices(current, {"int", "float"})
+
+    # --- общий путь записи + ответ ---
+
+    def _resolve(self, key: str, kinds: set[str]):
+        spec = SETTING_SPECS.get(key)
+        if spec is None or spec.kind not in kinds:
+            return None
+        return spec
+
+    async def _apply(self, interaction: discord.Interaction, spec, raw: str) -> None:
+        try:
+            parsed = await self.settings.set(interaction.guild_id, spec.key, raw)
+        except ValueError as exc:
+            await interaction.response.send_message(
+                f"Не приняла: {exc}. `{spec.key}` — {spec.label}.", ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            f"✅ **{spec.key}** = {_fmt(spec, parsed)} (для этого сервера).", ephemeral=True
+        )
+        logger.info(
+            "Настройка сервера изменена",
+            extra={
+                "guild_id": interaction.guild_id,
+                "key": spec.key,
+                "value": parsed,
+                "by": interaction.user.id,
+            },
+        )
+
+    # --- обзор ---
 
     @config_group.command(name="list", description="Все настройки сервера и их значения")
     async def config_list(self, interaction: discord.Interaction) -> None:
@@ -76,7 +133,7 @@ class ConfigCog(commands.Cog):
         default = self.settings.default(key)
         overridden = self.settings.is_override(gid, key)
         rng = ""
-        if spec.kind == "int" and (spec.min is not None or spec.max is not None):
+        if spec.kind in ("int", "float") and (spec.min is not None or spec.max is not None):
             rng = f"\n**Диапазон:** {spec.min}–{spec.max}"
         embed = discord.Embed(
             title=f"⚙️ {spec.key}",
@@ -90,35 +147,53 @@ class ConfigCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @config_group.command(name="set", description="Задать настройку для этого сервера")
-    @app_commands.describe(key="Ключ настройки", value="Новое значение")
-    @app_commands.autocomplete(key=_key_autocomplete)
-    async def config_set(self, interaction: discord.Interaction, key: str, value: str) -> None:
-        spec = SETTING_SPECS.get(key)
+    # --- типизированная запись ---
+
+    @config_group.command(
+        name="channel", description="Задать настройку-канал (без канала — выключить)"
+    )
+    @app_commands.describe(key="Настройка-канал", channel="Канал; не указывай — выключить (0)")
+    @app_commands.autocomplete(key=_channel_key_ac)
+    async def config_channel(
+        self,
+        interaction: discord.Interaction,
+        key: str,
+        channel: discord.abc.GuildChannel | None = None,
+    ) -> None:
+        spec = self._resolve(key, {"channel"})
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой настройки. Смотри `/config list`.", ephemeral=True
+                "Нет такой настройки-канала. Смотри `/config list`.", ephemeral=True
             )
             return
-        try:
-            parsed = await self.settings.set(interaction.guild_id, key, value)
-        except ValueError as exc:
+        await self._apply(interaction, spec, str(channel.id) if channel else "0")
+
+    @config_group.command(name="toggle", description="Включить/выключить настройку")
+    @app_commands.describe(key="Булева настройка", value="Вкл или выкл")
+    @app_commands.autocomplete(key=_bool_key_ac)
+    async def config_toggle(self, interaction: discord.Interaction, key: str, value: bool) -> None:
+        spec = self._resolve(key, {"bool"})
+        if spec is None:
             await interaction.response.send_message(
-                f"Не приняла: {exc}. `{key}` — {spec.label}.", ephemeral=True
+                "Нет такой вкл/выкл-настройки. Смотри `/config list`.", ephemeral=True
             )
             return
-        await interaction.response.send_message(
-            f"✅ **{key}** = {_fmt(spec, parsed)} (для этого сервера).", ephemeral=True
-        )
-        logger.info(
-            "Настройка сервера изменена",
-            extra={
-                "guild_id": interaction.guild_id,
-                "key": key,
-                "value": parsed,
-                "by": interaction.user.id,
-            },
-        )
+        await self._apply(interaction, spec, "1" if value else "0")
+
+    @config_group.command(name="number", description="Задать числовую настройку")
+    @app_commands.describe(key="Числовая настройка", value="Новое значение")
+    @app_commands.autocomplete(key=_number_key_ac)
+    async def config_number(self, interaction: discord.Interaction, key: str, value: float) -> None:
+        spec = self._resolve(key, {"int", "float"})
+        if spec is None:
+            await interaction.response.send_message(
+                "Нет такой числовой настройки. Смотри `/config list`.", ephemeral=True
+            )
+            return
+        # целые ключи принимают целое: 8.0 -> "8"; дробное для int-ключа
+        # осознанно уедет в парсер и вернёт понятную ошибку «нужно целое»
+        raw = str(int(value)) if value.is_integer() else str(value)
+        await self._apply(interaction, spec, raw)
 
     @config_group.command(name="reset", description="Вернуть настройку к глобальному дефолту")
     @app_commands.describe(key="Ключ настройки")

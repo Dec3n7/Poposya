@@ -1,5 +1,7 @@
-"""ConfigCog: /config list/show/set/reset и автодополнение ключей.
-Сервис настроек — реальный GuildSettingsService поверх SQLite."""
+"""ConfigCog: /config list/show/reset + типизированные channel/toggle/number
+и автодополнение ключей. Сервис — реальный GuildSettingsService поверх SQLite."""
+
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,9 +23,13 @@ async def service(session_factory):
 
 
 def make_cog(service):
-    from unittest.mock import MagicMock
-
     return ConfigCog(MagicMock(), service)
+
+
+def fake_channel(cid=555):
+    ch = MagicMock()
+    ch.id = cid
+    return ch
 
 
 async def test_list_shows_all_keys(service):
@@ -52,28 +58,65 @@ async def test_show_reports_default_and_override(service):
     assert "Диапазон" in embed.description  # int-настройка показывает диапазон
 
 
-async def test_set_valid(service):
+async def test_number_sets_int(service):
     cog = make_cog(service)
     interaction = make_interaction(guild_id=10)
-    await type(cog).config_set.callback(cog, interaction, "spam_limit", "8")
+    await type(cog).config_number.callback(cog, interaction, "spam_limit", 8.0)
     assert "spam_limit" in interaction.response.send_message.await_args.args[0]
     assert service.current(10, "spam_limit") == 8
 
 
-async def test_set_invalid_value(service):
+async def test_number_sets_float(service):
     cog = make_cog(service)
     interaction = make_interaction(guild_id=10)
-    await type(cog).config_set.callback(cog, interaction, "warn_threshold", "999")
+    await type(cog).config_number.callback(cog, interaction, "ai_event_comment_chance", 0.3)
+    assert service.current(10, "ai_event_comment_chance") == 0.3
+
+
+async def test_number_rejects_out_of_range(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await type(cog).config_number.callback(cog, interaction, "warn_threshold", 999.0)
     assert "Не приняла" in interaction.response.send_message.await_args.args[0]
     assert service.is_override(10, "warn_threshold") is False
 
 
-async def test_set_channel_key(service):
+async def test_number_rejects_fraction_for_int_key(service):
     cog = make_cog(service)
     interaction = make_interaction(guild_id=10)
-    await type(cog).config_set.callback(cog, interaction, "cinema_forum_channel", "<#555>")
+    await type(cog).config_number.callback(cog, interaction, "spam_limit", 8.5)
+    assert "Не приняла" in interaction.response.send_message.await_args.args[0]
+    assert service.is_override(10, "spam_limit") is False
+
+
+async def test_number_rejects_wrong_kind(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    # channel-ключ через числовую команду не проходит
+    await type(cog).config_number.callback(cog, interaction, "cinema_forum_channel", 5.0)
+    assert "числовой" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_toggle_sets_bool(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await type(cog).config_toggle.callback(cog, interaction, "music_karaoke_ansi", True)
+    assert service.current(10, "music_karaoke_ansi") == 1
+    assert "вкл" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_channel_sets_and_clears(service):
+    cog = make_cog(service)
+    interaction = make_interaction(guild_id=10)
+    await type(cog).config_channel.callback(
+        cog, interaction, "cinema_forum_channel", fake_channel(555)
+    )
     assert service.current(10, "cinema_forum_channel") == 555
     assert "<#555>" in interaction.response.send_message.await_args.args[0]
+    # без канала — выключить (0)
+    interaction2 = make_interaction(guild_id=10)
+    await type(cog).config_channel.callback(cog, interaction2, "cinema_forum_channel", None)
+    assert service.current(10, "cinema_forum_channel") == 0
 
 
 async def test_reset(service):
@@ -99,3 +142,16 @@ async def test_key_autocomplete_filters(service):
     values = [c.value for c in choices]
     assert "spam_limit" in values and "spam_window" in values
     assert "warn_threshold" not in values
+
+
+async def test_typed_autocomplete_filters_by_kind(service):
+    cog = make_cog(service)
+    interaction = make_interaction()
+    channel_keys = [c.value for c in await type(cog)._channel_key_ac(cog, interaction, "")]
+    assert "cinema_forum_channel" in channel_keys
+    assert "warn_threshold" not in channel_keys  # не канал
+    bool_keys = [c.value for c in await type(cog)._bool_key_ac(cog, interaction, "")]
+    assert bool_keys == ["music_karaoke_ansi"]
+    number_keys = [c.value for c in await type(cog)._number_key_ac(cog, interaction, "")]
+    assert "warn_threshold" in number_keys
+    assert "music_karaoke_ansi" not in number_keys  # не число
