@@ -122,29 +122,35 @@ def build_root_container(settings: Settings) -> RootContainer:
         holiday_multiplier=settings.holiday_points_multiplier,
         settings_provider=guild_settings,
     )
-    get_rank = GetRankUseCase(uow_factory, policy)
-    update_notes = UpdateUserNotesUseCase(uow_factory, settings.relationship_notes_max_chars)
+    get_rank = GetRankUseCase(uow_factory, policy, settings_provider=guild_settings)
+    update_notes = UpdateUserNotesUseCase(
+        uow_factory, settings.relationship_notes_max_chars, settings_provider=guild_settings
+    )
     relationship = RelationshipContainer(
         policy=policy,
         award_point=award_point,
         get_rank=get_rank,
-        set_points=SetPointsUseCase(uow_factory, policy),
+        set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),
         update_notes=update_notes,
         set_survey_choice=SetSurveyChoiceUseCase(uow_factory),
         toggle_survey_interest=ToggleSurveyInterestUseCase(uow_factory),
         complete_survey=CompleteSurveyUseCase(
-            uow_factory, policy, bonus=settings.survey_bonus_points
+            uow_factory,
+            policy,
+            bonus=settings.survey_bonus_points,
+            settings_provider=guild_settings,
         ),
         set_birthday=SetBirthdayUseCase(uow_factory),
         birthday_tick=BirthdayTickUseCase(uow_factory, remind_days=settings.birthday_remind_days),
-        leaderboard=GetLeaderboardUseCase(uow_factory, policy),
+        leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=guild_settings),
         decay_points=DecayPointsUseCase(
             uow_factory,
             policy,
             after_days=settings.relationship_decay_after_days,
             every_days=settings.relationship_decay_every_days,
             amount=settings.relationship_decay_points,
+            settings_provider=guild_settings,
         ),
         record_deep_dialog=RecordDeepDialogUseCase(uow_factory),
         add_dialog_summary=AddDialogSummaryUseCase(
@@ -153,7 +159,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         issue_secret_code=IssueSecretCodeUseCase(uow_factory),
         validate_secret_code=ValidateSecretCodeUseCase(uow_factory),
         register_secret_room=RegisterSecretRoomUseCase(
-            uow_factory, hours=settings.secret_room_hours
+            uow_factory, hours=settings.secret_room_hours, settings_provider=guild_settings
         ),
         get_secret_code=GetSecretCodeUseCase(uow_factory),
         pop_expired_secret_rooms=PopExpiredSecretRoomsUseCase(uow_factory),

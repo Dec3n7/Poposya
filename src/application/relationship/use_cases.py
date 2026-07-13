@@ -12,6 +12,16 @@ from src.domain.shared.holidays import HolidayCalendar
 UowFactory = Callable[[], IUnitOfWork]
 
 
+def _policy_of(
+    settings_provider, guild_id: int, fallback: PointsToLevelPolicy
+) -> PointsToLevelPolicy:
+    """Политика ролей сервера (пороги/эксклюзив из /config) или глобальный
+    фолбэк, если провайдер настроек не подключён (напр. в юнит-тестах)."""
+    if settings_provider is not None:
+        return settings_provider.resolved(guild_id).points_policy()
+    return fallback
+
+
 @dataclass(frozen=True)
 class SurveyData:
     gender: str = ""
@@ -114,22 +124,26 @@ class AwardPointUseCase:
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
 
+            # пер-серверные настройки: политика ролей, потолок, отсутствие, праздник
+            gs = self._settings.resolved(guild_id) if self._settings is not None else None
+            policy = gs.points_policy() if gs is not None else self._policy
+            absence_days = gs.relationship_absence_days if gs is not None else self._absence_days
+            holiday_multiplier = (
+                gs.holiday_points_multiplier if gs is not None else self._holiday_multiplier
+            )
+            daily_cap = gs.relationship_daily_point_cap if gs is not None else self._daily_cap
+
             returning = (
                 profile.last_dialog_at is not None
-                and now - profile.last_dialog_at > timedelta(days=self._absence_days)
+                and now - profile.last_dialog_at > timedelta(days=absence_days)
             )
-            old_role = self._policy.role_index(profile.points, profile.is_exclusive)
+            old_role = policy.role_index(profile.points, profile.is_exclusive)
 
             # в праздники очки идут с множителем (и потолок пропорционально выше)
             is_holiday = (
                 self._calendar is not None and self._calendar.holiday_name(now.date()) is not None
             )
-            multiplier = self._holiday_multiplier if is_holiday else 1
-            daily_cap = (
-                self._settings.get(guild_id, "relationship_daily_point_cap", self._daily_cap)
-                if self._settings is not None
-                else self._daily_cap
-            )
+            multiplier = holiday_multiplier if is_holiday else 1
             awarded = profile.award_point(
                 now, daily_cap * multiplier, amount=base_amount * multiplier
             )
@@ -138,16 +152,14 @@ class AwardPointUseCase:
             became_exclusive = False
             if awarded:
                 holder = await uow.relationships.get_exclusive_holder(guild_id)
-                previous_holder = _reevaluate_exclusive(
-                    profile, holder, self._policy.exclusive_threshold
-                )
+                previous_holder = _reevaluate_exclusive(profile, holder, policy.exclusive_threshold)
                 became_exclusive = (
                     profile.is_exclusive
                     and (holder is None or holder.user_id != profile.user_id)
-                    and old_role != self._policy.exclusive_role_index
+                    and old_role != policy.exclusive_role_index
                 )
 
-            new_role = self._policy.role_index(profile.points, profile.is_exclusive)
+            new_role = policy.role_index(profile.points, profile.is_exclusive)
 
             await uow.relationships.save(profile)
             if previous_holder is not None:
@@ -182,7 +194,7 @@ class AwardPointUseCase:
 
             return AwardResult(
                 points=profile.points,
-                level=self._policy.level(profile.points, profile.is_exclusive),
+                level=policy.level(profile.points, profile.is_exclusive),
                 role_index=new_role,
                 previous_role_index=old_role,
                 point_awarded=awarded,
@@ -196,22 +208,26 @@ class AwardPointUseCase:
 
 
 class GetRankUseCase:
-    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy):
+    def __init__(
+        self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None
+    ):
         self._uow_factory = uow_factory
         self._policy = policy
+        self._settings = settings_provider
 
     async def execute(self, user_id: int, guild_id: int) -> RankInfo:
+        policy = _policy_of(self._settings, guild_id, self._policy)
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get(user_id, guild_id)
             if profile is None:
                 profile = RelationshipProfile(user_id=user_id, guild_id=guild_id)
             return RankInfo(
                 points=profile.points,
-                level=self._policy.level(profile.points, profile.is_exclusive),
-                role_index=self._policy.role_index(profile.points, profile.is_exclusive),
+                level=policy.level(profile.points, profile.is_exclusive),
+                role_index=policy.role_index(profile.points, profile.is_exclusive),
                 is_exclusive=profile.is_exclusive,
                 frozen=profile.frozen_by_admin,
-                next_threshold=self._policy.next_threshold(profile.points),
+                next_threshold=policy.next_threshold(profile.points),
                 user_notes=profile.user_notes,
                 survey=_survey_of(profile),
                 birthday_day=profile.birthday_day,
@@ -224,21 +240,23 @@ class GetRankUseCase:
 class SetPointsUseCase:
     """Админская коррекция очков; после неё — тот же пересчёт лидерства."""
 
-    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy):
+    def __init__(
+        self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None
+    ):
         self._uow_factory = uow_factory
         self._policy = policy
+        self._settings = settings_provider
 
     async def execute(self, user_id: int, guild_id: int, points: int) -> RankInfo:
+        policy = _policy_of(self._settings, guild_id, self._policy)
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
-            old_role = self._policy.role_index(profile.points, profile.is_exclusive)
+            old_role = policy.role_index(profile.points, profile.is_exclusive)
             profile.points = max(0, points)
 
             holder = await uow.relationships.get_exclusive_holder(guild_id)
-            previous_holder = _reevaluate_exclusive(
-                profile, holder, self._policy.exclusive_threshold
-            )
-            new_role = self._policy.role_index(profile.points, profile.is_exclusive)
+            previous_holder = _reevaluate_exclusive(profile, holder, policy.exclusive_threshold)
+            new_role = policy.role_index(profile.points, profile.is_exclusive)
 
             await uow.relationships.save(profile)
             if previous_holder is not None:
@@ -257,11 +275,11 @@ class SetPointsUseCase:
             await uow.commit()
             return RankInfo(
                 points=profile.points,
-                level=self._policy.level(profile.points, profile.is_exclusive),
+                level=policy.level(profile.points, profile.is_exclusive),
                 role_index=new_role,
                 is_exclusive=profile.is_exclusive,
                 frozen=profile.frozen_by_admin,
-                next_threshold=self._policy.next_threshold(profile.points),
+                next_threshold=policy.next_threshold(profile.points),
             )
 
 
@@ -280,14 +298,18 @@ class ToggleFreezeUseCase:
 
 
 class UpdateUserNotesUseCase:
-    def __init__(self, uow_factory: UowFactory, max_chars: int):
+    def __init__(self, uow_factory: UowFactory, max_chars: int, settings_provider=None):
         self._uow_factory = uow_factory
         self._max_chars = max_chars
+        self._settings = settings_provider
 
     async def execute(self, user_id: int, guild_id: int, notes: str) -> None:
+        max_chars = self._max_chars
+        if self._settings is not None:
+            max_chars = self._settings.resolved(guild_id).relationship_notes_max_chars
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
-            profile.user_notes = notes.strip()[: self._max_chars]
+            profile.user_notes = notes.strip()[:max_chars]
             await uow.relationships.save(profile)
             await uow.commit()
 
@@ -358,18 +380,22 @@ class LeaderboardEntry:
 
 
 class GetLeaderboardUseCase:
-    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy):
+    def __init__(
+        self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None
+    ):
         self._uow_factory = uow_factory
         self._policy = policy
+        self._settings = settings_provider
 
     async def execute(self, guild_id: int, limit: int = 10) -> list[LeaderboardEntry]:
+        policy = _policy_of(self._settings, guild_id, self._policy)
         async with self._uow_factory() as uow:
             profiles = await uow.relationships.top_by_points(guild_id, limit)
             return [
                 LeaderboardEntry(
                     user_id=p.user_id,
                     points=p.points,
-                    role_index=self._policy.role_index(p.points, p.is_exclusive),
+                    role_index=policy.role_index(p.points, p.is_exclusive),
                     is_exclusive=p.is_exclusive,
                 )
                 for p in profiles
@@ -394,12 +420,14 @@ class DecayPointsUseCase:
         after_days: int,
         every_days: int,
         amount: int,
+        settings_provider=None,
     ):
         self._uow_factory = uow_factory
         self._policy = policy
         self._after_days = after_days
         self._every_days = every_days
         self._amount = amount
+        self._settings = settings_provider
 
     async def execute(self, now: datetime) -> DecayResult:
         inactive_before = now - timedelta(days=self._after_days)
@@ -409,10 +437,11 @@ class DecayPointsUseCase:
             profiles = await uow.relationships.list_decayable(inactive_before, decayed_before)
             touched_guilds: set[int] = set()
             for profile in profiles:
-                old_role = self._policy.role_index(profile.points, profile.is_exclusive)
+                policy = _policy_of(self._settings, profile.guild_id, self._policy)
+                old_role = policy.role_index(profile.points, profile.is_exclusive)
                 profile.points = max(0, profile.points - self._amount)
                 profile.last_decay_at = now.date()
-                new_role = self._policy.role_index(profile.points, profile.is_exclusive)
+                new_role = policy.role_index(profile.points, profile.is_exclusive)
                 await uow.relationships.save(profile)
                 touched_guilds.add(profile.guild_id)
                 if new_role != old_role and not profile.is_exclusive:
@@ -429,6 +458,7 @@ class DecayPointsUseCase:
 
             # угасание могло сместить лидера — проверяем титул в затронутых гильдиях
             for guild_id in touched_guilds:
+                policy = _policy_of(self._settings, guild_id, self._policy)
                 holder = await uow.relationships.get_exclusive_holder(guild_id)
                 if holder is None:
                     continue
@@ -439,7 +469,7 @@ class DecayPointsUseCase:
                 if (
                     challenger.user_id != holder.user_id
                     and challenger.points > holder.points
-                    and challenger.points >= self._policy.exclusive_threshold
+                    and challenger.points >= policy.exclusive_threshold
                 ):
                     holder.is_exclusive = False
                     challenger.is_exclusive = True
@@ -452,9 +482,7 @@ class DecayPointsUseCase:
                                 guild_id=guild_id,
                                 user_id=prof.user_id,
                                 old_role_index=None,
-                                new_role_index=self._policy.role_index(
-                                    prof.points, prof.is_exclusive
-                                ),
+                                new_role_index=policy.role_index(prof.points, prof.is_exclusive),
                                 points=prof.points,
                             )
                         )
@@ -550,9 +578,10 @@ class RegisterSecretRoomUseCase:
     """Помечает ключ использованным и записывает комнату (после того, как
     ког создал каналы в Discord)."""
 
-    def __init__(self, uow_factory: UowFactory, hours: int):
+    def __init__(self, uow_factory: UowFactory, hours: int, settings_provider=None):
         self._uow_factory = uow_factory
         self._hours = hours
+        self._settings = settings_provider
 
     async def execute(
         self,
@@ -562,7 +591,10 @@ class RegisterSecretRoomUseCase:
         voice_channel_id: int,
         now: datetime,
     ) -> datetime:
-        expires_at = now + timedelta(hours=self._hours)
+        hours = self._hours
+        if self._settings is not None:
+            hours = self._settings.resolved(guild_id).secret_room_hours
+        expires_at = now + timedelta(hours=hours)
         async with self._uow_factory() as uow:
             stored = await uow.secret_rooms.get_code(user_id, guild_id)
             if stored is not None:
@@ -655,12 +687,23 @@ class CompleteSurveyUseCase:
     """Кнопка «Готово»: разовый бонус очков (вне дневного потолка) +
     тот же пересчёт роли и лидерства, что и у обычного начисления."""
 
-    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy, bonus: int):
+    def __init__(
+        self,
+        uow_factory: UowFactory,
+        policy: PointsToLevelPolicy,
+        bonus: int,
+        settings_provider=None,
+    ):
         self._uow_factory = uow_factory
         self._policy = policy
         self._bonus = bonus
+        self._settings = settings_provider
 
     async def execute(self, user_id: int, guild_id: int, now: datetime) -> SurveyCompleteResult:
+        policy = _policy_of(self._settings, guild_id, self._policy)
+        bonus_amount = self._bonus
+        if self._settings is not None:
+            bonus_amount = self._settings.resolved(guild_id).survey_bonus_points
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
             first_time = profile.survey_completed_at is None
@@ -668,16 +711,16 @@ class CompleteSurveyUseCase:
             if first_time:
                 profile.survey_completed_at = now
                 if not profile.frozen_by_admin:
-                    bonus = self._bonus
-                    old_role = self._policy.role_index(profile.points, profile.is_exclusive)
+                    bonus = bonus_amount
+                    old_role = policy.role_index(profile.points, profile.is_exclusive)
                     profile.points += bonus
                     holder = await uow.relationships.get_exclusive_holder(guild_id)
                     previous_holder = _reevaluate_exclusive(
-                        profile, holder, self._policy.exclusive_threshold
+                        profile, holder, policy.exclusive_threshold
                     )
                     if previous_holder is not None:
                         await uow.relationships.save(previous_holder)
-                    new_role = self._policy.role_index(profile.points, profile.is_exclusive)
+                    new_role = policy.role_index(profile.points, profile.is_exclusive)
                     if new_role != old_role:
                         uow.add_event(
                             RelationshipRoleChanged(
