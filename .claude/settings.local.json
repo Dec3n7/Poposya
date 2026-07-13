@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p src/domain/events src/domain/music src/application/interfaces src/application/music src/application/di src/infrastructure/events src/infrastructure/logging src/infrastructure/audio src/infrastructure/discord/cogs tests)",
+      "Bash(touch src/__init__.py src/domain/__init__.py src/domain/events/__init__.py src/domain/music/__init__.py src/application/__init__.py src/application/interfaces/__init__.py src/application/music/__init__.py src/application/di/__init__.py src/infrastructure/__init__.py src/infrastructure/events/__init__.py src/infrastructure/logging/__init__.py src/infrastructure/audio/__init__.py src/infrastructure/discord/__init__.py src/infrastructure/discord/cogs/__init__.py tests/__init__.py)",
+      "Bash(python -m compileall -q src tests)",
+      "PowerShell(try { py -0p } catch { \"py launcher not found\" }; Get-ChildItem \"$env:LOCALAPPDATA\\\\Programs\\\\Python\" -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(winget install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements)",
+      "PowerShell(winget install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements)",
+      "PowerShell($py = \"$env:LOCALAPPDATA\\\\Programs\\\\Python\\\\Python312\\\\python.exe\"; & $py --version; Set-Location \"C:\\\\Users\\\\wildh\\\\Desktop\\\\Poposya\\\\Alpha\\\\V1\"; & $py -m venv .venv; .\\\\.venv\\\\Scripts\\\\python.exe -m pip install --quiet --upgrade pip; echo VENV_OK)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\wildh\\\\Desktop\\\\Poposya\\\\Alpha\\\\V1\"; $env:PYTHONUTF8 = \"1\"; .\\\\.venv\\\\Scripts\\\\python.exe -c \"import asyncio; from src.infrastructure.audio.ytdlp_source import YtDlpAudioSource; s = YtDlpAudioSource\\(\\); tracks = asyncio.run\\(s.search\\('lofi hip hop', requested_by=1, limit=3\\)\\); [print\\(t.title, '|', t.duration, '|', t.url\\) for t in tracks]; url = asyncio.run\\(s.get_stream_url\\(tracks[0]\\)\\); print\\('STREAM_OK', url[:60]\\)\")",
+      "PowerShell($browsers = @{}; if \\(Test-Path \"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\User Data\"\\) { $browsers[\"chrome\"] = $true }; if \\(Test-Path \"$env:APPDATA\\\\Mozilla\\\\Firefox\\\\Profiles\"\\) { $browsers[\"firefox\"] = $true }; if \\(Test-Path \"$env:LOCALAPPDATA\\\\Microsoft\\\\Edge\\\\User Data\"\\) { $browsers[\"edge\"] = $true }; if \\(Test-Path \"$env:APPDATA\\\\Opera Software\"\\) { $browsers[\"opera\"] = $true }; $browsers.Keys -join \", \")"
+    ]
+  }
+}

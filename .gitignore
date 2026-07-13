@@ -1,0 +1,21 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dev.db
+
+# базы данных и бэкапы
+*.db
+*.db-shm
+*.db-wal
+backups/
+
+# покрытие и логи
+.coverage
+htmlcov/
+logs/
+*.log
+
+# рантайм-данные (аудиокэш и т.п.)
+data/

@@ -1,0 +1,37 @@
+# Минимальный профиль: только бот + volume для SQLite (ТЗ 13.2).
+# Единственный источник настроек — файл .env рядом с этим файлом.
+#
+# Путь к БД и логам для контейнера переопределён ниже в environment —
+# править .env для Docker не нужно, база живёт на volume bot_data.
+#
+# Cookies YouTube (если нужны): положите cookies.txt рядом, раскомментируйте
+# volume ниже и укажите в .env: YTDLP_COOKIES_FILE=/app/data/cookies.txt
+#
+# Переход на PostgreSQL позже: добавить сервис db (postgres:16), asyncpg
+# в requirements.txt и сменить DATABASE_URL — код уже готов.
+
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # переопределяют значения из .env только внутри контейнера:
+      # база и логи — на volume, чтобы пережить пересборку образа
+      DATABASE_URL: sqlite+aiosqlite:////app/data/poposya.db
+      LOG_FILE: /app/data/logs/bot.log
+    ports:
+      - "8080:8080"   # /health и /ready (проверка в браузере: http://localhost:8080/health)
+    healthcheck:
+      # urlopen кидает исключение на HTTP 503 -> ненулевой код выхода -> unhealthy
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s   # время на миграции и подключение к Discord
+    volumes:
+      - bot_data:/app/data
+      # - ./cookies.txt:/app/data/cookies.txt:ro
+
+volumes:
+  bot_data:

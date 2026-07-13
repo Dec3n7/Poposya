@@ -1,0 +1,207 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    discord_token: str
+    # id сервера для мгновенной синхронизации слеш-команд в разработке;
+    # без него команды синхронизируются глобально (до часа задержки)
+    dev_guild_id: int | None = None
+
+    log_level: str = "INFO"
+    log_format: str = "json"  # json | plain
+    log_file: str = "logs/bot.log"  # DEBUG-лог с ротацией; пусто = только консоль
+    # лог в Discord-канал: ID канала (0 = выключено) и минимальный уровень
+    discord_log_channel: int = 0
+    discord_log_level: str = "WARNING"  # DEBUG | INFO | WARNING | ERROR
+
+    ffmpeg_path: str = "ffmpeg"
+
+    # --- health-эндпоинт (aiohttp, /health и /ready) ---
+    health_port: int = 8080
+
+    # --- база данных ---
+    database_url: str = "sqlite+aiosqlite:///./poposya.db"
+    auto_migrate: bool = True  # применять миграции Alembic при старте (dev-режим)
+    # бэкап SQLite: копия в <каталог БД>/backups при старте и раз в N часов,
+    # хранится backup_keep последних (0 в любом поле = выключено)
+    backup_interval_hours: int = 24
+    backup_keep: int = 7
+    # outbox критичных событий: как часто добивать неопубликованные, сек
+    outbox_dispatch_interval: int = 60
+    outbox_max_attempts: int = 10  # после стольких неудач событие оставляется в покое
+
+    # --- AI (Groq: OpenAI-совместимый API) ---
+    groq_api_key: str = ""
+    ai_model: str = "llama-3.3-70b-versatile"
+    # надёжность: ретраи, резервная модель, circuit breaker (ТЗ 8.2–8.3)
+    ai_fallback_model: str = "llama-3.1-8b-instant"  # пусто = без фолбэка
+    ai_retry_attempts: int = 3
+    ai_retry_base_delay: float = 1.0
+    ai_cb_failure_threshold: int = 5
+    ai_cb_timeout_seconds: int = 60
+    ai_temperature: float = 0.8
+    ai_max_tokens: int = 400
+    ai_max_concurrent: int = 2          # семафор AIQueue (бесплатный тариф Groq)
+    ai_request_timeout: int = 60
+    ai_context_messages: int = 25       # сколько последних сообщений канала идёт в промпт
+    ai_notes_update_every: int = 10     # обновлять заметку о пользователе каждые N очков
+    # память о разговорах: сессия диалога и резюме
+    ai_dialog_gap_minutes: int = 30     # пауза, после которой диалог считается законченным
+    ai_dialog_min_exchanges: int = 3    # минимум обменов для резюме диалога
+    ai_deep_dialog_exchanges: int = 5   # с какого числа обменов диалог считается «долгим»
+    ai_dialog_summary_keep: int = 5     # сколько резюме хранить на человека
+    ai_event_comment_chance: float = 0.12
+    ai_event_comment_cooldown: int = 900
+    ai_prompt_path: str = "src/infrastructure/ai/prompts/poposya_v1.md"
+    # реплик в час на пользователя по уровню отношений
+    ai_rate_limits_by_level: dict[int, int] = {
+        1: 5, 2: 10, 3: 20, 4: 40, 5: 60, 6: 120, 7: 240,
+    }
+
+    # --- relationship (очки и роли) ---
+    relationship_daily_point_cap: int = 20
+    # мягкое угасание очков при неактивности
+    relationship_decay_after_days: int = 30   # дней тишины до начала угасания
+    relationship_decay_every_days: int = 3    # раз в сколько дней списывать
+    relationship_decay_points: int = 1        # сколько очков списывать
+    relationship_role_thresholds: list[int] = [100, 250, 450, 700, 950, 1200]
+    relationship_exclusive_threshold: int = 1250
+    relationship_absence_days: int = 30
+    relationship_notes_max_chars: int = 700
+    relationship_role_names: list[str] = [
+        "☕ Случайный прохожий",
+        "🌧 Знакомый силуэт",
+        "🎨 Занятный собеседник",
+        "🎧 На одной волне",
+        "🍷 Вечерняя компания",
+        "🖤 Особенный",
+        "✂️👁🖤 Единственный",
+    ]
+
+    # --- антиспам ---
+    spam_limit: int = 5           # сколько сообщений за окно = спам
+    spam_window: int = 10         # окно отслеживания, секунды
+    spam_mute_minutes: int = 2    # длительность мута за спам
+
+    # --- каналы ---
+    welcome_channel: str = "bots"      # канал приветствий/прощаний (по названию)
+    main_channel: str = "основной"     # главный канал: активность, случайные реплики
+    log_channel: int = 0               # ID канала логов модерации (0 = отключено)
+
+    # --- анкета знакомства (/introduce) ---
+    survey_bonus_points: int = 5  # разовый бонус очков за заполнение
+    survey_interest_options: list[str] = [
+        "Игры", "Аниме", "Музыка", "Арт", "Код", "Спорт", "Кино",
+    ]
+
+    # --- дни рождения и праздники ---
+    birthday_remind_days: int = 3      # за сколько дней напоминать о ДР
+    holiday_points_multiplier: int = 2  # множитель очков в праздники
+    holidays: dict[str, str] = {
+        "01-01": "Новый год",
+        "14-02": "День святого Валентина",
+        "02-06": "День рождения Попоси",  # 2 июня — её собственный праздник
+        "31-10": "Хэллоуин",
+        "25-12": "Рождество",
+    }
+
+    # --- доставка сообщений (/send) ---
+    send_per_hour: int = 5  # лимит отправок на пользователя в час
+
+    # --- секретная комната ---
+    secret_room_min_level: int = 5     # уровень отношений для ключа и входа
+    secret_room_hours: int = 12        # время жизни комнаты
+    secret_room_text_name: str = "🖤-тайная-комната"
+    secret_room_voice_name: str = "🖤 Тайная комната"
+
+    # --- альбом Попоси (starboard) ---
+    album_channel: str = "альбом-попоси"   # канал-альбом (по названию)
+    album_reaction_threshold: int = 5      # реакций для попадания в альбом
+    album_reaction_emoji: str = ""         # конкретное эмодзи; пусто = любое
+
+    # --- модерация ---
+    warn_threshold: int = 3            # варнов до мута
+    warn_mute_minutes: int = 120       # длительность мута при накоплении варнов
+
+    auto_role: str = ""  # роль новичку при входе (название; пусто = выключено)
+
+    # слова, которые бот считает оскорблением в свой адрес (настроение −5)
+    bot_insult_words: list[str] = [
+        "дурак", "тупая", "тупой", "идиот", "заткнись", "глупая", "бесишь", "отстой",
+    ]
+
+    # --- активность бота ---
+    lonely_hours: int = 12             # часов тишины в главном канале до «скучаю»
+    absent_days_threshold: int = 7     # дней отсутствия участника до «с возвращением»
+    random_thought_min_hours: int = 3  # случайные реплики: минимальный интервал
+    random_thought_max_hours: int = 6  # случайные реплики: максимальный интервал
+    # очки отношений за присутствие в голосовых каналах (0 = выключено);
+    # дневной потолок общий с очками за сообщения, AFK-канал и заглушённые
+    # «в наушниках» не считаются
+    voice_points_per_hour: int = 3
+
+    # --- ночные находки («Токийские трофеи») ---
+    finds_channel: str = ""              # канал анонсов по ИМЕНИ; пусто = main_channel
+    finds_channel_id: int = 0            # канал анонсов по ID (через /config); 0 = по имени выше
+    finds_min_interval_hours: int = 12   # интервал между находками (случайный)
+    finds_max_interval_hours: int = 48
+    finds_lifetime_hours: int = 12       # сколько живёт неразобранная находка
+    finds_claim_cooldown_hours: int = 8  # кулдаун походов на пользователя
+    finds_fail_penalty: int = 5          # штраф очков за провал (не ниже 0)
+    finds_walk_cost: int = 60            # цена «специальной прогулки»
+    finds_walk_cooldown_days: int = 7
+
+    # --- киноклуб ---
+    # основной источник данных о фильмах; второй настроенный — автофолбэк
+    movie_provider: str = "tmdb"      # tmdb | kinopoisk
+    tmdb_api_key: str = ""            # ключ themoviedb.org (блокируется по IP в РФ)
+    kinopoisk_api_key: str = ""       # токен kinopoisk.dev (работает из РФ)
+    cinema_watchlist_max: int = 50    # предел вотчлиста на сервер
+    cinema_poll_options: int = 5      # кандидатов в опросе киновечера
+    cinema_rating_hours: int = 24     # сколько собираются оценки после просмотра
+    cinema_rating_minutes: int = 0    # >0 переопределяет часы (короткое окно для тестов)
+    # форум-канал «золотой фонд» (ID): после закрытия оценок бот публикует туда
+    # отдельный пост по фильму со сводкой и всеми рецензиями (0 = выключено)
+    cinema_forum_channel: int = 0
+    cinema_rating_points: int = 2     # очков отношений за первую оценку
+    cinema_utc_offset: int = 3        # часовой пояс дат киновечера (МСК = +3)
+
+    # --- плейлисты сервера ---
+    music_playlist_max_per_guild: int = 25
+    music_playlist_max_tracks: int = 100
+
+    # --- Spotify (задел под будущий API: пока работают только одиночные
+    # ссылки на треки через oEmbed -> поиск на YouTube) ---
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+
+    music_default_volume: float = 0.5
+    music_playlist_limit: int = 50
+    music_idle_timeout: int = 300
+    music_idle_warn_seconds: int = 120  # за сколько до выхода спросить «включить ещё?»
+    music_progress_interval: int = 5
+    # караоке: на сколько секунд показывать строки раньше счётчика
+    # (компенсация буферизации звука; больше = текст раньше)
+    music_lyrics_offset: float = 1.0
+    music_karaoke_ansi: bool = False   # цветная подсветка (ANSI); дёргает чат и вид спорный — по умолч. выкл
+    music_search_limit: int = 5
+    music_liked_max_per_user: int = 300  # потолок личного списка лайков
+
+    # --- кэш аудио: следующие треки очереди скачиваются на диск заранее
+    # и играют из файла — без сетевых заиканий (стрим остаётся фолбэком
+    # и способом мгновенного старта первого трека); 0 = выключить ---
+    music_prefetch_tracks: int = 3
+    music_cache_dir: str = "data/audio_cache"  # в Docker попадает на volume
+    music_cache_max_mb: int = 300              # LRU-вытеснение старых файлов
+
+    # Обход проверки YouTube «подтвердите, что вы не бот»:
+    # браузер, из которого yt-dlp возьмёт cookies (chrome/firefox/edge/…),
+    # либо путь к файлу cookies в формате Netscape
+    ytdlp_cookies_from_browser: str | None = None
+    ytdlp_cookies_file: str | None = None
