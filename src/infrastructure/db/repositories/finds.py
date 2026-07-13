@@ -80,9 +80,7 @@ class SqlAlchemyNightFindRepository(INightFindRepository):
         return _find_to_domain(row) if row else None
 
     async def get_by_message(self, message_id: int) -> NightFind | None:
-        stmt = select(NightFindModel).where(
-            NightFindModel.message_id == message_id
-        ).limit(1)
+        stmt = select(NightFindModel).where(NightFindModel.message_id == message_id).limit(1)
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _find_to_domain(row) if row else None
 
@@ -124,13 +122,15 @@ class SqlAlchemyCollectionRepository(ICollectionRepository):
         self._session = session
 
     async def add(self, item: CollectionItem) -> None:
-        self._session.add(CollectionItemModel(
-            guild_id=item.guild_id,
-            user_id=item.user_id,
-            item_id=item.item_id,
-            obtained_at=_naive(item.obtained_at),
-            gifted_at=_naive(item.gifted_at),
-        ))
+        self._session.add(
+            CollectionItemModel(
+                guild_id=item.guild_id,
+                user_id=item.user_id,
+                item_id=item.item_id,
+                obtained_at=_naive(item.obtained_at),
+                gifted_at=_naive(item.gifted_at),
+            )
+        )
 
     async def list_for_user(self, guild_id: int, user_id: int) -> list[CollectionItem]:
         stmt = (
@@ -190,18 +190,18 @@ class SqlAlchemyFindAttemptRepository(IFindAttemptRepository):
         self._session = session
 
     async def add(self, attempt: FindAttempt) -> None:
-        self._session.add(FindAttemptModel(
-            guild_id=attempt.guild_id,
-            user_id=attempt.user_id,
-            kind=attempt.kind,
-            success=attempt.success,
-            attempted_at=_naive(attempt.attempted_at),
-            find_id=attempt.find_id,
-        ))
+        self._session.add(
+            FindAttemptModel(
+                guild_id=attempt.guild_id,
+                user_id=attempt.user_id,
+                kind=attempt.kind,
+                success=attempt.success,
+                attempted_at=_naive(attempt.attempted_at),
+                find_id=attempt.find_id,
+            )
+        )
 
-    async def last_attempt_at(
-        self, guild_id: int, user_id: int, kind: str
-    ) -> datetime | None:
+    async def last_attempt_at(self, guild_id: int, user_id: int, kind: str) -> datetime | None:
         stmt = (
             select(FindAttemptModel.attempted_at)
             .where(

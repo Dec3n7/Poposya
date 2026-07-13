@@ -15,7 +15,7 @@ UowFactory = Callable[[], IUnitOfWork]
 @dataclass(frozen=True)
 class SurveyData:
     gender: str = ""
-    contact: str = ""      # "quiet" | "normal" | "attention" ("" = normal)
+    contact: str = ""  # "quiet" | "normal" | "attention" ("" = normal)
     interests: str = ""
     season: str = ""
     completed: bool = False
@@ -102,7 +102,11 @@ class AwardPointUseCase:
         self._settings = settings_provider
 
     async def execute(
-        self, user_id: int, guild_id: int, channel_id: int, now: datetime,
+        self,
+        user_id: int,
+        guild_id: int,
+        channel_id: int,
+        now: datetime,
         base_amount: int = 1,
     ) -> AwardResult:
         """base_amount — очков за одно событие (сообщение = 1, час в войсе = 3);
@@ -118,13 +122,13 @@ class AwardPointUseCase:
 
             # в праздники очки идут с множителем (и потолок пропорционально выше)
             is_holiday = (
-                self._calendar is not None
-                and self._calendar.holiday_name(now.date()) is not None
+                self._calendar is not None and self._calendar.holiday_name(now.date()) is not None
             )
             multiplier = self._holiday_multiplier if is_holiday else 1
             daily_cap = (
                 self._settings.get(guild_id, "relationship_daily_point_cap", self._daily_cap)
-                if self._settings is not None else self._daily_cap
+                if self._settings is not None
+                else self._daily_cap
             )
             awarded = profile.award_point(
                 now, daily_cap * multiplier, amount=base_amount * multiplier
@@ -137,9 +141,11 @@ class AwardPointUseCase:
                 previous_holder = _reevaluate_exclusive(
                     profile, holder, self._policy.exclusive_threshold
                 )
-                became_exclusive = profile.is_exclusive and (
-                    holder is None or holder.user_id != profile.user_id
-                ) and old_role != self._policy.exclusive_role_index
+                became_exclusive = (
+                    profile.is_exclusive
+                    and (holder is None or holder.user_id != profile.user_id)
+                    and old_role != self._policy.exclusive_role_index
+                )
 
             new_role = self._policy.role_index(profile.points, profile.is_exclusive)
 
@@ -148,23 +154,27 @@ class AwardPointUseCase:
                 await uow.relationships.save(previous_holder)
 
             if new_role != old_role:
-                uow.add_event(RelationshipRoleChanged(
-                    aggregate_id=f"{guild_id}:{user_id}",
-                    guild_id=guild_id,
-                    user_id=user_id,
-                    channel_id=channel_id,
-                    old_role_index=old_role,
-                    new_role_index=new_role,
-                    points=profile.points,
-                ))
+                uow.add_event(
+                    RelationshipRoleChanged(
+                        aggregate_id=f"{guild_id}:{user_id}",
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        channel_id=channel_id,
+                        old_role_index=old_role,
+                        new_role_index=new_role,
+                        points=profile.points,
+                    )
+                )
             if became_exclusive:
-                uow.add_event(ExclusiveTransferred(
-                    aggregate_id=str(guild_id),
-                    guild_id=guild_id,
-                    new_user_id=user_id,
-                    previous_user_id=previous_holder.user_id if previous_holder else None,
-                    channel_id=channel_id,
-                ))
+                uow.add_event(
+                    ExclusiveTransferred(
+                        aggregate_id=str(guild_id),
+                        guild_id=guild_id,
+                        new_user_id=user_id,
+                        previous_user_id=previous_holder.user_id if previous_holder else None,
+                        channel_id=channel_id,
+                    )
+                )
 
             summaries = await uow.dialog_summaries.last(guild_id, user_id, 3)
 
@@ -234,14 +244,16 @@ class SetPointsUseCase:
             if previous_holder is not None:
                 await uow.relationships.save(previous_holder)
             if new_role != old_role:
-                uow.add_event(RelationshipRoleChanged(
-                    aggregate_id=f"{guild_id}:{user_id}",
-                    guild_id=guild_id,
-                    user_id=user_id,
-                    old_role_index=old_role,
-                    new_role_index=new_role,
-                    points=profile.points,
-                ))
+                uow.add_event(
+                    RelationshipRoleChanged(
+                        aggregate_id=f"{guild_id}:{user_id}",
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        old_role_index=old_role,
+                        new_role_index=new_role,
+                        points=profile.points,
+                    )
+                )
             await uow.commit()
             return RankInfo(
                 points=profile.points,
@@ -301,7 +313,7 @@ class SetBirthdayUseCase:
 
 @dataclass(frozen=True)
 class BirthdayEvents:
-    remind: list[tuple[int, int]]        # (guild_id, user_id) — ДР через N дней
+    remind: list[tuple[int, int]]  # (guild_id, user_id) — ДР через N дней
     congratulate: list[tuple[int, int]]  # (guild_id, user_id) — ДР сегодня
 
 
@@ -404,14 +416,16 @@ class DecayPointsUseCase:
                 await uow.relationships.save(profile)
                 touched_guilds.add(profile.guild_id)
                 if new_role != old_role and not profile.is_exclusive:
-                    uow.add_event(RelationshipRoleChanged(
-                        aggregate_id=f"{profile.guild_id}:{profile.user_id}",
-                        guild_id=profile.guild_id,
-                        user_id=profile.user_id,
-                        old_role_index=old_role,
-                        new_role_index=new_role,
-                        points=profile.points,
-                    ))
+                    uow.add_event(
+                        RelationshipRoleChanged(
+                            aggregate_id=f"{profile.guild_id}:{profile.user_id}",
+                            guild_id=profile.guild_id,
+                            user_id=profile.user_id,
+                            old_role_index=old_role,
+                            new_role_index=new_role,
+                            points=profile.points,
+                        )
+                    )
 
             # угасание могло сместить лидера — проверяем титул в затронутых гильдиях
             for guild_id in touched_guilds:
@@ -432,22 +446,26 @@ class DecayPointsUseCase:
                     await uow.relationships.save(holder)
                     await uow.relationships.save(challenger)
                     for prof in (holder, challenger):
-                        uow.add_event(RelationshipRoleChanged(
-                            aggregate_id=f"{guild_id}:{prof.user_id}",
+                        uow.add_event(
+                            RelationshipRoleChanged(
+                                aggregate_id=f"{guild_id}:{prof.user_id}",
+                                guild_id=guild_id,
+                                user_id=prof.user_id,
+                                old_role_index=None,
+                                new_role_index=self._policy.role_index(
+                                    prof.points, prof.is_exclusive
+                                ),
+                                points=prof.points,
+                            )
+                        )
+                    uow.add_event(
+                        ExclusiveTransferred(
+                            aggregate_id=str(guild_id),
                             guild_id=guild_id,
-                            user_id=prof.user_id,
-                            old_role_index=None,
-                            new_role_index=self._policy.role_index(
-                                prof.points, prof.is_exclusive
-                            ),
-                            points=prof.points,
-                        ))
-                    uow.add_event(ExclusiveTransferred(
-                        aggregate_id=str(guild_id),
-                        guild_id=guild_id,
-                        new_user_id=challenger.user_id,
-                        previous_user_id=holder.user_id,
-                    ))
+                            new_user_id=challenger.user_id,
+                            previous_user_id=holder.user_id,
+                        )
+                    )
                     transfers.append((guild_id, challenger.user_id, holder.user_id))
 
             await uow.commit()
@@ -473,7 +491,9 @@ class AddDialogSummaryUseCase:
 
     async def execute(self, user_id: int, guild_id: int, summary: str, now: datetime) -> None:
         async with self._uow_factory() as uow:
-            await uow.dialog_summaries.add(guild_id, user_id, summary.strip()[:400], now, self._keep)
+            await uow.dialog_summaries.add(
+                guild_id, user_id, summary.strip()[:400], now, self._keep
+            )
             await uow.commit()
 
 
@@ -491,9 +511,9 @@ class IssueSecretCodeUseCase:
                 return existing.code
             raw = _secrets.token_hex(4).upper()
             code = f"{raw[:4]}-{raw[4:]}"
-            await uow.secret_rooms.save_code(SecretCode(
-                guild_id=guild_id, user_id=user_id, code=code, issued_at=now
-            ))
+            await uow.secret_rooms.save_code(
+                SecretCode(guild_id=guild_id, user_id=user_id, code=code, issued_at=now)
+            )
             await uow.commit()
             return code
 
@@ -535,21 +555,27 @@ class RegisterSecretRoomUseCase:
         self._hours = hours
 
     async def execute(
-        self, user_id: int, guild_id: int,
-        text_channel_id: int, voice_channel_id: int, now: datetime,
+        self,
+        user_id: int,
+        guild_id: int,
+        text_channel_id: int,
+        voice_channel_id: int,
+        now: datetime,
     ) -> datetime:
         expires_at = now + timedelta(hours=self._hours)
         async with self._uow_factory() as uow:
             stored = await uow.secret_rooms.get_code(user_id, guild_id)
             if stored is not None:
                 await uow.secret_rooms.save_code(replace(stored, used_at=now))
-            await uow.secret_rooms.add_room(SecretRoom(
-                guild_id=guild_id,
-                text_channel_id=text_channel_id,
-                voice_channel_id=voice_channel_id,
-                expires_at=expires_at,
-                created_by=user_id,
-            ))
+            await uow.secret_rooms.add_room(
+                SecretRoom(
+                    guild_id=guild_id,
+                    text_channel_id=text_channel_id,
+                    voice_channel_id=voice_channel_id,
+                    expires_at=expires_at,
+                    created_by=user_id,
+                )
+            )
             await uow.commit()
             return expires_at
 
@@ -602,9 +628,7 @@ class ToggleSurveyInterestUseCase:
     def __init__(self, uow_factory: UowFactory):
         self._uow_factory = uow_factory
 
-    async def execute(
-        self, user_id: int, guild_id: int, interest: str
-    ) -> tuple[bool, list[str]]:
+    async def execute(self, user_id: int, guild_id: int, interest: str) -> tuple[bool, list[str]]:
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
             interests = [i for i in profile.survey_interests.split(",") if i]
@@ -655,14 +679,16 @@ class CompleteSurveyUseCase:
                         await uow.relationships.save(previous_holder)
                     new_role = self._policy.role_index(profile.points, profile.is_exclusive)
                     if new_role != old_role:
-                        uow.add_event(RelationshipRoleChanged(
-                            aggregate_id=f"{guild_id}:{user_id}",
-                            guild_id=guild_id,
-                            user_id=user_id,
-                            old_role_index=old_role,
-                            new_role_index=new_role,
-                            points=profile.points,
-                        ))
+                        uow.add_event(
+                            RelationshipRoleChanged(
+                                aggregate_id=f"{guild_id}:{user_id}",
+                                guild_id=guild_id,
+                                user_id=user_id,
+                                old_role_index=old_role,
+                                new_role_index=new_role,
+                                points=profile.points,
+                            )
+                        )
             await uow.relationships.save(profile)
             await uow.commit()
             return SurveyCompleteResult(

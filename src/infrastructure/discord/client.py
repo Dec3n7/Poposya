@@ -74,9 +74,7 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(
             RelationshipCog(self, self.container.relationship, role_sync, self.container.event_bus)
         )
-        await self.add_cog(
-            FindsCog(self, self.container.finds, self.container.settings, mood, gs)
-        )
+        await self.add_cog(FindsCog(self, self.container.finds, self.container.settings, mood, gs))
         tmdb = TmdbClient(self.container.settings.tmdb_api_key)
         kinopoisk = KinopoiskClient(self.container.settings.kinopoisk_api_key)
         if self.container.settings.movie_provider == "kinopoisk":
@@ -108,7 +106,9 @@ class PoposyaBot(commands.Bot):
         )
         await self.add_cog(
             SecretRoomCog(
-                self, self.container.relationship, self.container.settings,
+                self,
+                self.container.relationship,
+                self.container.settings,
                 self.container.event_bus,
             )
         )
@@ -134,7 +134,9 @@ class PoposyaBot(commands.Bot):
             guild = discord.Object(id=dev_guild_id)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
-            logger.info("Слеш-команды синхронизированы с dev-гильдией", extra={"guild_id": dev_guild_id})
+            logger.info(
+                "Слеш-команды синхронизированы с dev-гильдией", extra={"guild_id": dev_guild_id}
+            )
         else:
             await self.tree.sync()
             logger.info("Слеш-команды синхронизированы глобально (может занять до часа)")
@@ -143,7 +145,8 @@ class PoposyaBot(commands.Bot):
         self._was_connected = True
         logger.info(
             "Бот запущен как %s · серверов: %d",
-            self.user, len(self.guilds),
+            self.user,
+            len(self.guilds),
             extra={"bot_user": str(self.user), "guilds": len(self.guilds)},
         )
 

@@ -1,5 +1,6 @@
 """ModerationCog: вызываем callback'и слеш-команд напрямую с фейковыми
 Interaction/Member/container — проверяем ветвление, без живого Discord."""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -24,8 +25,12 @@ def not_found():
 
 def make_settings(**over):
     base = dict(
-        spam_window=10, spam_limit=5, spam_mute_minutes=2,
-        warn_threshold=3, warn_mute_minutes=120, log_channel=0,
+        spam_window=10,
+        spam_limit=5,
+        spam_mute_minutes=2,
+        warn_threshold=3,
+        warn_mute_minutes=120,
+        log_channel=0,
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -92,6 +97,7 @@ def make_cog(container=None, settings=None):
 
 # --- /say -------------------------------------------------------------------
 
+
 async def test_say_sends_to_channel():
     cog = make_cog()
     interaction = make_interaction()
@@ -115,6 +121,7 @@ async def test_say_forbidden():
 
 # --- /warn ------------------------------------------------------------------
 
+
 async def test_warn_bot_rejected():
     cog = make_cog()
     interaction = make_interaction()
@@ -124,7 +131,9 @@ async def test_warn_bot_rejected():
 
 async def test_warn_normal():
     container = make_container()
-    container.warn_user.execute.return_value = WarnResult(count=1, threshold=3, mute_triggered=False)
+    container.warn_user.execute.return_value = WarnResult(
+        count=1, threshold=3, mute_triggered=False
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     user = make_member()
@@ -146,6 +155,7 @@ async def test_warn_triggers_mute():
 
 
 # --- /warnings, /clearwarns -------------------------------------------------
+
 
 async def test_warnings_empty():
     cog = make_cog()
@@ -177,6 +187,7 @@ async def test_clearwarns_reports_count():
 
 # --- /mute, /unmute ---------------------------------------------------------
 
+
 async def test_mute_success():
     cog = make_cog()
     interaction = make_interaction()
@@ -207,12 +218,15 @@ async def test_unmute_failure():
     cog = make_cog()
     interaction = make_interaction()
     user = make_member()
-    user.timeout = AsyncMock(side_effect=discord.HTTPException(MagicMock(status=500, reason="x"), "e"))
+    user.timeout = AsyncMock(
+        side_effect=discord.HTTPException(MagicMock(status=500, reason="x"), "e")
+    )
     await type(cog).unmute.callback(cog, interaction, user)
     assert "Не получилось" in interaction.response.send_message.await_args.args[0]
 
 
 # --- /tempban, /unban, /bans -----------------------------------------------
+
 
 async def test_tempban_success():
     container = make_container()
@@ -280,6 +294,7 @@ async def test_bans_list():
 
 # --- /clear, /slowmode ------------------------------------------------------
 
+
 async def test_clear_purges():
     cog = make_cog()
     interaction = make_interaction()
@@ -301,6 +316,7 @@ async def test_slowmode_on_and_off():
 
 
 # --- /rage ------------------------------------------------------------------
+
 
 async def test_rage_not_in_voice():
     cog = make_cog()
@@ -327,6 +343,7 @@ async def test_rage_moves_and_kicks():
 
 
 # --- helpers: _timeout / _log ----------------------------------------------
+
 
 async def test_log_skipped_without_channel():
     cog = make_cog(settings=make_settings(log_channel=0))

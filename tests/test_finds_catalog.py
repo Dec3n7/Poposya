@@ -1,5 +1,6 @@
 """Чистая логика каталога находок: сезоны, шансы, взвешенный бросок предметов,
 праздничные/сезонные предметы, награды."""
+
 import random
 
 import pytest
@@ -8,12 +9,20 @@ from src.domain.finds import catalog
 from src.domain.finds.entities import Rarity
 
 
-@pytest.mark.parametrize("month,season", [
-    (12, "зима"), (1, "зима"), (2, "зима"),
-    (3, "весна"), (5, "весна"),
-    (6, "лето"), (8, "лето"),
-    (9, "осень"), (11, "осень"),
-])
+@pytest.mark.parametrize(
+    "month,season",
+    [
+        (12, "зима"),
+        (1, "зима"),
+        (2, "зима"),
+        (3, "весна"),
+        (5, "весна"),
+        (6, "лето"),
+        (8, "лето"),
+        (9, "осень"),
+        (11, "осень"),
+    ],
+)
 def test_season_for_month(month, season):
     assert catalog.season_for_month(month) == season
 
@@ -25,10 +34,19 @@ def test_get_item_and_location():
     assert catalog.get_location("nope") is None
 
 
-@pytest.mark.parametrize("level,chance", [
-    (7, 0.70), (8, 0.70), (5, 0.60), (6, 0.60),
-    (3, 0.52), (4, 0.52), (1, 0.45), (0, 0.45),
-])
+@pytest.mark.parametrize(
+    "level,chance",
+    [
+        (7, 0.70),
+        (8, 0.70),
+        (5, 0.60),
+        (6, 0.60),
+        (3, 0.52),
+        (4, 0.52),
+        (1, 0.45),
+        (0, 0.45),
+    ],
+)
 def test_success_chance(level, chance):
     assert catalog.success_chance(level) == chance
 
@@ -51,8 +69,7 @@ def test_roll_item_holiday_only_on_its_day():
         assert item.holiday is None
     # в праздничный день предмет доступен
     seen_holiday = any(
-        catalog.roll_item(random.Random(i), holiday="01-01").holiday == "01-01"
-        for i in range(200)
+        catalog.roll_item(random.Random(i), holiday="01-01").holiday == "01-01" for i in range(200)
     )
     assert seen_holiday
 

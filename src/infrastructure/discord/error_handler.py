@@ -60,7 +60,8 @@ async def on_app_command_error(
     with LoggingContext.correlation_id(code):
         logger.error(
             "Необработанная ошибка команды /%s: %s",
-            command, original,
+            command,
+            original,
             exc_info=original,
             extra={
                 "command": command,

@@ -48,7 +48,8 @@ class RoleSyncService:
         )
 
         to_remove = [
-            role for name, role in managed.items()
+            role
+            for name, role in managed.items()
             if role is not None and role in member.roles and role != desired
         ]
         try:

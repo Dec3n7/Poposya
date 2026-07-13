@@ -1,5 +1,6 @@
 """Общие фейки для тестов discord-cog'ов: исключения discord, именованный
 пользователь, заготовка Interaction и Member."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import discord

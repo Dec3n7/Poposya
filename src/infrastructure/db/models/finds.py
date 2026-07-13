@@ -36,9 +36,7 @@ class CollectionItemModel(Base):
     obtained_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     gifted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    __table_args__ = (
-        Index("ix_user_collections_owner", "guild_id", "user_id", "obtained_at"),
-    )
+    __table_args__ = (Index("ix_user_collections_owner", "guild_id", "user_id", "obtained_at"),)
 
 
 class FindAttemptModel(Base):

@@ -1,5 +1,6 @@
 """SecretRoomCog: /secret (показ/выдача/валидация ключа, создание комнаты) и
 выдача ключа при пересечении порога уровня."""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -18,8 +19,10 @@ NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
 
 def make_settings(**over):
     base = dict(
-        secret_room_min_level=5, secret_room_hours=12,
-        secret_room_text_name="tayna", secret_room_voice_name="Tayna",
+        secret_room_min_level=5,
+        secret_room_hours=12,
+        secret_room_text_name="tayna",
+        secret_room_voice_name="Tayna",
         relationship_role_names=["R0", "R1", "R2", "R3", "R4", "R5", "R6"],
     )
     base.update(over)
@@ -27,8 +30,14 @@ def make_settings(**over):
 
 
 def make_rank(level=6):
-    return RankInfo(points=1000, level=level, role_index=4, is_exclusive=False,
-                    frozen=False, next_threshold=None)
+    return RankInfo(
+        points=1000,
+        level=level,
+        role_index=4,
+        is_exclusive=False,
+        frozen=False,
+        next_threshold=None,
+    )
 
 
 def make_container():
@@ -44,8 +53,9 @@ def make_container():
 
 def make_cog(container=None, settings=None):
     bot = MagicMock()
-    return SecretRoomCog(bot, container or make_container(),
-                         settings or make_settings(), InMemoryEventBus())
+    return SecretRoomCog(
+        bot, container or make_container(), settings or make_settings(), InMemoryEventBus()
+    )
 
 
 def test_min_role_index_derived_from_level():
@@ -54,6 +64,7 @@ def test_min_role_index_derived_from_level():
 
 
 # --- /secret: недостаточный уровень ---
+
 
 async def test_secret_denied_below_level():
     container = make_container()
@@ -65,6 +76,7 @@ async def test_secret_denied_below_level():
 
 
 # --- /secret без аргумента: показать/выдать ключ ---
+
 
 async def test_secret_issues_when_no_code():
     container = make_container()
@@ -79,7 +91,11 @@ async def test_secret_issues_when_no_code():
 async def test_secret_shows_existing_unused_code():
     container = make_container()
     container.get_secret_code.execute.return_value = SecretCode(
-        guild_id=10, user_id=1, code="CODE-1234", issued_at=NOW, used_at=None,
+        guild_id=10,
+        user_id=1,
+        code="CODE-1234",
+        issued_at=NOW,
+        used_at=None,
     )
     cog = make_cog(container)
     interaction = make_interaction()
@@ -90,7 +106,11 @@ async def test_secret_shows_existing_unused_code():
 async def test_secret_reports_used_code():
     container = make_container()
     container.get_secret_code.execute.return_value = SecretCode(
-        guild_id=10, user_id=1, code="CODE-1234", issued_at=NOW, used_at=NOW,
+        guild_id=10,
+        user_id=1,
+        code="CODE-1234",
+        issued_at=NOW,
+        used_at=NOW,
     )
     cog = make_cog(container)
     interaction = make_interaction()
@@ -99,6 +119,7 @@ async def test_secret_reports_used_code():
 
 
 # --- /secret с ключом: валидация ---
+
 
 async def test_secret_redeem_wrong_code():
     container = make_container()
@@ -163,6 +184,7 @@ async def test_secret_redeem_forbidden_channel_creation():
 
 # --- выдача ключа при пересечении порога ---
 
+
 async def test_on_role_changed_crossing_threshold_dms_key():
     container = make_container()
     cog = make_cog(container)  # min_role_index = 3
@@ -170,8 +192,12 @@ async def test_on_role_changed_crossing_threshold_dms_key():
     user.send = AsyncMock()
     cog.bot.get_user.return_value = user
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1,
-        old_role_index=2, new_role_index=3, points=700,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        old_role_index=2,
+        new_role_index=3,
+        points=700,
     )
     await cog._on_role_changed(event)
     container.issue_secret_code.execute.assert_awaited_once()
@@ -182,8 +208,12 @@ async def test_on_role_changed_not_crossing_noop():
     container = make_container()
     cog = make_cog(container)
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1,
-        old_role_index=3, new_role_index=4, points=950,  # уже был выше порога
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        old_role_index=3,
+        new_role_index=4,
+        points=950,  # уже был выше порога
     )
     await cog._on_role_changed(event)
     container.issue_secret_code.execute.assert_not_awaited()
@@ -196,7 +226,11 @@ async def test_on_role_changed_dm_closed_swallowed():
     user.send = AsyncMock(side_effect=forbidden())
     cog.bot.get_user.return_value = user
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1,
-        old_role_index=None, new_role_index=3, points=700,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        old_role_index=None,
+        new_role_index=3,
+        points=700,
     )
     await cog._on_role_changed(event)  # не должно пробросить

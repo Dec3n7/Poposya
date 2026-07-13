@@ -1,5 +1,6 @@
 """Music views: SearchSelect, LikedListView (пагинация/запуск), PlayerView
 (interaction_check и кнопки управления)."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,21 +17,33 @@ from src.infrastructure.discord.cogs.music.views import (
 
 
 def make_track(vid="a", title="Песня", duration=200):
-    return Track(video_id=vid, title=title, url=f"https://youtu.be/{vid}",
-                 duration=duration, requested_by=1, uploader="Artist")
+    return Track(
+        video_id=vid,
+        title=title,
+        url=f"https://youtu.be/{vid}",
+        duration=duration,
+        requested_by=1,
+        uploader="Artist",
+    )
 
 
 def make_liked(vid, title=None):
-    return LikedTrack(user_id=1, video_id=vid, title=title or vid,
-                      uploader="Artist", duration=180,
-                      liked_at=__import__("datetime").datetime.now())
+    return LikedTrack(
+        user_id=1,
+        video_id=vid,
+        title=title or vid,
+        uploader="Artist",
+        duration=180,
+        liked_at=__import__("datetime").datetime.now(),
+    )
 
 
 def make_interaction(user_id=1, in_voice=True):
     interaction = MagicMock()
     interaction.guild_id = 10
     interaction.user = SimpleNamespace(
-        id=user_id, display_name="Гость",
+        id=user_id,
+        display_name="Гость",
         voice=SimpleNamespace(channel=MagicMock()) if in_voice else None,
     )
     interaction.guild = MagicMock()
@@ -45,6 +58,7 @@ def make_interaction(user_id=1, in_voice=True):
 
 
 # --- SearchSelect / SearchView ---------------------------------------------
+
 
 async def test_search_select_enqueues_chosen():
     enqueue = AsyncMock(return_value=True)
@@ -65,6 +79,7 @@ def test_search_view_builds_options():
 
 
 # --- LikedListView ----------------------------------------------------------
+
 
 def make_liked_view(n=25, owner_id=1):
     resolve = SimpleNamespace(execute=AsyncMock())
@@ -125,6 +140,7 @@ async def test_liked_play_select_success():
 
 # --- QueueView --------------------------------------------------------------
 
+
 def make_queue_player(n_queue=25, current=True):
     player = MagicMock()
     player.current = make_track("cur", "Текущий") if current else None
@@ -143,7 +159,7 @@ def test_queue_view_embed_shows_current_and_requester():
 def test_queue_view_pagination():
     view = QueueView(make_queue_player(n_queue=25))  # 3 страницы
     assert view.total_pages == 3
-    assert view.prev_button.disabled is True   # на первой ← выключен
+    assert view.prev_button.disabled is True  # на первой ← выключен
     assert view.next_button.disabled is False
 
 
@@ -163,6 +179,7 @@ def test_queue_view_empty_queue():
 
 
 # --- PlayerView -------------------------------------------------------------
+
 
 def make_player_view(player=None):
     service = MagicMock()

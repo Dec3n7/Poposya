@@ -1,5 +1,6 @@
 """Тесты JSON-логгера и correlation-context: маскирование секретов,
 extra-поля, exception, изоляция correlation_id по asyncio-задачам."""
+
 import asyncio
 import json
 import logging
@@ -30,14 +31,18 @@ def test_extra_fields_passed_through():
 
 
 def test_secret_keys_masked():
-    out = json.loads(JsonFormatter().format(_record(
-        groq_api_key="sk-secret",
-        discord_token="tok",
-        password="p",
-        database_url="postgres://x",
-        token="raw",
-        user_id=1,
-    )))
+    out = json.loads(
+        JsonFormatter().format(
+            _record(
+                groq_api_key="sk-secret",
+                discord_token="tok",
+                password="p",
+                database_url="postgres://x",
+                token="raw",
+                user_id=1,
+            )
+        )
+    )
     assert out["groq_api_key"] == "***"
     assert out["discord_token"] == "***"
     assert out["password"] == "***"
@@ -64,6 +69,7 @@ def test_exception_included():
         raise ValueError("bad")
     except ValueError:
         import sys
+
         rec = logging.LogRecord("l", logging.ERROR, __file__, 1, "boom", None, sys.exc_info())
     out = json.loads(JsonFormatter().format(rec))
     assert "exception" in out
@@ -81,6 +87,7 @@ def test_correlation_id_added_when_set():
 
 def test_correlation_id_accepts_uuid():
     from uuid import uuid4
+
     u = uuid4()
     with LoggingContext.correlation_id(u):
         assert LoggingContext.get() == str(u)

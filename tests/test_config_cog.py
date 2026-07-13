@@ -1,5 +1,6 @@
 """ConfigCog: /config list/show/set/reset и автодополнение ключей.
 Сервис настроек — реальный GuildSettingsService поверх SQLite."""
+
 import pytest
 
 from src.config import Settings
@@ -21,6 +22,7 @@ async def service(session_factory):
 
 def make_cog(service):
     from unittest.mock import MagicMock
+
     return ConfigCog(MagicMock(), service)
 
 

@@ -30,11 +30,7 @@ class SqliteBackupService:
 
     @property
     def enabled(self) -> bool:
-        return (
-            self._db_path is not None
-            and self._interval_seconds > 0
-            and self._keep > 0
-        )
+        return self._db_path is not None and self._interval_seconds > 0 and self._keep > 0
 
     @property
     def backup_dir(self) -> Path:

@@ -82,7 +82,9 @@ class RelationshipCog(commands.Cog):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="leaderboard", description="Топ очков сервера: кто ближе всех к Попосе")
+    @app_commands.command(
+        name="leaderboard", description="Топ очков сервера: кто ближе всех к Попосе"
+    )
     @app_commands.guild_only()
     async def leaderboard(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
@@ -100,9 +102,7 @@ class RelationshipCog(commands.Cog):
                 if entry.role_index is not None
                 else "без статуса"
             )
-            lines.append(
-                f"{medals.get(i, f'`{i}.`')} **{name}** — {entry.points} · {role_name}"
-            )
+            lines.append(f"{medals.get(i, f'`{i}.`')} **{name}** — {entry.points} · {role_name}")
         embed = discord.Embed(
             title="🏆 Кто ближе всех к Попосе",
             description="\n".join(lines),
@@ -135,7 +135,9 @@ class RelationshipCog(commands.Cog):
             ephemeral=True,
         )
 
-    @relationship_group.command(name="freeze", description="Заморозить/разморозить начисление очков")
+    @relationship_group.command(
+        name="freeze", description="Заморозить/разморозить начисление очков"
+    )
     @app_commands.describe(user="Пользователь")
     async def freeze(self, interaction: discord.Interaction, user: discord.Member) -> None:
         frozen = await self.container.toggle_freeze.execute(user.id, interaction.guild_id)

@@ -36,8 +36,7 @@ class AudioCache:
     def prune(self) -> None:
         """Удалить самые старые файлы, пока кэш не влезет в лимит."""
         files = [
-            p for p in self.directory.iterdir()
-            if p.is_file() and p.suffix not in _TEMP_SUFFIXES
+            p for p in self.directory.iterdir() if p.is_file() and p.suffix not in _TEMP_SUFFIXES
         ]
         files.sort(key=lambda p: p.stat().st_mtime, reverse=True)  # свежие первыми
         total = 0

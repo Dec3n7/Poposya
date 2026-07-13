@@ -35,11 +35,13 @@ async def session_factory(tmp_path):
 
 # --- бэкап SQLite ---
 
+
 def test_sqlite_path_from_url():
     assert sqlite_path_from_url("sqlite+aiosqlite:///./poposya.db").name == "poposya.db"
-    assert str(sqlite_path_from_url("sqlite+aiosqlite:////app/data/poposya.db")).replace(
-        "\\", "/"
-    ) == "/app/data/poposya.db"
+    assert (
+        str(sqlite_path_from_url("sqlite+aiosqlite:////app/data/poposya.db")).replace("\\", "/")
+        == "/app/data/poposya.db"
+    )
     assert sqlite_path_from_url("postgresql+asyncpg://x/y") is None
 
 
@@ -85,16 +87,25 @@ def test_backup_disabled_for_non_sqlite():
 
 # --- outbox ---
 
+
 def test_event_serialization_roundtrip():
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1, channel_id=5,
-        old_role_index=None, new_role_index=2, points=450,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        channel_id=5,
+        old_role_index=None,
+        new_role_index=2,
+        points=450,
     )
     restored = deserialize_event(event.event_type, serialize_event(event))
     assert restored == event
 
     transfer = ExclusiveTransferred(
-        aggregate_id="10", guild_id=10, new_user_id=2, previous_user_id=1,
+        aggregate_id="10",
+        guild_id=10,
+        new_user_id=2,
+        previous_user_id=1,
     )
     assert deserialize_event(transfer.event_type, serialize_event(transfer)) == transfer
 
@@ -114,7 +125,11 @@ async def test_uow_stores_critical_event_and_marks_published(session_factory):
 
     uow = SqlAlchemyUnitOfWork(session_factory, bus)
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1, new_role_index=1, points=250,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        new_role_index=1,
+        points=250,
     )
     async with uow:
         uow.add_event(event)
@@ -128,7 +143,11 @@ async def test_uow_stores_critical_event_and_marks_published(session_factory):
 
 async def test_dispatcher_delivers_unpublished(session_factory):
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1, new_role_index=3, points=700,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        new_role_index=3,
+        points=700,
     )
     # имитация падения между commit и publish: запись есть, published_at пуст
     async with session_factory() as session:
@@ -150,6 +169,7 @@ async def test_dispatcher_delivers_unpublished(session_factory):
 
 
 # --- войс-прогресс ---
+
 
 async def test_voice_progress_roundtrip(session_factory):
     async with session_factory() as session:

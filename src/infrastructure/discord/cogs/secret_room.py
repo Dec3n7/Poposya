@@ -68,9 +68,7 @@ class SecretRoomCog(commands.Cog):
         )
         if not crossed:
             return
-        code = await self.container.issue_secret_code.execute(
-            event.user_id, event.guild_id, _now()
-        )
+        code = await self.container.issue_secret_code.execute(event.user_id, event.guild_id, _now())
         user = self.bot.get_user(event.user_id)
         if user is None:
             try:
@@ -130,8 +128,7 @@ class SecretRoomCog(commands.Cog):
         if not check.ok:
             replies = {
                 "room_active": (
-                    f"Комната уже открыта — <#{check.active_room_channel_id}>. "
-                    "Побереги свой ключ."
+                    f"Комната уже открыта — <#{check.active_room_channel_id}>. Побереги свой ключ."
                 ),
                 "no_code": "У тебя нет ключа. Ключи я раздаю сама — и не всем.",
                 "used": "Этот ключ уже сгорел. Дверь открывается один раз.",
@@ -150,7 +147,7 @@ class SecretRoomCog(commands.Cog):
                 view_channel=True, manage_channels=True, send_messages=True, connect=True
             ),
         }
-        for name in self.settings.relationship_role_names[self._min_role_index:]:
+        for name in self.settings.relationship_role_names[self._min_role_index :]:
             role = discord.utils.get(guild.roles, name=name)
             if role is not None:
                 overwrites[role] = discord.PermissionOverwrite(
@@ -174,8 +171,11 @@ class SecretRoomCog(commands.Cog):
             return
 
         expires_at = await self.container.register_secret_room.execute(
-            interaction.user.id, interaction.guild_id,
-            text_channel.id, voice_channel.id, _now(),
+            interaction.user.id,
+            interaction.guild_id,
+            text_channel.id,
+            voice_channel.id,
+            _now(),
         )
         await text_channel.send(
             _ROOM_WELCOME.format(ts=int(expires_at.timestamp())),

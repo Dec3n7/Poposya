@@ -35,7 +35,7 @@ class RadioService:
         self._get_session = get_session
         self._enabled: dict[int, bool] = {}
         self._history: dict[int, deque[str]] = {}  # последние video_id
-        self._last_fill: dict[int, float] = {}     # monotonic; защита от цикла
+        self._last_fill: dict[int, float] = {}  # monotonic; защита от цикла
 
     def is_enabled(self, guild_id: int) -> bool:
         return self._enabled.get(guild_id, False)

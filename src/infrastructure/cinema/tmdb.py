@@ -45,11 +45,13 @@ class TmdbClient:
         for item in (data.get("results") or [])[:limit]:
             release = item.get("release_date") or ""
             poster_path = item.get("poster_path") or ""
-            results.append(MovieInfo(
-                tmdb_id=item["id"],
-                title=item.get("title") or item.get("original_title") or "Без названия",
-                year=int(release[:4]) if release[:4].isdigit() else None,
-                overview=(item.get("overview") or "").strip(),
-                poster_url=f"{_POSTER_BASE}{poster_path}" if poster_path else "",
-            ))
+            results.append(
+                MovieInfo(
+                    tmdb_id=item["id"],
+                    title=item.get("title") or item.get("original_title") or "Без названия",
+                    year=int(release[:4]) if release[:4].isdigit() else None,
+                    overview=(item.get("overview") or "").strip(),
+                    poster_url=f"{_POSTER_BASE}{poster_path}" if poster_path else "",
+                )
+            )
         return results

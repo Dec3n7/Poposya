@@ -1,5 +1,6 @@
 """Прямые тесты SQL-репозиториев киноклуба на SQLite: вотчлист, голоса 👍/👎,
 ранжирование, киновечера с опросом, оценки 1–10 и агрегаты."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -21,6 +22,7 @@ def make_entry(title, **over):
 
 
 # --- MovieEntry -------------------------------------------------------------
+
 
 async def test_entry_add_get_and_save(session_factory):
     async with session_factory() as s:
@@ -52,7 +54,9 @@ async def test_find_listed_duplicate_by_tmdb_and_title(session_factory):
     async with session_factory() as s:
         repo = SqlAlchemyMovieEntryRepository(s)
         await repo.add(make_entry("Матрица", tmdb_id=603))
-        await repo.add(make_entry("The Matrix"))  # ASCII: SQLite LOWER регистронезависим только для латиницы
+        await repo.add(
+            make_entry("The Matrix")
+        )  # ASCII: SQLite LOWER регистронезависим только для латиницы
         await s.commit()
         assert (await repo.find_listed_duplicate(10, 603, "матрица")).tmdb_id == 603
         # по названию (без tmdb_id), регистронезависимо
@@ -126,10 +130,14 @@ async def test_list_watched_and_rating_pending(session_factory):
 
 # --- MovieNight -------------------------------------------------------------
 
+
 def make_night(**over):
     base = dict(
-        guild_id=10, created_by=1, scheduled_at=NOW + timedelta(days=1),
-        poll_ends_at=NOW + timedelta(hours=2), candidate_ids=[1, 2, 3],
+        guild_id=10,
+        created_by=1,
+        scheduled_at=NOW + timedelta(days=1),
+        poll_ends_at=NOW + timedelta(hours=2),
+        candidate_ids=[1, 2, 3],
     )
     base.update(over)
     return MovieNight(**base)
@@ -188,6 +196,7 @@ async def test_night_list_pending(session_factory):
 
 # --- MovieRating ------------------------------------------------------------
 
+
 async def test_rating_upsert_and_stats(session_factory):
     async with session_factory() as s:
         entries = SqlAlchemyMovieEntryRepository(s)
@@ -195,7 +204,7 @@ async def test_rating_upsert_and_stats(session_factory):
         await s.commit()
         ratings = SqlAlchemyMovieRatingRepository(s)
 
-        assert await ratings.upsert(entry.id, 1, 8, NOW) is True   # новая
+        assert await ratings.upsert(entry.id, 1, 8, NOW) is True  # новая
         assert await ratings.upsert(entry.id, 2, 10, NOW) is True
         assert await ratings.upsert(entry.id, 1, 6, NOW) is False  # обновление
         await s.commit()

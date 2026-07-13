@@ -36,19 +36,20 @@ class FakeLiked(ILikedTrackRepository):
 
     async def get(self, user_id, video_id):
         return next(
-            (
-                r for r in self.rows.values()
-                if r.user_id == user_id and r.video_id == video_id
-            ),
+            (r for r in self.rows.values() if r.user_id == user_id and r.video_id == video_id),
             None,
         )
 
     async def add(self, liked):
         self._seq += 1
         self.rows[self._seq] = LikedTrack(
-            id=self._seq, user_id=liked.user_id, video_id=liked.video_id,
-            title=liked.title, uploader=liked.uploader,
-            duration=liked.duration, liked_at=liked.liked_at,
+            id=self._seq,
+            user_id=liked.user_id,
+            video_id=liked.video_id,
+            title=liked.title,
+            uploader=liked.uploader,
+            duration=liked.duration,
+            liked_at=liked.liked_at,
         )
 
     async def remove(self, user_id, video_id):
@@ -68,8 +69,12 @@ class FakeLiked(ILikedTrackRepository):
     async def update_resolution(self, liked_id, video_id, title, uploader, duration):
         old = self.rows[liked_id]
         self.rows[liked_id] = LikedTrack(
-            id=liked_id, user_id=old.user_id, video_id=video_id,
-            title=title, uploader=uploader, duration=duration,
+            id=liked_id,
+            user_id=old.user_id,
+            video_id=video_id,
+            title=title,
+            uploader=uploader,
+            duration=duration,
             liked_at=old.liked_at,
         )
 

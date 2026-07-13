@@ -22,12 +22,14 @@ class SqlAlchemyDialogSummaryRepository(IDialogSummaryRepository):
         self._session = session
 
     async def add(self, guild_id: int, user_id: int, summary: str, at: datetime, keep: int) -> None:
-        self._session.add(DialogSummaryModel(
-            guild_id=guild_id,
-            user_id=user_id,
-            summary=summary,
-            created_at=at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            DialogSummaryModel(
+                guild_id=guild_id,
+                user_id=user_id,
+                summary=summary,
+                created_at=at.replace(tzinfo=None),
+            )
+        )
         await self._session.flush()
         # держим только последние keep записей
         stmt = (
@@ -153,13 +155,15 @@ class SqlAlchemySecretRoomRepository(ISecretRoomRepository):
         return self._room_to_domain(row) if row else None
 
     async def add_room(self, room: SecretRoom) -> None:
-        self._session.add(SecretRoomModel(
-            guild_id=room.guild_id,
-            text_channel_id=room.text_channel_id,
-            voice_channel_id=room.voice_channel_id,
-            expires_at=_naive(room.expires_at),
-            created_by=room.created_by,
-        ))
+        self._session.add(
+            SecretRoomModel(
+                guild_id=room.guild_id,
+                text_channel_id=room.text_channel_id,
+                voice_channel_id=room.voice_channel_id,
+                expires_at=_naive(room.expires_at),
+                created_by=room.created_by,
+            )
+        )
 
     async def pop_expired_rooms(self, now: datetime) -> list[SecretRoom]:
         naive_now = now.replace(tzinfo=None)

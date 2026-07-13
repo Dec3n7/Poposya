@@ -1,5 +1,6 @@
 """Composition root: build_root_container собирает все контейнеры и цепочку
 надёжности AI. Проверяем оба пути — без Groq и с Groq (+фолбэк)."""
+
 import pytest
 
 from src.application.di.root_container import RootContainer, build_root_container
@@ -11,7 +12,7 @@ def make_settings(tmp_path, **over):
     base = dict(
         discord_token="test-token",
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'c.db'}",
-        music_prefetch_tracks=0,           # без AudioCache — не создаём каталоги
+        music_prefetch_tracks=0,  # без AudioCache — не создаём каталоги
         music_cache_dir=str(tmp_path / "cache"),
     )
     base.update(over)

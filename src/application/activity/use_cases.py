@@ -26,7 +26,8 @@ class TouchMemberActivityUseCase:
     async def execute(self, user_id: int, guild_id: int, now: datetime) -> ActivityTouch:
         threshold = (
             self._settings.get(guild_id, "absent_days_threshold", self._threshold)
-            if self._settings is not None else self._threshold
+            if self._settings is not None
+            else self._threshold
         )
         async with self._uow_factory() as uow:
             last = await uow.member_activity.get_last_message(user_id, guild_id)
@@ -43,9 +44,9 @@ class AddReminderUseCase:
 
     async def execute(self, user_id: int, guild_id: int, text: str, due_at: datetime) -> None:
         async with self._uow_factory() as uow:
-            await uow.reminders.add(Reminder(
-                user_id=user_id, guild_id=guild_id, text=text, due_at=due_at
-            ))
+            await uow.reminders.add(
+                Reminder(user_id=user_id, guild_id=guild_id, text=text, due_at=due_at)
+            )
             await uow.commit()
 
 

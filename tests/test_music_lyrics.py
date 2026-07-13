@@ -1,5 +1,6 @@
 """LyricsService: кэш текстов, префетч, эмбеды (plain/караоке), стоп/старт и
 кнопка 📜 (toggle). Живой цикл (_live_loop) не гоняем — create_task мокаем."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,13 +14,15 @@ SYNCED = "[00:00.00] строка один\n[00:05.00] строка два\n[00:
 
 
 def make_track(vid="a", title="Песня"):
-    return Track(video_id=vid, title=title, url="u", duration=200,
-                 requested_by=1, uploader="Artist")
+    return Track(
+        video_id=vid, title=title, url="u", duration=200, requested_by=1, uploader="Artist"
+    )
 
 
 def make_settings():
-    return SimpleNamespace(music_lyrics_offset=1.0, music_progress_interval=5,
-                           music_karaoke_ansi=True)
+    return SimpleNamespace(
+        music_lyrics_offset=1.0, music_progress_interval=5, music_karaoke_ansi=True
+    )
 
 
 def make_service(client=None, session=None, spawn=None):
@@ -30,6 +33,7 @@ def make_service(client=None, session=None, spawn=None):
 
 
 # --- кэш и префетч ----------------------------------------------------------
+
 
 async def test_get_caches_result():
     client = SimpleNamespace(find_both=AsyncMock(return_value=(SYNCED, "plain")))
@@ -70,6 +74,7 @@ def test_prefetch_spawns_once():
 
 # --- эмбеды -----------------------------------------------------------------
 
+
 def test_plain_embed():
     svc = make_service()
     embed = svc.plain_embed(make_track(title="Заголовок"), "текст песни")
@@ -96,14 +101,15 @@ def test_karaoke_embed_ansi_colored():
     svc = make_service()
     blocks = [(0.0, ["строка"]), (5.0, ["следующая"])]
     embed = svc._karaoke_embed("T", blocks, index=0, elapsed=3, ansi=True)
-    assert "```ansi" in embed.description       # цветной блок
-    assert "\x1b[1;36m" in embed.description     # текущая строка — цветом
+    assert "```ansi" in embed.description  # цветной блок
+    assert "\x1b[1;36m" in embed.description  # текущая строка — цветом
     assert "**строка**" not in embed.description  # не markdown-жирный
 
 
 def test_ansi_enabled_reads_setting():
     # дефолт из Settings (True), и переопределение через провайдер
     from unittest.mock import MagicMock as MM
+
     svc = make_service()
     assert svc._ansi_enabled(10) is True  # gs=None -> дефолт
     svc._gs = MM()
@@ -112,6 +118,7 @@ def test_ansi_enabled_reads_setting():
 
 
 # --- стоп/старт караоке -----------------------------------------------------
+
 
 def test_stop_karaoke_no_session():
     svc = make_service(session=None)
@@ -158,6 +165,7 @@ async def test_start_karaoke_sends_message(monkeypatch):
 
 
 # --- toggle (кнопка 📜) -----------------------------------------------------
+
 
 async def test_toggle_turns_off_when_running():
     task = MagicMock()

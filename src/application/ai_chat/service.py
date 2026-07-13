@@ -131,8 +131,13 @@ class ChatService:
         return None
 
     def _record_exchange(
-        self, guild_id: int, user_id: int, user_display: str,
-        user_text: str, reply: str, now: datetime,
+        self,
+        guild_id: int,
+        user_id: int,
+        user_display: str,
+        user_text: str,
+        reply: str,
+        now: datetime,
     ) -> None:
         key = (guild_id, user_id)
         session = self._sessions.setdefault(key, {"exchanges": [], "last": now})
@@ -163,16 +168,18 @@ class ChatService:
         return due
 
     async def summarize_dialog(
-        self, guild_id: int, user_id: int, user_display: str,
-        exchanges: list[tuple[str, str]], now: datetime,
+        self,
+        guild_id: int,
+        user_id: int,
+        user_display: str,
+        exchanges: list[tuple[str, str]],
+        now: datetime,
     ) -> None:
         """Резюме завершившегося диалога + учёт «долгих разговоров»."""
         if self._add_summary is None:
             return
         try:
-            transcript = "\n".join(
-                f"{user_display}: {u}\nТы: {r}" for u, r in exchanges
-            )
+            transcript = "\n".join(f"{user_display}: {u}\nТы: {r}" for u, r in exchanges)
             system = (
                 "Сожми диалог в 1-2 предложения памяти от первого лица персонажа "
                 "(Попося): о чём говорили, что важного узнала о собеседнике. "
@@ -201,7 +208,9 @@ class ChatService:
         key = f"{request.guild_id}:{request.user_id}"
         if not self._limiter.try_acquire(key, limit):
             return ChatReply(
-                text=random.choice(_BRUSH_OFFS), rate_limited=True, award=award,
+                text=random.choice(_BRUSH_OFFS),
+                rate_limited=True,
+                award=award,
                 stale_session=stale,
             )
 
@@ -212,8 +221,12 @@ class ChatService:
         )
         text = text.strip()
         self._record_exchange(
-            request.guild_id, request.user_id, request.user_display,
-            request.content, text, now,
+            request.guild_id,
+            request.user_id,
+            request.user_display,
+            request.content,
+            text,
+            now,
         )
         return ChatReply(text=text, rate_limited=False, award=award, stale_session=stale)
 
@@ -314,7 +327,11 @@ class ChatService:
                 "доставай к месту, не вываливай всё сразу."
             )
         if survey.season:
-            note = " Твоё любимое — лето: совпадение можешь отметить." if survey.season == "лето" else ""
+            note = (
+                " Твоё любимое — лето: совпадение можешь отметить."
+                if survey.season == "лето"
+                else ""
+            )
             parts.append(f"- Любимое время года: {survey.season}.{note}")
         return "\n".join(parts)
 
@@ -353,11 +370,17 @@ class ChatService:
         return f"Сегодня {name} — у тебя праздничное, приподнятое настроение.\n"
 
     def _build_system_prompt(
-        self, request: ChatRequest, award: AwardResult, now: datetime,
+        self,
+        request: ChatRequest,
+        award: AwardResult,
+        now: datetime,
         mood: int | None = None,
     ) -> str:
         variables = self._base_variables(
-            now, award.level, award.is_exclusive, award.user_notes,
+            now,
+            award.level,
+            award.is_exclusive,
+            award.user_notes,
             award.returning_after_absence,
         )
         prompt = self._template.render(variables)

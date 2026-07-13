@@ -1,5 +1,6 @@
 """Админ-команды /config: тюнинг настроек сервера без правки .env и пересборки.
 Редактируемые ключи ограничены реестром SETTING_SPECS."""
+
 import logging
 
 import discord
@@ -92,9 +93,7 @@ class ConfigCog(commands.Cog):
     @config_group.command(name="set", description="Задать настройку для этого сервера")
     @app_commands.describe(key="Ключ настройки", value="Новое значение")
     @app_commands.autocomplete(key=_key_autocomplete)
-    async def config_set(
-        self, interaction: discord.Interaction, key: str, value: str
-    ) -> None:
+    async def config_set(self, interaction: discord.Interaction, key: str, value: str) -> None:
         spec = SETTING_SPECS.get(key)
         if spec is None:
             await interaction.response.send_message(
@@ -113,8 +112,12 @@ class ConfigCog(commands.Cog):
         )
         logger.info(
             "Настройка сервера изменена",
-            extra={"guild_id": interaction.guild_id, "key": key, "value": parsed,
-                   "by": interaction.user.id},
+            extra={
+                "guild_id": interaction.guild_id,
+                "key": key,
+                "value": parsed,
+                "by": interaction.user.id,
+            },
         )
 
     @config_group.command(name="reset", description="Вернуть настройку к глобальному дефолту")

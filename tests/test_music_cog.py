@@ -1,5 +1,6 @@
 """MusicCog: биндинг слеш-команд к сервисам. service/radio/lyrics подменяются
 моками — проверяем разбор аргументов и ответы."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,22 +15,37 @@ NOW_URL = "https://youtube.com/watch?v=abc"
 
 
 def make_track(vid="a", title="Песня", duration=200):
-    return Track(video_id=vid, title=title, url=f"https://youtu.be/{vid}",
-                 duration=duration, requested_by=1)
+    return Track(
+        video_id=vid, title=title, url=f"https://youtu.be/{vid}", duration=duration, requested_by=1
+    )
 
 
 def make_liked(vid, title=None):
     import datetime
-    return LikedTrack(user_id=1, video_id=vid, title=title or vid, uploader="Artist",
-                      duration=180, liked_at=datetime.datetime.now())
+
+    return LikedTrack(
+        user_id=1,
+        video_id=vid,
+        title=title or vid,
+        uploader="Artist",
+        duration=180,
+        liked_at=datetime.datetime.now(),
+    )
 
 
 def make_settings():
     return SimpleNamespace(
-        music_playlist_limit=50, music_search_limit=5, music_playlist_max_per_guild=25,
-        music_liked_max_per_user=300, music_default_volume=0.5, music_prefetch_tracks=0,
-        ffmpeg_path="ffmpeg", music_progress_interval=5, music_idle_timeout=300,
-        music_idle_warn_seconds=120, music_lyrics_offset=1.0,
+        music_playlist_limit=50,
+        music_search_limit=5,
+        music_playlist_max_per_guild=25,
+        music_liked_max_per_user=300,
+        music_default_volume=0.5,
+        music_prefetch_tracks=0,
+        ffmpeg_path="ffmpeg",
+        music_progress_interval=5,
+        music_idle_timeout=300,
+        music_idle_warn_seconds=120,
+        music_lyrics_offset=1.0,
     )
 
 
@@ -72,7 +88,9 @@ def make_interaction(user_id=1, in_voice=True):
     interaction = MagicMock()
     interaction.guild_id = 10
     interaction.user = SimpleNamespace(
-        id=user_id, display_name="Гость", mention=f"<@{user_id}>",
+        id=user_id,
+        display_name="Гость",
+        mention=f"<@{user_id}>",
         voice=SimpleNamespace(channel=MagicMock()) if in_voice else None,
         guild_permissions=SimpleNamespace(administrator=False),
     )
@@ -101,6 +119,7 @@ def make_player(current=None, queue=(), paused=False):
 
 # --- queue / skip / shuffle -------------------------------------------------
 
+
 async def test_queue_empty():
     cog = make_cog()
     interaction = make_interaction()
@@ -111,7 +130,8 @@ async def test_queue_empty():
 async def test_queue_lists_current_and_upcoming():
     cog = make_cog()
     cog.service.get_player.return_value = make_player(
-        current=make_track("a", "Текущий"), queue=[make_track("b", "Следующий")])
+        current=make_track("a", "Текущий"), queue=[make_track("b", "Следующий")]
+    )
     interaction = make_interaction()
     await type(cog).queue.callback(cog, interaction)
     assert "embed" in interaction.response.send_message.await_args.kwargs
@@ -150,6 +170,7 @@ async def test_shuffle_ok():
 
 
 # --- stop / pause / resume / volume / nowplaying / leave --------------------
+
 
 async def test_stop_when_idle():
     cog = make_cog()
@@ -213,6 +234,7 @@ async def test_leave_when_absent():
 
 # --- _play_request ----------------------------------------------------------
 
+
 async def test_play_requires_voice():
     cog = make_cog()
     interaction = make_interaction(in_voice=False)
@@ -257,6 +279,7 @@ async def test_play_spotify_non_track():
 
 # --- taste ------------------------------------------------------------------
 
+
 async def test_taste_with_bot():
     cog = make_cog()
     interaction = make_interaction()
@@ -294,6 +317,7 @@ async def test_taste_computes_percentage():
 
 # --- radio ------------------------------------------------------------------
 
+
 async def test_radio_toggle_off():
     cog = make_cog()
     cog.radio.toggle.return_value = False
@@ -313,6 +337,7 @@ async def test_radio_toggle_on():
 
 # --- toggle_like_current ----------------------------------------------------
 
+
 async def test_toggle_like_nothing_playing():
     cog = make_cog()
     interaction = make_interaction()
@@ -331,6 +356,7 @@ async def test_toggle_like_liked():
 
 
 # --- playlists --------------------------------------------------------------
+
 
 async def test_playlist_save_empty_queue():
     container = make_container()
@@ -369,6 +395,7 @@ async def test_playlist_delete_ok():
 
 # --- liked ------------------------------------------------------------------
 
+
 async def test_liked_list_empty():
     cog = make_cog()
     interaction = make_interaction(user_id=1)
@@ -403,6 +430,7 @@ async def test_liked_all_empty():
 
 
 # --- history / save-queue ---------------------------------------------------
+
 
 async def test_history_empty():
     cog = make_cog()

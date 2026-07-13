@@ -1,5 +1,6 @@
 """Тесты чистой логики AI-чата: трекер настроения, шаблон промпта,
 иерархия исключений."""
+
 import pytest
 
 from src.application.ai_chat.mood import MoodTracker
@@ -8,6 +9,7 @@ from src.domain.ai_chat.prompt import PromptTemplate
 
 
 # --- MoodTracker ------------------------------------------------------------
+
 
 def test_mood_default():
     assert MoodTracker().get(10) == 50
@@ -55,20 +57,24 @@ def test_mood_drift_converges():
     assert m.get(10) == 75
 
 
-@pytest.mark.parametrize("mood,expected_fragment", [
-    (0, "мрачное"),
-    (30, "мрачное"),
-    (31, "ровное"),
-    (50, "ровное"),
-    (64, "ровное"),
-    (65, "хорошее"),
-    (100, "хорошее"),
-])
+@pytest.mark.parametrize(
+    "mood,expected_fragment",
+    [
+        (0, "мрачное"),
+        (30, "мрачное"),
+        (31, "ровное"),
+        (50, "ровное"),
+        (64, "ровное"),
+        (65, "хорошее"),
+        (100, "хорошее"),
+    ],
+)
 def test_mood_describe(mood, expected_fragment):
     assert expected_fragment in MoodTracker.describe(mood)
 
 
 # --- PromptTemplate ---------------------------------------------------------
+
 
 def test_prompt_renders_variables():
     tpl = PromptTemplate("Привет, {{name}}! Настроение: {{mood}}")
@@ -91,6 +97,7 @@ def test_prompt_no_vars():
 
 
 # --- Exceptions -------------------------------------------------------------
+
 
 def test_provider_error_is_chat_error():
     assert issubclass(AIProviderError, AIChatError)

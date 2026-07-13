@@ -64,13 +64,11 @@ def parse_lrc(text: str) -> list[tuple[float, str]]:
     return lines
 
 
-def group_blocks(
-    lines: list[tuple[float, str]], size: int = 4
-) -> list[tuple[float, list[str]]]:
+def group_blocks(lines: list[tuple[float, str]], size: int = 4) -> list[tuple[float, list[str]]]:
     """Абзацы по size строк: (время начала абзаца, строки)."""
     blocks: list[tuple[float, list[str]]] = []
     for i in range(0, len(lines), size):
-        chunk = lines[i:i + size]
+        chunk = lines[i : i + size]
         blocks.append((chunk[0][0], [text for _, text in chunk]))
     return blocks
 

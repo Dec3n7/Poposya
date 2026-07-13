@@ -10,16 +10,19 @@ from src.infrastructure.db.models.music import GuildPlaylistModel, LikedTrackMod
 
 
 def _tracks_to_json(tracks: list[Track]) -> str:
-    return json.dumps([
-        {
-            "video_id": t.video_id,
-            "title": t.title,
-            "url": t.url,
-            "duration": t.duration,
-            "uploader": t.uploader,
-        }
-        for t in tracks
-    ], ensure_ascii=False)
+    return json.dumps(
+        [
+            {
+                "video_id": t.video_id,
+                "title": t.title,
+                "url": t.url,
+                "duration": t.duration,
+                "uploader": t.uploader,
+            }
+            for t in tracks
+        ],
+        ensure_ascii=False,
+    )
 
 
 def _tracks_from_json(raw: str, created_by: int) -> list[Track]:
@@ -33,7 +36,8 @@ def _tracks_from_json(raw: str, created_by: int) -> list[Track]:
             uploader=item.get("uploader"),
             thumbnail=(
                 f"https://i.ytimg.com/vi/{item['video_id']}/hqdefault.jpg"
-                if item.get("video_id") else None
+                if item.get("video_id")
+                else None
             ),
         )
         for item in json.loads(raw)
@@ -69,14 +73,13 @@ class SqlAlchemyPlaylistRepository(IPlaylistRepository):
             .order_by(GuildPlaylistModel.name)
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return [
-            (row.name, len(json.loads(row.tracks_json)), row.created_by)
-            for row in rows
-        ]
+        return [(row.name, len(json.loads(row.tracks_json)), row.created_by) for row in rows]
 
     async def count(self, guild_id: int) -> int:
-        stmt = select(func.count()).select_from(GuildPlaylistModel).where(
-            GuildPlaylistModel.guild_id == guild_id
+        stmt = (
+            select(func.count())
+            .select_from(GuildPlaylistModel)
+            .where(GuildPlaylistModel.guild_id == guild_id)
         )
         return (await self._session.execute(stmt)).scalar_one()
 
@@ -127,14 +130,16 @@ class SqlAlchemyLikedTrackRepository(ILikedTrackRepository):
         return _liked_to_domain(row) if row else None
 
     async def add(self, liked: LikedTrack) -> None:
-        self._session.add(LikedTrackModel(
-            user_id=liked.user_id,
-            video_id=liked.video_id,
-            title=liked.title,
-            uploader=liked.uploader,
-            duration=liked.duration,
-            liked_at=liked.liked_at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            LikedTrackModel(
+                user_id=liked.user_id,
+                video_id=liked.video_id,
+                title=liked.title,
+                uploader=liked.uploader,
+                duration=liked.duration,
+                liked_at=liked.liked_at.replace(tzinfo=None),
+            )
+        )
 
     async def remove(self, user_id: int, video_id: str) -> bool:
         result = await self._session.execute(
@@ -155,14 +160,20 @@ class SqlAlchemyLikedTrackRepository(ILikedTrackRepository):
         return [_liked_to_domain(row) for row in rows]
 
     async def count(self, user_id: int) -> int:
-        stmt = select(func.count()).select_from(LikedTrackModel).where(
-            LikedTrackModel.user_id == user_id
+        stmt = (
+            select(func.count())
+            .select_from(LikedTrackModel)
+            .where(LikedTrackModel.user_id == user_id)
         )
         return (await self._session.execute(stmt)).scalar_one()
 
     async def update_resolution(
-        self, liked_id: int, video_id: str, title: str,
-        uploader: str | None, duration: int | None,
+        self,
+        liked_id: int,
+        video_id: str,
+        title: str,
+        uploader: str | None,
+        duration: int | None,
     ) -> None:
         row = await self._session.get(LikedTrackModel, liked_id)
         if row is None:

@@ -1,5 +1,6 @@
 """Тесты ChatService: начисление+ответ, rate-limit brush-off, сессии диалогов,
 сборка системного/пользовательского промпта, комментарии на события, заметки."""
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -80,9 +81,16 @@ class FakeNotes:
 
 def make_award(**over):
     base = dict(
-        points=10, level=2, role_index=0, previous_role_index=0,
-        point_awarded=True, is_exclusive=False, became_exclusive=False,
-        returning_after_absence=False, user_notes="", survey=SurveyData(),
+        points=10,
+        level=2,
+        role_index=0,
+        previous_role_index=0,
+        point_awarded=True,
+        is_exclusive=False,
+        became_exclusive=False,
+        returning_after_absence=False,
+        user_notes="",
+        survey=SurveyData(),
         recent_summaries=(),
     )
     base.update(over)
@@ -91,15 +99,20 @@ def make_award(**over):
 
 def make_rank(**over):
     base = dict(
-        points=10, level=2, role_index=0, is_exclusive=False, frozen=False,
+        points=10,
+        level=2,
+        role_index=0,
+        is_exclusive=False,
+        frozen=False,
         next_threshold=100,
     )
     base.update(over)
     return RankInfo(**base)
 
 
-def make_service(provider=None, limiter=None, award=None, rank=None, notes=None,
-                 calendar=None, **kw):
+def make_service(
+    provider=None, limiter=None, award=None, rank=None, notes=None, calendar=None, **kw
+):
     provider = provider or FakeProvider()
     return ChatService(
         provider=provider,
@@ -119,14 +132,20 @@ def make_service(provider=None, limiter=None, award=None, rank=None, notes=None,
 
 def make_request(**over):
     base = dict(
-        guild_id=10, channel_id=100, channel_name="общий", user_id=1,
-        user_display="Гость", content="привет", history=[],
+        guild_id=10,
+        channel_id=100,
+        channel_name="общий",
+        user_id=1,
+        user_display="Гость",
+        content="привет",
+        history=[],
     )
     base.update(over)
     return ChatRequest(**base)
 
 
 # --- respond ----------------------------------------------------------------
+
 
 async def test_respond_returns_trimmed_text_and_awards():
     provider = FakeProvider(reply="  привет тебе  ")
@@ -176,6 +195,7 @@ async def test_respond_stale_session_ignored_if_too_short():
 
 # --- evict_stale_sessions (чистка памяти) -----------------------------------
 
+
 async def test_evict_stale_returns_meaningful_and_clears():
     svc = make_service(dialog_gap_minutes=30, dialog_min_exchanges=2)
     # user 1 — два обмена, содержательный диалог
@@ -193,9 +213,7 @@ async def test_evict_stale_returns_meaningful_and_clears():
     assert (guild_id, user_id, display) == (10, 1, "Аня")
     assert len(exchanges) == 2
     # обе сессии удалены — вернувшемуся собеседнику stale уже не отдаётся
-    reply = await svc.respond(
-        make_request(user_id=1, content="снова"), NOW + timedelta(hours=3)
-    )
+    reply = await svc.respond(make_request(user_id=1, content="снова"), NOW + timedelta(hours=3))
     assert reply.stale_session is None
 
 
@@ -207,6 +225,7 @@ async def test_evict_keeps_fresh_sessions():
 
 
 # --- AIQueue: приоритет живых запросов над фоновыми -------------------------
+
 
 async def test_aiqueue_background_leaves_slot_for_foreground():
     queue = AIQueue(2)
@@ -238,6 +257,7 @@ async def test_aiqueue_background_leaves_slot_for_foreground():
 
 
 # --- build_system_prompt ----------------------------------------------------
+
 
 def test_build_user_message_without_history():
     svc = make_service()
@@ -316,6 +336,7 @@ def test_memory_block_empty():
 
 # --- comment_on_event / freeform / notes / summary --------------------------
 
+
 async def test_comment_on_event():
     provider = FakeProvider(reply="  крутой трек  ")
     svc = make_service(provider=provider, rank=FakeRank(make_rank(level=3)))
@@ -385,8 +406,13 @@ async def test_summarize_dialog_records_and_deep():
         record_deep_dialog=deep,
         deep_dialog_exchanges=3,
     )
-    exchanges = [("привет", "хай"), ("как дела", "норм"), ("пока", "давай"),
-                 ("ещё", "да"), ("финал", "ок")]
+    exchanges = [
+        ("привет", "хай"),
+        ("как дела", "норм"),
+        ("пока", "давай"),
+        ("ещё", "да"),
+        ("финал", "ок"),
+    ]
     await svc.summarize_dialog(10, 1, "Гость", exchanges, NOW)
     assert summary.calls == [(1, 10, "воспоминание")]
     assert deep.count == 1  # 5 обменов >= порога 3

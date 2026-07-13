@@ -1,5 +1,6 @@
 """CinemaCog: хелперы (_trim/_title_of/_ts/_parse_when), /movie add/list/remove/
 watched/top, голосование 👍/👎, кнопки оценок."""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -36,8 +37,13 @@ def make_entry(title="Фильм", **over):
 
 
 def make_settings(**over):
-    base = dict(cinema_watchlist_max=50, cinema_utc_offset=3, cinema_poll_options=5,
-                cinema_rating_hours=24, cinema_forum_channel=0)
+    base = dict(
+        cinema_watchlist_max=50,
+        cinema_utc_offset=3,
+        cinema_poll_options=5,
+        cinema_rating_hours=24,
+        cinema_forum_channel=0,
+    )
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -61,17 +67,24 @@ def make_container():
 
 
 def make_search(enabled=True, results=None):
-    return SimpleNamespace(enabled=enabled,
-                           search=AsyncMock(return_value=results or []))
+    return SimpleNamespace(enabled=enabled, search=AsyncMock(return_value=results or []))
 
 
 def make_cog(container=None, search=None, settings=None):
     bot = MagicMock()
-    return CinemaCog(bot, container or make_container(), MagicMock(), None,
-                     settings or make_settings(), MagicMock(), search or make_search())
+    return CinemaCog(
+        bot,
+        container or make_container(),
+        MagicMock(),
+        None,
+        settings or make_settings(),
+        MagicMock(),
+        search or make_search(),
+    )
 
 
 # --- pure helpers -----------------------------------------------------------
+
 
 def test_trim():
     assert _trim("короткий", 20) == "короткий"
@@ -98,6 +111,7 @@ def test_parse_when_tomorrow_and_auto_advance():
 
 def test_parse_when_explicit_date():
     from datetime import date, timedelta, timezone as _tz
+
     cog = make_cog()
     # завтрашняя дата в формате ДД.ММ — гарантированно в будущем
     tz = _tz(timedelta(hours=3))
@@ -108,16 +122,16 @@ def test_parse_when_explicit_date():
 
 def test_parse_when_invalid():
     cog = make_cog()
-    assert cog._parse_when(None, "25:00") is None   # час вне диапазона
-    assert cog._parse_when(None, "нея") is None      # не время
+    assert cog._parse_when(None, "25:00") is None  # час вне диапазона
+    assert cog._parse_when(None, "нея") is None  # не время
     assert cog._parse_when("31.02", "10:00") is None  # несуществующая дата
 
 
 # --- /movie add + add_entry -------------------------------------------------
 
+
 async def test_movie_add_multiple_offers_picker():
-    search = make_search(results=[
-        MovieInfo(1, "A", 2000, "", ""), MovieInfo(2, "B", 2001, "", "")])
+    search = make_search(results=[MovieInfo(1, "A", 2000, "", ""), MovieInfo(2, "B", 2001, "", "")])
     cog = make_cog(search=search)
     interaction = make_interaction()
     await type(cog).movie_add.callback(cog, interaction, "matrix")
@@ -163,6 +177,7 @@ async def test_add_entry_success_posts_card():
 
 
 # --- handle_vote ------------------------------------------------------------
+
 
 async def test_handle_vote_gone():
     container = make_container()
@@ -235,7 +250,8 @@ async def test_review_button_opens_modal():
 async def test_handle_review_ok_updates_footer():
     container = make_container()
     container.review_movie.execute.return_value = RateResult(
-        status="ok", first_time=True, count=2, reviews=3)
+        status="ok", first_time=True, count=2, reviews=3
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     card = MagicMock()
@@ -288,11 +304,18 @@ async def test_finalize_no_reviews_no_thread():
 
 # --- форум «золотой фонд» ---------------------------------------------------
 
+
 def test_build_summary_embed():
     cog = make_cog()
-    final = make_entry("Начало", year=2010, id=5, poposya_score=9,
-                       poposya_review="сон во сне, уважаю", poster_url="http://p",
-                       watched_at=NOW)
+    final = make_entry(
+        "Начало",
+        year=2010,
+        id=5,
+        poposya_score=9,
+        poposya_review="сон во сне, уважаю",
+        poster_url="http://p",
+        watched_at=NOW,
+    )
     embed = cog._build_summary_embed(final, avg=8.4, count=3)
     names = [f.name for f in embed.fields]
     assert "⭐ Оценка сервера" in names
@@ -318,7 +341,9 @@ async def test_publish_forum_creates_post_and_ratings():
     thread = MagicMock()
     thread.mention = "<#777>"
     thread.send = AsyncMock()
-    forum.create_thread = AsyncMock(return_value=SimpleNamespace(thread=thread, message=MagicMock()))
+    forum.create_thread = AsyncMock(
+        return_value=SimpleNamespace(thread=thread, message=MagicMock())
+    )
     cog.bot.get_channel = MagicMock(return_value=forum)
 
     link = await cog._publish_to_forum(make_entry("Начало", id=5), MagicMock())
@@ -356,8 +381,7 @@ async def test_finalize_sends_pointer_when_forum_used():
     container = make_container()
     final = make_entry("Начало", id=5, channel_id=100, status="rating")
     container.get_movie.execute.return_value = final
-    container.finalize_rating.execute.return_value = FinalizeResult(
-        entry=final, avg=8.0, count=2)
+    container.finalize_rating.execute.return_value = FinalizeResult(entry=final, avg=8.0, count=2)
     cog = make_cog(container, settings=make_settings(cinema_forum_channel=555))
     cog.chat = None  # без AI-вердикта
     cog._disable_message = AsyncMock()
@@ -374,6 +398,7 @@ async def test_finalize_sends_pointer_when_forum_used():
 
 
 # --- /movie list / top / remove / watched -----------------------------------
+
 
 async def test_movie_list_empty():
     cog = make_cog()
@@ -405,8 +430,15 @@ async def test_movie_top_empty():
 async def test_movie_top_lists():
     container = make_container()
     container.top_watched.execute.return_value = [
-        make_entry("Топ", year=2010, id=1, status="watched", avg_score=9.0,
-                   ratings_count=5, poposya_score=8),
+        make_entry(
+            "Топ",
+            year=2010,
+            id=1,
+            status="watched",
+            avg_score=9.0,
+            ratings_count=5,
+            poposya_score=8,
+        ),
     ]
     cog = make_cog(container)
     interaction = make_interaction()

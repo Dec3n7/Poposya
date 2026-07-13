@@ -92,9 +92,7 @@ class LogRelayCog(commands.Cog):
                 except discord.HTTPException:
                     pass
 
-    @app_commands.command(
-        name="botlog", description="Логи бота в канал: уровень и куда писать"
-    )
+    @app_commands.command(name="botlog", description="Логи бота в канал: уровень и куда писать")
     @app_commands.describe(
         level="Минимальный уровень (OFF = выключить)",
         channel="Канал для логов (по умолчанию — текущий выбор)",
@@ -111,9 +109,7 @@ class LogRelayCog(commands.Cog):
             self.channel_id = channel.id
         if level == "OFF":
             self.handler.setLevel(logging.CRITICAL + 1)
-            await interaction.response.send_message(
-                "Логи в Discord выключены.", ephemeral=True
-            )
+            await interaction.response.send_message("Логи в Discord выключены.", ephemeral=True)
             return
         self.handler.setLevel(getattr(logging, level))
         target = self.bot.get_channel(self.channel_id)

@@ -45,7 +45,11 @@ class ILikedTrackRepository(ABC):
 
     @abstractmethod
     async def update_resolution(
-        self, liked_id: int, video_id: str, title: str,
-        uploader: str | None, duration: int | None,
+        self,
+        liked_id: int,
+        video_id: str,
+        title: str,
+        uploader: str | None,
+        duration: int | None,
     ) -> None:
         """Обновить метаданные после «оживления» умершего видео поиском."""

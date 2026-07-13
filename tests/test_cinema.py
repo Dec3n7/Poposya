@@ -26,7 +26,11 @@ NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
 
 def make_entry(title: str, guild_id: int = 10, tmdb_id: int | None = None) -> MovieEntry:
     return MovieEntry(
-        guild_id=guild_id, title=title, added_by=1, added_at=NOW, tmdb_id=tmdb_id,
+        guild_id=guild_id,
+        title=title,
+        added_by=1,
+        added_at=NOW,
+        tmdb_id=tmdb_id,
     )
 
 
@@ -49,14 +53,10 @@ class FakeMovies(IMovieEntryRepository):
         return self.rows.get(entry_id)
 
     async def get_by_message(self, message_id):
-        return next(
-            (e for e in self.rows.values() if e.message_id == message_id), None
-        )
+        return next((e for e in self.rows.values() if e.message_id == message_id), None)
 
     async def get_by_rating_message(self, message_id):
-        return next(
-            (e for e in self.rows.values() if e.rating_message_id == message_id), None
-        )
+        return next((e for e in self.rows.values() if e.rating_message_id == message_id), None)
 
     async def find_listed_duplicate(self, guild_id, tmdb_id, title_lower):
         for e in self.rows.values():
@@ -69,16 +69,14 @@ class FakeMovies(IMovieEntryRepository):
         return None
 
     async def count_listed(self, guild_id):
-        return len([
-            e for e in self.rows.values()
-            if e.guild_id == guild_id and e.status == "listed"
-        ])
+        return len(
+            [e for e in self.rows.values() if e.guild_id == guild_id and e.status == "listed"]
+        )
 
     async def count_proposed(self, guild_id, user_id):
-        return len([
-            e for e in self.rows.values()
-            if e.guild_id == guild_id and e.added_by == user_id
-        ])
+        return len(
+            [e for e in self.rows.values() if e.guild_id == guild_id and e.added_by == user_id]
+        )
 
     async def list_ranked(self, guild_id):
         result = []
@@ -90,10 +88,7 @@ class FakeMovies(IMovieEntryRepository):
         return result
 
     async def list_watched(self, guild_id):
-        rows = [
-            e for e in self.rows.values()
-            if e.guild_id == guild_id and e.status == "watched"
-        ]
+        rows = [e for e in self.rows.values() if e.guild_id == guild_id and e.status == "watched"]
         return sorted(rows, key=lambda e: e.avg_score or 0, reverse=True)
 
     async def list_rating_pending(self):
@@ -135,19 +130,16 @@ class FakeNights(IMovieNightRepository):
         return self.rows.get(night_id)
 
     async def get_by_poll_message(self, message_id):
-        return next(
-            (n for n in self.rows.values() if n.poll_message_id == message_id), None
-        )
+        return next((n for n in self.rows.values() if n.poll_message_id == message_id), None)
 
     async def get_by_winner_message(self, message_id):
-        return next(
-            (n for n in self.rows.values() if n.winner_message_id == message_id), None
-        )
+        return next((n for n in self.rows.values() if n.winner_message_id == message_id), None)
 
     async def get_active(self, guild_id):
         return next(
             (
-                n for n in self.rows.values()
+                n
+                for n in self.rows.values()
                 if n.guild_id == guild_id and n.status in ("poll", "scheduled")
             ),
             None,
@@ -204,9 +196,9 @@ class FakeRatings(IMovieRatingRepository):
         ]
 
     async def list_ratings(self, entry_id):
-        users = {
-            uid for (eid, uid) in self.scores if eid == entry_id
-        } | {uid for (eid, uid) in self.reviews if eid == entry_id}
+        users = {uid for (eid, uid) in self.scores if eid == entry_id} | {
+            uid for (eid, uid) in self.reviews if eid == entry_id
+        }
         return [
             (uid, self.scores.get((entry_id, uid)), self.reviews.get((entry_id, uid), ""))
             for uid in users
@@ -218,7 +210,8 @@ class FakeRatings(IMovieRatingRepository):
 
     async def user_stats(self, guild_id, user_id):
         values = [
-            s for (eid, uid), s in self.scores.items()
+            s
+            for (eid, uid), s in self.scores.items()
             if uid == user_id
             and eid in self._movies.rows
             and self._movies.rows[eid].guild_id == guild_id
@@ -267,6 +260,7 @@ def uow_factory(state):
 
 # --- провайдеры поиска ---
 
+
 async def test_fallback_movie_search():
     from src.infrastructure.cinema.provider import FallbackMovieSearch, MovieInfo
 
@@ -307,6 +301,7 @@ async def test_fallback_movie_search():
 
 # --- вотчлист ---
 
+
 async def test_add_movie_duplicates_and_limit(uow_factory):
     uc = AddMovieUseCase(uow_factory, watchlist_max=2)
     assert (await uc.execute(make_entry("Akira", tmdb_id=100))).status == "ok"
@@ -336,6 +331,7 @@ async def test_vote_toggle_and_switch(state, uow_factory):
 
 
 # --- киновечер ---
+
 
 async def _fill_watchlist(state, count=3):
     entries = []
@@ -387,6 +383,7 @@ async def test_poll_without_votes_cancels(state, uow_factory):
 
 # --- оценки ---
 
+
 async def test_rating_flow(state, uow_factory):
     entry = await state["movies"].add(make_entry("Akira"))
     open_uc = OpenRatingUseCase(uow_factory, rating_hours=24)
@@ -423,7 +420,7 @@ async def test_cinema_profile_stats(state, uow_factory):
     await state["ratings"].upsert(other.id, 1, 6, NOW)
     uc = GetCinemaProfileUseCase(uow_factory)
     profile = await uc.execute(10, 1)
-    assert profile.proposed == 2      # make_entry ставит added_by=1
+    assert profile.proposed == 2  # make_entry ставит added_by=1
     assert profile.ratings_count == 2
     assert profile.avg_given == 7.0
     empty = await uc.execute(10, 99)
@@ -432,12 +429,17 @@ async def test_cinema_profile_stats(state, uow_factory):
 
 async def test_rating_via_winner_message(state, uow_factory):
     entries = await _fill_watchlist(state, 1)
-    night = await state["nights"].add(MovieNight(
-        guild_id=10, created_by=1,
-        scheduled_at=NOW, poll_ends_at=NOW,
-        status="scheduled", winner_entry_id=entries[0].id,
-        winner_message_id=900,
-    ))
+    night = await state["nights"].add(
+        MovieNight(
+            guild_id=10,
+            created_by=1,
+            scheduled_at=NOW,
+            poll_ends_at=NOW,
+            status="scheduled",
+            winner_entry_id=entries[0].id,
+            winner_message_id=900,
+        )
+    )
     open_uc = OpenRatingUseCase(uow_factory, rating_hours=24)
     opened = await open_uc.execute_by_winner_message(900, NOW)
     assert opened is not None and opened.id == entries[0].id

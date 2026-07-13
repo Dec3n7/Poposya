@@ -46,9 +46,7 @@ class SearchSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         track = self.tracks[int(self.values[0])]
         prefix = "Поставила первой" if self.to_front else "Добавила"
-        await interaction.response.edit_message(
-            content=f"{prefix}: **{track.title}**", view=None
-        )
+        await interaction.response.edit_message(content=f"{prefix}: **{track.title}**", view=None)
         await self._enqueue(interaction, [track], self.to_front)
 
 
@@ -120,7 +118,7 @@ class QueueView(discord.ui.View):
                 f"{fmt_duration(current.duration)} · <@{current.requested_by}>"
             )
             lines.append("")
-        for i, track in enumerate(queue[start:start + _QUEUE_PAGE_SIZE], start=start + 1):
+        for i, track in enumerate(queue[start : start + _QUEUE_PAGE_SIZE], start=start + 1):
             lines.append(
                 f"`{i}.` {trim(track.title, 55)} — "
                 f"{fmt_duration(track.duration)} · <@{track.requested_by}>"
@@ -153,7 +151,8 @@ class QueueView(discord.ui.View):
         self.page = min(self.total_pages - 1, self.page + 1)
         self._sync()
         await interaction.response.edit_message(
-            embed=self.build_embed(), view=self,
+            embed=self.build_embed(),
+            view=self,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -186,7 +185,7 @@ class LikedListView(discord.ui.View):
 
     def _page_tracks(self) -> list[LikedTrack]:
         start = self.page * _LIKED_PAGE_SIZE
-        return self.tracks[start:start + _LIKED_PAGE_SIZE]
+        return self.tracks[start : start + _LIKED_PAGE_SIZE]
 
     def build_embed(self, viewer_id: int) -> discord.Embed:
         start = self.page * _LIKED_PAGE_SIZE
@@ -200,7 +199,9 @@ class LikedListView(discord.ui.View):
             else f"❤️ Лайки {self.owner.display_name} ({len(self.tracks)})"
         )
         embed = discord.Embed(
-            title=title, description="\n".join(lines)[:4000], color=EMBED_COLOR,
+            title=title,
+            description="\n".join(lines)[:4000],
+            color=EMBED_COLOR,
         )
         embed.set_footer(
             text=f"Страница {self.page + 1}/{self.total_pages} · меню ниже — включить трек"
@@ -300,7 +301,9 @@ class PlayerView(discord.ui.View):
 
     # --- ряд 0: управление треками ---
 
-    @discord.ui.button(emoji="⏮️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:prev")
+    @discord.ui.button(
+        emoji="⏮️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:prev"
+    )
     async def prev_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         player = self._service.get_player(interaction.guild_id)
@@ -316,14 +319,18 @@ class PlayerView(discord.ui.View):
         if player is not None:
             await player.toggle_pause()
 
-    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:next")
+    @discord.ui.button(
+        emoji="⏭️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:next"
+    )
     async def next_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         player = self._service.get_player(interaction.guild_id)
         if player is not None:
             await player.skip()
 
-    @discord.ui.button(emoji="🔁", style=discord.ButtonStyle.secondary, row=0, custom_id="music:repeat")
+    @discord.ui.button(
+        emoji="🔁", style=discord.ButtonStyle.secondary, row=0, custom_id="music:repeat"
+    )
     async def repeat_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         # без лишних сообщений: режим повтора виден в эмбеде плеера,
         # который обновляется этим же нажатием
@@ -339,21 +346,27 @@ class PlayerView(discord.ui.View):
 
     # --- ряд 1: громкость ---
 
-    @discord.ui.button(emoji="🔉", style=discord.ButtonStyle.secondary, row=1, custom_id="music:vol_down")
+    @discord.ui.button(
+        emoji="🔉", style=discord.ButtonStyle.secondary, row=1, custom_id="music:vol_down"
+    )
     async def volume_down_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         player = self._service.get_player(interaction.guild_id)
         if player is not None:
             await player.change_volume(-0.1)
 
-    @discord.ui.button(emoji="🔊", style=discord.ButtonStyle.secondary, row=1, custom_id="music:vol_up")
+    @discord.ui.button(
+        emoji="🔊", style=discord.ButtonStyle.secondary, row=1, custom_id="music:vol_up"
+    )
     async def volume_up_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         player = self._service.get_player(interaction.guild_id)
         if player is not None:
             await player.change_volume(+0.1)
 
-    @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, row=1, custom_id="music:shuffle")
+    @discord.ui.button(
+        emoji="🔀", style=discord.ButtonStyle.secondary, row=1, custom_id="music:shuffle"
+    )
     async def shuffle_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         player = self._service.get_player(interaction.guild_id)
         if player is None:
@@ -366,7 +379,9 @@ class PlayerView(discord.ui.View):
         await interaction.response.defer()
         await player.shuffle()  # новый порядок виден в поле «Далее» эмбеда
 
-    @discord.ui.button(emoji="📜", style=discord.ButtonStyle.secondary, row=1, custom_id="music:lyrics")
+    @discord.ui.button(
+        emoji="📜", style=discord.ButtonStyle.secondary, row=1, custom_id="music:lyrics"
+    )
     async def lyrics_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await self._lyrics.toggle(interaction)
 
@@ -379,8 +394,11 @@ class PlayerView(discord.ui.View):
     # --- ряд 2: сохранить очередь как плейлист ---
 
     @discord.ui.button(
-        emoji="💾", label="Сохранить очередь", style=discord.ButtonStyle.secondary,
-        row=2, custom_id="music:savequeue",
+        emoji="💾",
+        label="Сохранить очередь",
+        style=discord.ButtonStyle.secondary,
+        row=2,
+        custom_id="music:savequeue",
     )
     async def save_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         if self._on_save is not None:

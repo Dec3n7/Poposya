@@ -58,9 +58,9 @@ class FunCog(commands.Cog):
         relationship: RelationshipContainer,
         chat_service: ChatService | None,
         settings: Settings,
-        finds=None,    # FindsContainer — витрина коллекции в /profile
-        music=None,    # MusicContainer — лайки в /profile
-        cinema=None,   # CinemaContainer — кино-статистика в /profile
+        finds=None,  # FindsContainer — витрина коллекции в /profile
+        music=None,  # MusicContainer — лайки в /profile
+        cinema=None,  # CinemaContainer — кино-статистика в /profile
     ):
         self.bot = bot
         self.activity = activity
@@ -76,7 +76,9 @@ class FunCog(commands.Cog):
     async def cog_load(self) -> None:
         # напоминания хранятся в БД — рестарт не сбрасывает таймеры
         self._reminder_task = asyncio.create_task(self._reminder_loop())
-        logger.info("Развлечения: цикл напоминаний запущен (проверка каждые %d с)", _REMINDER_CHECK_INTERVAL)
+        logger.info(
+            "Развлечения: цикл напоминаний запущен (проверка каждые %d с)", _REMINDER_CHECK_INTERVAL
+        )
 
     def cog_unload(self) -> None:
         if self._reminder_task is not None:
@@ -87,9 +89,7 @@ class FunCog(commands.Cog):
     _DICE_MAX_ROUNDS = 10
     _DICE_MAX_PLAYERS = 20  # больше не влезает в сообщение по-человечески
 
-    @app_commands.command(
-        name="dice", description="Бросить кубик — или вызвать других на дуэль"
-    )
+    @app_commands.command(name="dice", description="Бросить кубик — или вызвать других на дуэль")
     @app_commands.describe(
         sides="Число граней (по умолчанию 6)",
         users="Соперники: просто отметь @участников через пробел",
@@ -142,8 +142,7 @@ class FunCog(commands.Cog):
         for round_no in range(1, self._DICE_MAX_ROUNDS + 1):
             rolls = [(member, random.randint(1, sides)) for member in contenders]
             lines.append(
-                f"**Раунд {round_no}:** "
-                + ", ".join(f"{m.display_name} — `{r}`" for m, r in rolls)
+                f"**Раунд {round_no}:** " + ", ".join(f"{m.display_name} — `{r}`" for m, r in rolls)
             )
             best = max(result for _, result in rolls)
             top = [member for member, result in rolls if result == best]
@@ -152,9 +151,7 @@ class FunCog(commands.Cog):
                 lines.append(f"🏆 Победа: {winner.mention} — выбросил **{best}**!")
                 break
             lines.append(
-                "Ничья между "
-                + " и ".join(m.display_name for m in top)
-                + " — перебрасываю. 🎲"
+                "Ничья между " + " и ".join(m.display_name for m in top) + " — перебрасываю. 🎲"
             )
             contenders = top
         if winner is None:
@@ -179,12 +176,28 @@ class FunCog(commands.Cog):
     # --- профиль глазами Попоси ---
 
     _MONTHS_RU = [
-        "", "января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+        "",
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря",
     ]
     _ATTITUDE = {
-        1: "настороженное", 2: "сдержанное", 3: "нейтральное", 4: "тёплое",
-        5: "доверительное", 6: "близкое", 7: "ты — единственный",
+        1: "настороженное",
+        2: "сдержанное",
+        3: "нейтральное",
+        4: "тёплое",
+        5: "доверительное",
+        6: "близкое",
+        7: "ты — единственный",
     }
     _OPENERS = {
         1: "Это ты… Напомни, как тебя зовут?",
@@ -386,7 +399,9 @@ class FunCog(commands.Cog):
             name="Каналов",
             value=f"{len(guild.text_channels)} текстовых, {len(guild.voice_channels)} голосовых",
         )
-        embed.add_field(name="Бустов", value=f"{guild.premium_subscription_count} (ур. {guild.premium_tier})")
+        embed.add_field(
+            name="Бустов", value=f"{guild.premium_subscription_count} (ур. {guild.premium_tier})"
+        )
         embed.add_field(name="Создан", value=f"<t:{int(guild.created_at.timestamp())}:D>")
         if guild.owner:
             embed.add_field(name="Владелец", value=str(guild.owner))

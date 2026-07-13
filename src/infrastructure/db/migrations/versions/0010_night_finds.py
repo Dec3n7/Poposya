@@ -5,6 +5,7 @@ Revises: 0009
 Create Date: 2026-07-10
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -30,7 +31,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_night_finds_guild_active", "night_finds",
+        "ix_night_finds_guild_active",
+        "night_finds",
         ["guild_id", "claimed_by", "expires_at"],
     )
     op.create_index("ix_night_finds_message", "night_finds", ["message_id"])
@@ -46,7 +48,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_user_collections_owner", "user_collections",
+        "ix_user_collections_owner",
+        "user_collections",
         ["guild_id", "user_id", "obtained_at"],
     )
 
@@ -62,7 +65,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_find_attempts_user", "find_attempts",
+        "ix_find_attempts_user",
+        "find_attempts",
         ["guild_id", "user_id", "kind", "attempted_at"],
     )
     op.create_index("ix_find_attempts_find", "find_attempts", ["find_id", "user_id"])

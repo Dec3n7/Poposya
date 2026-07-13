@@ -3,6 +3,7 @@
 
 Все persistent-view (timeout=None) переживают рестарт: custom_id стабилен,
 а привязку к сообщению ког восстанавливает из БД в on_ready."""
+
 from typing import TYPE_CHECKING
 
 import discord
@@ -54,7 +55,9 @@ class CinemaCardView(discord.ui.View):
     async def up_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await self.cog.handle_vote(interaction, +1)
 
-    @discord.ui.button(emoji="👎", style=discord.ButtonStyle.secondary, custom_id="cinema:vote:down")
+    @discord.ui.button(
+        emoji="👎", style=discord.ButtonStyle.secondary, custom_id="cinema:vote:down"
+    )
     async def down_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await self.cog.handle_vote(interaction, -1)
 
@@ -67,8 +70,10 @@ class CinemaWatchedView(discord.ui.View):
         self.cog = cog
 
     @discord.ui.button(
-        label="Мы посмотрели — оценить", emoji="🍿",
-        style=discord.ButtonStyle.primary, custom_id="cinema:beginrating",
+        label="Мы посмотрели — оценить",
+        emoji="🍿",
+        style=discord.ButtonStyle.primary,
+        custom_id="cinema:beginrating",
     )
     async def begin_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await self.cog.handle_begin_rating(interaction)
@@ -91,9 +96,7 @@ class ReviewModal(discord.ui.Modal, title="Твой отзыв о фильме")
         self.rating_message_id = rating_message_id
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.cog.handle_review(
-            interaction, self.rating_message_id, str(self.review.value)
-        )
+        await self.cog.handle_review(interaction, self.rating_message_id, str(self.review.value))
 
 
 class CinemaRatingView(discord.ui.View):
@@ -112,8 +115,11 @@ class CinemaRatingView(discord.ui.View):
             button.callback = self._make_callback(score)
             self.add_item(button)
         review_btn = discord.ui.Button(
-            label="Отзыв", emoji="✍️", style=discord.ButtonStyle.primary,
-            row=2, custom_id="cinema:review",
+            label="Отзыв",
+            emoji="✍️",
+            style=discord.ButtonStyle.primary,
+            row=2,
+            custom_id="cinema:review",
         )
         review_btn.callback = self._open_review
         self.add_item(review_btn)
@@ -121,6 +127,7 @@ class CinemaRatingView(discord.ui.View):
     def _make_callback(self, score: int):
         async def callback(interaction: discord.Interaction) -> None:
             await self.cog.handle_rate(interaction, score)
+
         return callback
 
     async def _open_review(self, interaction: discord.Interaction) -> None:
@@ -136,13 +143,12 @@ class NightPollView(discord.ui.View):
     def __init__(self, cog: "CinemaCog", night_id: int, candidates: list[MovieEntry]):
         super().__init__(timeout=None)
         options = [
-            discord.SelectOption(
-                label=_trim(_title_of(entry), 95), value=str(entry.id), emoji="🎬"
-            )
+            discord.SelectOption(label=_trim(_title_of(entry), 95), value=str(entry.id), emoji="🎬")
             for entry in candidates
         ]
         select = discord.ui.Select(
-            placeholder="Твой голос…", options=options,
+            placeholder="Твой голос…",
+            options=options,
             custom_id=f"cinema:poll:{night_id}",
         )
 

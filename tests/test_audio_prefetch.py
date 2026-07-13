@@ -12,6 +12,7 @@ from tests.test_player import FakeAudio, FakeVoice, make_track
 
 # --- AudioCache ---
 
+
 def test_cache_find_ignores_partial_downloads(tmp_path):
     cache = AudioCache(tmp_path / "audio", max_bytes=10_000)
     (cache.directory / "abc.webm.part").write_bytes(b"half")
@@ -43,6 +44,7 @@ def test_cache_find_refreshes_mtime(tmp_path):
 
 
 # --- закачка наперёд в GuildPlayer ---
+
 
 class DownloadingFakeAudio(FakeAudio):
     """Источник с кэшем: download кладёт файл в словарь, cached_path читает."""

@@ -1,5 +1,6 @@
 """Тесты устойчивости AI-цепочки: circuit breaker, retry/backoff, fallback,
 rate limiter. Без сети — inner-провайдер подменяется заглушкой."""
+
 import asyncio
 
 import pytest
@@ -40,6 +41,7 @@ async def _noop_sleep(_delay):
 
 
 # --- CircuitBreaker ---------------------------------------------------------
+
 
 async def test_cb_passes_through_on_success():
     inner = FakeProvider(["ok"])
@@ -120,6 +122,7 @@ async def test_cb_close_delegates():
 
 # --- ResilientAIProvider (retry/backoff) -----------------------------------
 
+
 async def test_resilient_retries_then_succeeds(monkeypatch):
     monkeypatch.setattr("src.infrastructure.ai.resilient.asyncio.sleep", _noop_sleep)
     inner = FakeProvider([AIProviderError("429", retryable=True), "ok"])
@@ -172,6 +175,7 @@ async def test_resilient_close_delegates():
 
 # --- FallbackAIProvider -----------------------------------------------------
 
+
 async def test_fallback_uses_primary_when_ok():
     primary = FakeProvider(["primary"])
     fallback = FakeProvider(["fallback"])
@@ -195,6 +199,7 @@ async def test_fallback_close_delegates_both():
 
 
 # --- InMemoryRateLimiter ----------------------------------------------------
+
 
 def test_rate_limiter_allows_up_to_limit():
     rl = InMemoryRateLimiter()

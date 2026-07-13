@@ -35,12 +35,30 @@ SURVEY_INTRO = (
     "Нажимай, что подходит. Передумаешь — вернёшься и поменяешь. Я не осуждаю. Почти."
 )
 
-_GENDER_OPTIONS = [("👦", "Парень", "парень"), ("👧", "Девушка", "девушка"), ("🕶️", "Инкогнито", "инкогнито")]
-_CONTACT_OPTIONS = [("🔕", "Не беспокоить", "quiet"), ("💬", "Иногда можно", "normal"), ("💘", "Хочу внимания", "attention")]
-_SEASON_OPTIONS = [("🌸", "Весна", "весна"), ("☀️", "Лето", "лето"), ("🍁", "Осень", "осень"), ("❄️", "Зима", "зима")]
+_GENDER_OPTIONS = [
+    ("👦", "Парень", "парень"),
+    ("👧", "Девушка", "девушка"),
+    ("🕶️", "Инкогнито", "инкогнито"),
+]
+_CONTACT_OPTIONS = [
+    ("🔕", "Не беспокоить", "quiet"),
+    ("💬", "Иногда можно", "normal"),
+    ("💘", "Хочу внимания", "attention"),
+]
+_SEASON_OPTIONS = [
+    ("🌸", "Весна", "весна"),
+    ("☀️", "Лето", "лето"),
+    ("🍁", "Осень", "осень"),
+    ("❄️", "Зима", "зима"),
+]
 _INTEREST_EMOJI = {
-    "Игры": "🎮", "Аниме": "🍥", "Музыка": "🎵", "Арт": "🎨",
-    "Код": "💻", "Спорт": "⚽", "Кино": "🎬",
+    "Игры": "🎮",
+    "Аниме": "🍥",
+    "Музыка": "🎵",
+    "Арт": "🎨",
+    "Код": "💻",
+    "Спорт": "⚽",
+    "Кино": "🎬",
 }
 
 _SEASON_REPLIES = {
@@ -75,16 +93,22 @@ class SurveyView(discord.ui.View):
         for emoji, label, value in _SEASON_OPTIONS:
             self.add_item(self._choice_button(emoji, label, "season", value, row=4))
         done = discord.ui.Button(
-            emoji="✅", label="Готово", style=discord.ButtonStyle.success,
-            custom_id="survey:done", row=4,
+            emoji="✅",
+            label="Готово",
+            style=discord.ButtonStyle.success,
+            custom_id="survey:done",
+            row=4,
         )
         done.callback = self._on_done
         self.add_item(done)
 
     def _choice_button(self, emoji: str, label: str, field: str, value: str, row: int):
         button = discord.ui.Button(
-            emoji=emoji, label=label, style=discord.ButtonStyle.secondary,
-            custom_id=f"survey:{field}:{value}", row=row,
+            emoji=emoji,
+            label=label,
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"survey:{field}:{value}",
+            row=row,
         )
 
         async def callback(interaction: discord.Interaction) -> None:
@@ -106,9 +130,11 @@ class SurveyView(discord.ui.View):
 
     def _interest_button(self, interest: str, row: int):
         button = discord.ui.Button(
-            emoji=_INTEREST_EMOJI.get(interest, "🎯"), label=interest,
+            emoji=_INTEREST_EMOJI.get(interest, "🎯"),
+            label=interest,
             style=discord.ButtonStyle.secondary,
-            custom_id=f"survey:interest:{interest}", row=row,
+            custom_id=f"survey:interest:{interest}",
+            row=row,
         )
 
         async def callback(interaction: discord.Interaction) -> None:

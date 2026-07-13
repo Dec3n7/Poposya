@@ -1,5 +1,6 @@
 """Тесты активности поверх реального UoW+SQLite: возвращение после отсутствия,
 напоминания, войс-минуты, дедуп альбомных постов."""
+
 from datetime import datetime, timedelta, timezone
 
 from src.application.activity.use_cases import (

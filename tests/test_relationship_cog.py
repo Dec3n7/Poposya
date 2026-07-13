@@ -1,5 +1,6 @@
 """RelationshipCog: команды /rank, /leaderboard, админ-группа и реакция на
 доменные события (выдача Discord-ролей)."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -15,8 +16,9 @@ ROLE_NAMES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"]
 
 
 def make_rank(**over):
-    base = dict(points=100, level=2, role_index=0, is_exclusive=False,
-                frozen=False, next_threshold=250)
+    base = dict(
+        points=100, level=2, role_index=0, is_exclusive=False, frozen=False, next_threshold=250
+    )
     base.update(over)
     return RankInfo(**base)
 
@@ -26,16 +28,21 @@ def make_container():
     c.role_names = ROLE_NAMES
     c.get_rank = SimpleNamespace(execute=AsyncMock(return_value=make_rank()))
     c.leaderboard = SimpleNamespace(execute=AsyncMock(return_value=[]))
-    c.set_points = SimpleNamespace(execute=AsyncMock(return_value=make_rank(points=300, role_index=1)))
+    c.set_points = SimpleNamespace(
+        execute=AsyncMock(return_value=make_rank(points=300, role_index=1))
+    )
     c.toggle_freeze = SimpleNamespace(execute=AsyncMock(return_value=True))
     return c
 
 
 def make_cog(container=None, role_sync=None):
     bot = MagicMock()
-    return RelationshipCog(bot, container or make_container(),
-                           role_sync or MagicMock(sync_member=AsyncMock(), ensure_roles=AsyncMock()),
-                           InMemoryEventBus())
+    return RelationshipCog(
+        bot,
+        container or make_container(),
+        role_sync or MagicMock(sync_member=AsyncMock(), ensure_roles=AsyncMock()),
+        InMemoryEventBus(),
+    )
 
 
 async def test_rank_shows_points_and_status():
@@ -50,7 +57,9 @@ async def test_rank_shows_points_and_status():
 
 async def test_rank_no_role():
     container = make_container()
-    container.get_rank.execute.return_value = make_rank(role_index=None, points=10, next_threshold=100)
+    container.get_rank.execute.return_value = make_rank(
+        role_index=None, points=10, next_threshold=100
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     await type(cog).rank.callback(cog, interaction)
@@ -120,12 +129,17 @@ async def test_sync_command():
 
 # --- реакция на доменные события ---
 
+
 async def test_on_role_changed_syncs_member():
     role_sync = MagicMock(sync_member=AsyncMock())
     cog = make_cog(role_sync=role_sync)
     cog.bot.get_guild.return_value = MagicMock()
     event = RelationshipRoleChanged(
-        aggregate_id="10:1", guild_id=10, user_id=1, new_role_index=2, points=450,
+        aggregate_id="10:1",
+        guild_id=10,
+        user_id=1,
+        new_role_index=2,
+        points=450,
     )
     await cog._on_role_changed(event)
     role_sync.sync_member.assert_awaited_once()
@@ -135,8 +149,9 @@ async def test_on_role_changed_unknown_guild_noop():
     role_sync = MagicMock(sync_member=AsyncMock())
     cog = make_cog(role_sync=role_sync)
     cog.bot.get_guild.return_value = None
-    event = RelationshipRoleChanged(aggregate_id="10:1", guild_id=10, user_id=1,
-                                    new_role_index=2, points=450)
+    event = RelationshipRoleChanged(
+        aggregate_id="10:1", guild_id=10, user_id=1, new_role_index=2, points=450
+    )
     await cog._on_role_changed(event)
     role_sync.sync_member.assert_not_awaited()
 
@@ -157,6 +172,8 @@ async def test_on_exclusive_transferred_no_previous():
     role_sync = MagicMock(sync_member=AsyncMock())
     cog = make_cog(role_sync=role_sync)
     cog.bot.get_guild.return_value = MagicMock()
-    event = ExclusiveTransferred(aggregate_id="10", guild_id=10, new_user_id=2, previous_user_id=None)
+    event = ExclusiveTransferred(
+        aggregate_id="10", guild_id=10, new_user_id=2, previous_user_id=None
+    )
     await cog._on_exclusive_transferred(event)
     role_sync.sync_member.assert_not_awaited()

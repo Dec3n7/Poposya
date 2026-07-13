@@ -34,8 +34,7 @@ class FakeRepo(IRelationshipRepository):
 
     async def find_birthdays(self, month, day):
         return [
-            p for p in self.profiles.values()
-            if p.birthday_month == month and p.birthday_day == day
+            p for p in self.profiles.values() if p.birthday_month == month and p.birthday_day == day
         ]
 
     async def top_by_points(self, guild_id, limit):

@@ -1,5 +1,6 @@
 """Прямые тесты SQL-репозитория лайкнутых треков на SQLite (фейки в
 test_liked_tracks не задевают реальный репозиторий)."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -12,8 +13,12 @@ NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
 
 def make_liked(video_id, title="Song", at=NOW):
     return LikedTrack(
-        user_id=1, video_id=video_id, title=title,
-        uploader="Artist", duration=200, liked_at=at,
+        user_id=1,
+        video_id=video_id,
+        title=title,
+        uploader="Artist",
+        duration=200,
+        liked_at=at,
     )
 
 

@@ -40,17 +40,18 @@ class KinopoiskClient:
         results: list[MovieInfo] = []
         for doc in (data.get("docs") or [])[:limit]:
             title = (
-                doc.get("name") or doc.get("alternativeName")
-                or doc.get("enName") or "Без названия"
+                doc.get("name") or doc.get("alternativeName") or doc.get("enName") or "Без названия"
             )
             year = doc.get("year")
             overview = (doc.get("description") or doc.get("shortDescription") or "").strip()
             poster = ((doc.get("poster") or {}).get("url")) or ""
-            results.append(MovieInfo(
-                tmdb_id=int(doc.get("id") or 0),
-                title=title,
-                year=int(year) if year else None,
-                overview=overview,
-                poster_url=poster,
-            ))
+            results.append(
+                MovieInfo(
+                    tmdb_id=int(doc.get("id") or 0),
+                    title=title,
+                    year=int(year) if year else None,
+                    overview=overview,
+                    poster_url=poster,
+                )
+            )
         return results

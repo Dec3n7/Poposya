@@ -59,9 +59,7 @@ class IFindAttemptRepository(ABC):
     async def add(self, attempt: FindAttempt) -> None: ...
 
     @abstractmethod
-    async def last_attempt_at(
-        self, guild_id: int, user_id: int, kind: str
-    ) -> datetime | None: ...
+    async def last_attempt_at(self, guild_id: int, user_id: int, kind: str) -> datetime | None: ...
 
     @abstractmethod
     async def has_attempted(self, find_id: int, user_id: int) -> bool:

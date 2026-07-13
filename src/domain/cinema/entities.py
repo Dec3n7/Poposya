@@ -16,10 +16,10 @@ class MovieEntry:
     year: int | None = None
     overview: str = ""
     poster_url: str = ""
-    message_id: int = 0          # карточка с кнопками 👍/👎
-    channel_id: int = 0          # канал карточки/оценок (для итогов после рестарта)
-    status: str = "listed"       # listed | rating | watched
-    rating_message_id: int = 0   # сообщение с кнопками оценок 1–10
+    message_id: int = 0  # карточка с кнопками 👍/👎
+    channel_id: int = 0  # канал карточки/оценок (для итогов после рестарта)
+    status: str = "listed"  # listed | rating | watched
+    rating_message_id: int = 0  # сообщение с кнопками оценок 1–10
     rating_ends_at: datetime | None = None
     avg_score: float | None = None
     ratings_count: int = 0

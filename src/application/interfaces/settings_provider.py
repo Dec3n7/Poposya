@@ -7,5 +7,4 @@ class ISettingsProvider(ABC):
     реализация держит переопределения в памяти, горячий путь без запросов к БД."""
 
     @abstractmethod
-    def get(self, guild_id: int, key: str, default):
-        ...
+    def get(self, guild_id: int, key: str, default): ...

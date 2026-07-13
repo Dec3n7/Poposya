@@ -1,4 +1,5 @@
 """LogRelayCog: обработчик-очередь, шумовой фильтр, команда /botlog."""
+
 import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock

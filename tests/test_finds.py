@@ -86,16 +86,11 @@ class FakeNightFinds(INightFindRepository):
         return self.rows.get(find_id)
 
     async def get_by_message(self, message_id):
-        return next(
-            (f for f in self.rows.values() if f.message_id == message_id), None
-        )
+        return next((f for f in self.rows.values() if f.message_id == message_id), None)
 
     async def get_active(self, guild_id, now):
         return next(
-            (
-                f for f in self.rows.values()
-                if f.guild_id == guild_id and f.is_active(now)
-            ),
+            (f for f in self.rows.values() if f.guild_id == guild_id and f.is_active(now)),
             None,
         )
 
@@ -120,24 +115,27 @@ class FakeCollections(ICollectionRepository):
         self._seq += 1
         self.items.append(
             CollectionItem(
-                id=self._seq, guild_id=item.guild_id, user_id=item.user_id,
-                item_id=item.item_id, obtained_at=item.obtained_at,
+                id=self._seq,
+                guild_id=item.guild_id,
+                user_id=item.user_id,
+                item_id=item.item_id,
+                obtained_at=item.obtained_at,
                 gifted_at=item.gifted_at,
             )
         )
 
     async def list_for_user(self, guild_id, user_id):
-        return [
-            i for i in self.items
-            if i.guild_id == guild_id and i.user_id == user_id
-        ]
+        return [i for i in self.items if i.guild_id == guild_id and i.user_id == user_id]
 
     async def get_ungifted(self, guild_id, user_id, item_id):
         return next(
             (
-                i for i in self.items
-                if i.guild_id == guild_id and i.user_id == user_id
-                and i.item_id == item_id and i.gifted_at is None
+                i
+                for i in self.items
+                if i.guild_id == guild_id
+                and i.user_id == user_id
+                and i.item_id == item_id
+                and i.gifted_at is None
             ),
             None,
         )
@@ -146,8 +144,11 @@ class FakeCollections(ICollectionRepository):
         for idx, item in enumerate(self.items):
             if item.id == collection_item_id:
                 self.items[idx] = CollectionItem(
-                    id=item.id, guild_id=item.guild_id, user_id=item.user_id,
-                    item_id=item.item_id, obtained_at=item.obtained_at,
+                    id=item.id,
+                    guild_id=item.guild_id,
+                    user_id=item.user_id,
+                    item_id=item.item_id,
+                    obtained_at=item.obtained_at,
                     gifted_at=now,
                 )
 
@@ -161,15 +162,14 @@ class FakeAttempts(IFindAttemptRepository):
 
     async def last_attempt_at(self, guild_id, user_id, kind):
         matching = [
-            a.attempted_at for a in self.attempts
+            a.attempted_at
+            for a in self.attempts
             if a.guild_id == guild_id and a.user_id == user_id and a.kind == kind
         ]
         return max(matching) if matching else None
 
     async def has_attempted(self, find_id, user_id):
-        return any(
-            a.find_id == find_id and a.user_id == user_id for a in self.attempts
-        )
+        return any(a.find_id == find_id and a.user_id == user_id for a in self.attempts)
 
 
 class FakeUoW(IUnitOfWork):
@@ -225,26 +225,32 @@ def policy():
 
 
 async def _make_find(state, message_id=111, item_id="zippo_engraved") -> NightFind:
-    return await state["night_finds"].add(NightFind(
-        guild_id=10,
-        location_id="nezu_square",
-        item_id=item_id,
-        created_at=NOW,
-        expires_at=NOW + timedelta(hours=12),
-        channel_id=5,
-        message_id=message_id,
-    ))
+    return await state["night_finds"].add(
+        NightFind(
+            guild_id=10,
+            location_id="nezu_square",
+            item_id=item_id,
+            created_at=NOW,
+            expires_at=NOW + timedelta(hours=12),
+            channel_id=5,
+            message_id=message_id,
+        )
+    )
 
 
 def _claim_uc(uow_factory, policy, rng_value: float) -> ClaimFindUseCase:
     return ClaimFindUseCase(
-        uow_factory, policy,
-        cooldown_hours=8, fail_penalty=5, notes_max_chars=700,
+        uow_factory,
+        policy,
+        cooldown_hours=8,
+        fail_penalty=5,
+        notes_max_chars=700,
         rng=ForcedRng(rng_value),
     )
 
 
 # --- каталог ---
+
 
 def test_catalog_counts_match_spec():
     by_rarity = {rarity: 0 for rarity in Rarity}
@@ -267,6 +273,7 @@ def test_catalog_ids_unique_and_seasons_valid():
     assert all(item.season in valid for item in catalog.ITEMS)
     # праздничные метки — строго "ДД-ММ"
     import re
+
     for item in catalog.ITEMS:
         if item.holiday is not None:
             assert re.fullmatch(r"\d{2}-\d{2}", item.holiday), item.id
@@ -309,6 +316,7 @@ def test_success_chance_grows_with_level():
 
 
 # --- claim ---
+
 
 async def test_claim_success_awards_and_collects(state, events, uow_factory, policy):
     find = await _make_find(state)
@@ -383,10 +391,16 @@ async def test_legendary_claim_writes_note(state, uow_factory, policy, events):
 
 # --- gift ---
 
+
 async def test_gift_awards_bonus_and_notes(state, uow_factory, policy, events):
-    await state["collections"].add(CollectionItem(
-        guild_id=10, user_id=1, item_id="butterfly_pin", obtained_at=NOW,
-    ))
+    await state["collections"].add(
+        CollectionItem(
+            guild_id=10,
+            user_id=1,
+            item_id="butterfly_pin",
+            obtained_at=NOW,
+        )
+    )
     uc = GiftItemUseCase(uow_factory, policy, notes_max_chars=700)
     result = await uc.execute(10, 1, "butterfly_pin", NOW)
     assert result.status == "ok"
@@ -401,6 +415,7 @@ async def test_gift_awards_bonus_and_notes(state, uow_factory, policy, events):
 
 # --- специальная прогулка ---
 
+
 async def test_walk_requires_points(state, uow_factory, policy, events):
     uc = SpecialWalkUseCase(uow_factory, policy, cost=60, cooldown_days=7)
     result = await uc.execute(10, 1, NOW)
@@ -410,9 +425,7 @@ async def test_walk_requires_points(state, uow_factory, policy, events):
 async def test_walk_spends_rewards_and_cools_down(state, uow_factory, policy, events):
     profile = await state["relationships"].get_or_create(1, 10)
     profile.points = 200
-    uc = SpecialWalkUseCase(
-        uow_factory, policy, cost=60, cooldown_days=7, rng=ForcedRng(0.0)
-    )
+    uc = SpecialWalkUseCase(uow_factory, policy, cost=60, cooldown_days=7, rng=ForcedRng(0.0))
     result = await uc.execute(10, 1, NOW)
     assert result.status == "success"
     assert result.item is not None
@@ -426,6 +439,7 @@ async def test_walk_spends_rewards_and_cools_down(state, uow_factory, policy, ev
 
 
 # --- спавн ---
+
 
 async def test_spawn_only_one_active_per_guild(state, uow_factory, events):
     uc = SpawnFindUseCase(uow_factory, lifetime_hours=12, rng=random.Random(1))

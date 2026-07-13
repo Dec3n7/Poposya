@@ -70,8 +70,10 @@ class FindClaimView(discord.ui.View):
         self.cog = cog
 
     @discord.ui.button(
-        label="Сходить туда", emoji="👣",
-        style=discord.ButtonStyle.primary, custom_id="poposya:nightfind:claim",
+        label="Сходить туда",
+        emoji="👣",
+        style=discord.ButtonStyle.primary,
+        custom_id="poposya:nightfind:claim",
     )
     async def claim_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await self.cog.handle_claim(interaction)
@@ -133,7 +135,7 @@ class FindsCog(commands.Cog):
         return discord.utils.get(guild.text_channels, name=name)
 
     def _holiday_key(self, now: datetime) -> str | None:
-        """"ДД-ММ", если сегодня праздник из настроек, иначе None."""
+        """ "ДД-ММ", если сегодня праздник из настроек, иначе None."""
         key = f"{now.day:02d}-{now.month:02d}"
         return key if key in self.settings.holidays else None
 
@@ -188,9 +190,7 @@ class FindsCog(commands.Cog):
                 try:
                     await self._try_spawn(guild)
                 except Exception:
-                    logger.exception(
-                        "Спавн находки упал", extra={"guild_id": guild.id}
-                    )
+                    logger.exception("Спавн находки упал", extra={"guild_id": guild.id})
 
     async def _try_spawn(self, guild: discord.Guild, force: bool = False) -> NightFind | None:
         # ВРЕМЕННО для визуальных тестов: условие «сервер живой» отключено,
@@ -209,7 +209,8 @@ class FindsCog(commands.Cog):
         now = datetime.now(timezone.utc)
         holiday = self._holiday_key(now)
         result = await self.finds.spawn_find.execute(
-            guild.id, now,
+            guild.id,
+            now,
             season=season_for_month(now.month),
             # хорошее настроение или праздник — находки лучше
             boosted=mood >= 65 or holiday is not None,
@@ -233,7 +234,8 @@ class FindsCog(commands.Cog):
         embed.set_footer(text="Одна попытка на находку. Заберёт первый, кому повезёт.")
         try:
             message = await channel.send(
-                embed=embed, view=FindClaimView(self),
+                embed=embed,
+                view=FindClaimView(self),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
@@ -264,9 +266,7 @@ class FindsCog(commands.Cog):
         fresh = await self.finds.list_live_finds.execute(now)
         if any(f.id == find.id for f in fresh):
             return
-        await self._close_announcement(
-            find, "-# 🌙 Опоздали. Токио быстрый — находки не ждут."
-        )
+        await self._close_announcement(find, "-# 🌙 Опоздали. Токио быстрый — находки не ждут.")
 
     async def _close_announcement(self, find: NightFind, note: str) -> None:
         """Убрать кнопку с анонса и дописать итог."""
@@ -327,9 +327,7 @@ class FindsCog(commands.Cog):
             ephemeral=True,
         )
 
-    async def _announce_claim(
-        self, interaction: discord.Interaction, result: ClaimResult
-    ) -> None:
+    async def _announce_claim(self, interaction: discord.Interaction, result: ClaimResult) -> None:
         item = result.item
         user = interaction.user
         # закрыть анонс
@@ -338,8 +336,7 @@ class FindsCog(commands.Cog):
             embed = message.embeds[0] if message.embeds else None
             if embed is not None:
                 embed.description = (
-                    f"{embed.description}\n\n-# ✅ Забрал {user.mention} — "
-                    f"{item.emoji} {item.name}"
+                    f"{embed.description}\n\n-# ✅ Забрал {user.mention} — {item.emoji} {item.name}"
                 )
             await message.edit(embed=embed, view=None)
         except discord.HTTPException:
@@ -389,9 +386,7 @@ class FindsCog(commands.Cog):
                 ephemeral=True,
             )
             return
-        existing = await self.finds.get_active_find.execute(
-            guild.id, datetime.now(timezone.utc)
-        )
+        existing = await self.finds.get_active_find.execute(guild.id, datetime.now(timezone.utc))
         if existing is not None:
             await interaction.response.send_message(
                 "Активная находка уже висит — сначала заберите её.", ephemeral=True
@@ -440,9 +435,7 @@ class FindsCog(commands.Cog):
     @app_commands.guild_only()
     async def collection_command(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        entries = await self.finds.get_collection.execute(
-            interaction.guild_id, interaction.user.id
-        )
+        entries = await self.finds.get_collection.execute(interaction.guild_id, interaction.user.id)
         if not entries:
             await interaction.followup.send(
                 "Пока пусто. Следи за моими ночными прогулками — и успевай первым.",
@@ -498,9 +491,7 @@ class FindsCog(commands.Cog):
     async def gift_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        entries = await self.finds.get_collection.execute(
-            interaction.guild_id, interaction.user.id
-        )
+        entries = await self.finds.get_collection.execute(interaction.guild_id, interaction.user.id)
         seen: dict[str, str] = {}  # item_id -> название с эмодзи
         for entry in entries:
             if entry.gifted_at is None and entry.item.id not in seen:
@@ -521,7 +512,9 @@ class FindsCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         now = datetime.now(timezone.utc)
         result = await self.finds.special_walk.execute(
-            interaction.guild_id, interaction.user.id, now,
+            interaction.guild_id,
+            interaction.user.id,
+            now,
             season=season_for_month(now.month),
             holiday=self._holiday_key(now),
         )

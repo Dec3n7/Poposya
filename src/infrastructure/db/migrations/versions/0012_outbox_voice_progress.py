@@ -5,6 +5,7 @@ Revises: 0011
 Create Date: 2026-07-10
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -27,9 +28,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("event_id"),
     )
-    op.create_index(
-        "ix_outbox_unpublished", "outbox_events", ["published_at", "attempts"]
-    )
+    op.create_index("ix_outbox_unpublished", "outbox_events", ["published_at", "attempts"])
 
     op.create_table(
         "voice_progress",

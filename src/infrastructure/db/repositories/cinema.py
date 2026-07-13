@@ -123,16 +123,24 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         return await self._one_where(*conditions)
 
     async def count_listed(self, guild_id: int) -> int:
-        stmt = select(func.count()).select_from(MovieEntryModel).where(
-            MovieEntryModel.guild_id == guild_id,
-            MovieEntryModel.status == "listed",
+        stmt = (
+            select(func.count())
+            .select_from(MovieEntryModel)
+            .where(
+                MovieEntryModel.guild_id == guild_id,
+                MovieEntryModel.status == "listed",
+            )
         )
         return (await self._session.execute(stmt)).scalar_one()
 
     async def count_proposed(self, guild_id: int, user_id: int) -> int:
-        stmt = select(func.count()).select_from(MovieEntryModel).where(
-            MovieEntryModel.guild_id == guild_id,
-            MovieEntryModel.added_by == user_id,
+        stmt = (
+            select(func.count())
+            .select_from(MovieEntryModel)
+            .where(
+                MovieEntryModel.guild_id == guild_id,
+                MovieEntryModel.added_by == user_id,
+            )
         )
         return (await self._session.execute(stmt)).scalar_one()
 
@@ -190,9 +198,7 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         if row is None:
-            self._session.add(MovieVoteModel(
-                entry_id=entry_id, user_id=user_id, value=value
-            ))
+            self._session.add(MovieVoteModel(entry_id=entry_id, user_id=user_id, value=value))
         else:
             row.value = value
 
@@ -205,9 +211,11 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         )
 
     async def vote_counts(self, entry_id: int) -> tuple[int, int]:
-        stmt = select(MovieVoteModel.value, func.count()).where(
-            MovieVoteModel.entry_id == entry_id
-        ).group_by(MovieVoteModel.value)
+        stmt = (
+            select(MovieVoteModel.value, func.count())
+            .where(MovieVoteModel.entry_id == entry_id)
+            .group_by(MovieVoteModel.value)
+        )
         counts = dict((await self._session.execute(stmt)).all())
         return counts.get(1, 0), counts.get(-1, 0)
 
@@ -283,9 +291,7 @@ class SqlAlchemyMovieNightRepository(IMovieNightRepository):
         )
 
     async def list_pending(self) -> list[MovieNight]:
-        stmt = select(MovieNightModel).where(
-            MovieNightModel.status.in_(("poll", "scheduled"))
-        )
+        stmt = select(MovieNightModel).where(MovieNightModel.status.in_(("poll", "scheduled")))
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_night_to_domain(row) for row in rows]
 
@@ -304,16 +310,18 @@ class SqlAlchemyMovieNightRepository(IMovieNightRepository):
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         if row is None:
-            self._session.add(MovieNightVoteModel(
-                night_id=night_id, user_id=user_id, entry_id=entry_id
-            ))
+            self._session.add(
+                MovieNightVoteModel(night_id=night_id, user_id=user_id, entry_id=entry_id)
+            )
         else:
             row.entry_id = entry_id
 
     async def tally(self, night_id: int) -> dict[int, int]:
-        stmt = select(MovieNightVoteModel.entry_id, func.count()).where(
-            MovieNightVoteModel.night_id == night_id
-        ).group_by(MovieNightVoteModel.entry_id)
+        stmt = (
+            select(MovieNightVoteModel.entry_id, func.count())
+            .where(MovieNightVoteModel.night_id == night_id)
+            .group_by(MovieNightVoteModel.entry_id)
+        )
         return dict((await self._session.execute(stmt)).all())
 
 
@@ -328,30 +336,35 @@ class SqlAlchemyMovieRatingRepository(IMovieRatingRepository):
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
-    async def upsert(
-        self, entry_id: int, user_id: int, score: int, at: datetime
-    ) -> bool:
+    async def upsert(self, entry_id: int, user_id: int, score: int, at: datetime) -> bool:
         row = await self._get_row(entry_id, user_id)
         if row is None:
-            self._session.add(MovieRatingModel(
-                entry_id=entry_id, user_id=user_id,
-                score=score, rated_at=_naive(at),
-            ))
+            self._session.add(
+                MovieRatingModel(
+                    entry_id=entry_id,
+                    user_id=user_id,
+                    score=score,
+                    rated_at=_naive(at),
+                )
+            )
             return True
         first_time = row.score is None  # раньше был только отзыв — балл впервые
         row.score = score
         row.rated_at = _naive(at)
         return first_time
 
-    async def set_review(
-        self, entry_id: int, user_id: int, review: str, at: datetime
-    ) -> bool:
+    async def set_review(self, entry_id: int, user_id: int, review: str, at: datetime) -> bool:
         row = await self._get_row(entry_id, user_id)
         if row is None:
-            self._session.add(MovieRatingModel(
-                entry_id=entry_id, user_id=user_id,
-                score=None, review=review, rated_at=_naive(at),
-            ))
+            self._session.add(
+                MovieRatingModel(
+                    entry_id=entry_id,
+                    user_id=user_id,
+                    score=None,
+                    review=review,
+                    rated_at=_naive(at),
+                )
+            )
             return True
         first_time = not (row.review or "").strip()
         row.review = review
@@ -360,9 +373,9 @@ class SqlAlchemyMovieRatingRepository(IMovieRatingRepository):
 
     async def stats(self, entry_id: int) -> tuple[float | None, int]:
         # count(score) не считает строки-отзывы без цифры
-        stmt = select(
-            func.avg(MovieRatingModel.score), func.count(MovieRatingModel.score)
-        ).where(MovieRatingModel.entry_id == entry_id)
+        stmt = select(func.avg(MovieRatingModel.score), func.count(MovieRatingModel.score)).where(
+            MovieRatingModel.entry_id == entry_id
+        )
         avg, count = (await self._session.execute(stmt)).one()
         return (round(float(avg), 1) if avg is not None else None), count
 
@@ -372,13 +385,9 @@ class SqlAlchemyMovieRatingRepository(IMovieRatingRepository):
         )
         return (await self._session.execute(stmt)).scalar_one()
 
-    async def list_reviews(
-        self, entry_id: int
-    ) -> list[tuple[int, int | None, str]]:
+    async def list_reviews(self, entry_id: int) -> list[tuple[int, int | None, str]]:
         stmt = (
-            select(
-                MovieRatingModel.user_id, MovieRatingModel.score, MovieRatingModel.review
-            )
+            select(MovieRatingModel.user_id, MovieRatingModel.score, MovieRatingModel.review)
             .where(
                 MovieRatingModel.entry_id == entry_id,
                 MovieRatingModel.review.is_not(None),
@@ -387,18 +396,12 @@ class SqlAlchemyMovieRatingRepository(IMovieRatingRepository):
         )
         rows = (await self._session.execute(stmt)).all()
         return [
-            (user_id, score, review)
-            for user_id, score, review in rows
-            if (review or "").strip()
+            (user_id, score, review) for user_id, score, review in rows if (review or "").strip()
         ]
 
-    async def list_ratings(
-        self, entry_id: int
-    ) -> list[tuple[int, int | None, str]]:
+    async def list_ratings(self, entry_id: int) -> list[tuple[int, int | None, str]]:
         stmt = (
-            select(
-                MovieRatingModel.user_id, MovieRatingModel.score, MovieRatingModel.review
-            )
+            select(MovieRatingModel.user_id, MovieRatingModel.score, MovieRatingModel.review)
             .where(
                 MovieRatingModel.entry_id == entry_id,
                 or_(

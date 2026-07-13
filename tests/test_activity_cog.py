@@ -1,5 +1,6 @@
 """ActivityCog: каналы/отправка, приветствия/прощания, активность главного
 канала и возвращение, «Альбом», календарный и войс-тик."""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -17,10 +18,18 @@ NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
 
 def make_settings(**over):
     base = dict(
-        holidays={"11-07": "Праздник"}, welcome_channel="bots", main_channel="основной",
-        auto_role="", album_channel="альбом", album_reaction_emoji="",
-        album_reaction_threshold=5, holiday_points_multiplier=2, birthday_remind_days=3,
-        voice_points_per_hour=3, lonely_hours=12, random_thought_min_hours=3,
+        holidays={"11-07": "Праздник"},
+        welcome_channel="bots",
+        main_channel="основной",
+        auto_role="",
+        album_channel="альбом",
+        album_reaction_emoji="",
+        album_reaction_threshold=5,
+        holiday_points_multiplier=2,
+        birthday_remind_days=3,
+        voice_points_per_hour=3,
+        lonely_hours=12,
+        random_thought_min_hours=3,
         random_thought_max_hours=6,
     )
     base.update(over)
@@ -29,8 +38,9 @@ def make_settings(**over):
 
 def make_container():
     c = SimpleNamespace()
-    c.touch_activity = SimpleNamespace(execute=AsyncMock(
-        return_value=ActivityTouch(returned_after_absence=False, days_absent=0)))
+    c.touch_activity = SimpleNamespace(
+        execute=AsyncMock(return_value=ActivityTouch(returned_after_absence=False, days_absent=0))
+    )
     c.try_mark_album = SimpleNamespace(execute=AsyncMock(return_value=True))
     c.load_voice_progress = SimpleNamespace(execute=AsyncMock(return_value={}))
     c.save_voice_progress = SimpleNamespace(execute=AsyncMock())
@@ -39,16 +49,26 @@ def make_container():
 
 def make_relationship():
     r = SimpleNamespace()
-    r.decay_points = SimpleNamespace(execute=AsyncMock(return_value=DecayResult(decayed=0, transfers=[])))
-    r.birthday_tick = SimpleNamespace(execute=AsyncMock(return_value=BirthdayEvents(remind=[], congratulate=[])))
+    r.decay_points = SimpleNamespace(
+        execute=AsyncMock(return_value=DecayResult(decayed=0, transfers=[]))
+    )
+    r.birthday_tick = SimpleNamespace(
+        execute=AsyncMock(return_value=BirthdayEvents(remind=[], congratulate=[]))
+    )
     r.award_point = SimpleNamespace(execute=AsyncMock())
     return r
 
 
 def make_cog(container=None, relationship=None, chat=None, settings=None):
     bot = MagicMock()
-    return ActivityCog(bot, container or make_container(), relationship or make_relationship(),
-                       chat, settings or make_settings(), MoodTracker())
+    return ActivityCog(
+        bot,
+        container or make_container(),
+        relationship or make_relationship(),
+        chat,
+        settings or make_settings(),
+        MoodTracker(),
+    )
 
 
 def guild_with_channel(name, channel):
@@ -59,6 +79,7 @@ def guild_with_channel(name, channel):
 
 
 # --- каналы / _send ---------------------------------------------------------
+
 
 def test_welcome_and_main_channel_lookup():
     cog = make_cog()
@@ -84,6 +105,7 @@ async def test_send_delivers():
 
 
 # --- join / remove ----------------------------------------------------------
+
 
 async def test_member_join_fallback_welcome():
     cog = make_cog()  # chat=None
@@ -135,6 +157,7 @@ async def test_member_remove_fallback():
 
 # --- on_message -------------------------------------------------------------
 
+
 async def test_on_message_main_channel_bumps_mood():
     cog = make_cog()
     msg = MagicMock()
@@ -149,11 +172,20 @@ async def test_on_message_main_channel_bumps_mood():
 async def test_on_message_returning_member_comments():
     container = make_container()
     container.touch_activity.execute.return_value = ActivityTouch(
-        returned_after_absence=True, days_absent=10)
+        returned_after_absence=True, days_absent=10
+    )
     chat = MagicMock()
-    chat.get_rank = AsyncMock(return_value=RankInfo(
-        points=10, level=2, role_index=0, is_exclusive=False, frozen=False,
-        next_threshold=100, survey=SurveyData(contact="normal")))
+    chat.get_rank = AsyncMock(
+        return_value=RankInfo(
+            points=10,
+            level=2,
+            role_index=0,
+            is_exclusive=False,
+            frozen=False,
+            next_threshold=100,
+            survey=SurveyData(contact="normal"),
+        )
+    )
     chat.freeform_remark = AsyncMock(return_value="С возвращением.")
     cog = make_cog(container, chat=chat)
     msg = MagicMock()
@@ -170,11 +202,20 @@ async def test_on_message_returning_member_comments():
 async def test_on_message_returning_quiet_survey_silent():
     container = make_container()
     container.touch_activity.execute.return_value = ActivityTouch(
-        returned_after_absence=True, days_absent=10)
+        returned_after_absence=True, days_absent=10
+    )
     chat = MagicMock()
-    chat.get_rank = AsyncMock(return_value=RankInfo(
-        points=10, level=2, role_index=0, is_exclusive=False, frozen=False,
-        next_threshold=100, survey=SurveyData(contact="quiet")))
+    chat.get_rank = AsyncMock(
+        return_value=RankInfo(
+            points=10,
+            level=2,
+            role_index=0,
+            is_exclusive=False,
+            frozen=False,
+            next_threshold=100,
+            survey=SurveyData(contact="quiet"),
+        )
+    )
     chat.freeform_remark = AsyncMock()
     cog = make_cog(container, chat=chat)
     msg = MagicMock()
@@ -188,9 +229,11 @@ async def test_on_message_returning_quiet_survey_silent():
 
 # --- альбом (on_raw_reaction_add) ------------------------------------------
 
+
 def make_reaction_payload(guild_id=10, channel_id=100, message_id=200, emoji="🔥"):
-    return SimpleNamespace(guild_id=guild_id, channel_id=channel_id,
-                           message_id=message_id, emoji=emoji)
+    return SimpleNamespace(
+        guild_id=guild_id, channel_id=channel_id, message_id=message_id, emoji=emoji
+    )
 
 
 async def test_album_below_threshold_skipped():
@@ -224,8 +267,9 @@ async def test_album_posts_when_threshold_reached():
     cog.bot.get_guild.return_value = guild
 
     message = MagicMock()
-    message.author = SimpleNamespace(bot=False, display_name="Автор",
-                                     display_avatar=SimpleNamespace(url="http://a"))
+    message.author = SimpleNamespace(
+        bot=False, display_name="Автор", display_avatar=SimpleNamespace(url="http://a")
+    )
     message.reactions = [SimpleNamespace(emoji="🔥", count=5)]
     message.content = "мем"
     message.attachments = []
@@ -263,9 +307,12 @@ async def test_album_dedup_skips_second():
 
 # --- календарный и войс-тик --------------------------------------------------
 
+
 async def test_calendar_tick_announces_holiday():
     relationship = make_relationship()
-    cog = make_cog(relationship=relationship, settings=make_settings(holidays={"11-07": "Праздник"}))
+    cog = make_cog(
+        relationship=relationship, settings=make_settings(holidays={"11-07": "Праздник"})
+    )
     main = MagicMock()
     main.name = "основной"
     main.send = AsyncMock()
@@ -277,6 +324,7 @@ async def test_calendar_tick_announces_holiday():
 
     # monkeypatch календарь на «сегодня праздник»
     import src.infrastructure.discord.cogs.activity as mod
+
     orig = cog.calendar.holiday_name
     cog.calendar = SimpleNamespace(holiday_name=lambda d: "Праздник")
     await cog._calendar_tick()
@@ -287,7 +335,8 @@ async def test_calendar_tick_announces_holiday():
 async def test_calendar_tick_birthday_congratulate():
     relationship = make_relationship()
     relationship.birthday_tick.execute.return_value = BirthdayEvents(
-        remind=[], congratulate=[(10, 1)])
+        remind=[], congratulate=[(10, 1)]
+    )
     cog = make_cog(relationship=relationship, settings=make_settings(holidays={}))
     cog.calendar = SimpleNamespace(holiday_name=lambda d: None)
     main = MagicMock()

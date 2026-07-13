@@ -1,5 +1,6 @@
 """Инфраструктура Discord, тестируемая без живого подключения: голосовое
 соединение, синхронизация ролей, health-хендлер, сессия, доп. ветки outbox."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,6 +22,7 @@ def http_error():
 
 
 # --- DiscordVoiceConnection -------------------------------------------------
+
 
 def make_vc(playing=False, paused=False):
     vc = MagicMock()
@@ -96,8 +98,9 @@ async def test_voice_play_passes_headers_to_ffmpeg(monkeypatch):
     conn = DiscordVoiceConnection(vc)
     monkeypatch.setattr(discord, "FFmpegPCMAudio", MagicMock())
     monkeypatch.setattr(discord, "PCMVolumeTransformer", MagicMock())
-    await conn.play("https://stream/audio", 0.5, lambda e: None,
-                    headers={"User-Agent": "test-agent"})
+    await conn.play(
+        "https://stream/audio", 0.5, lambda e: None, headers={"User-Agent": "test-agent"}
+    )
     before = discord.FFmpegPCMAudio.call_args.kwargs["before_options"]
     assert "-headers" in before and "test-agent" in before
 
@@ -114,14 +117,15 @@ async def test_voice_play_local_file_no_reconnect(monkeypatch):
 
 # --- RoleSyncService --------------------------------------------------------
 
+
 def make_guild(role_names=(), members=None):
     roles = [SimpleNamespace(name=n) for n in role_names]
     guild = MagicMock()
     guild.id = 10
     guild.roles = roles
-    guild.create_role = AsyncMock(side_effect=lambda name, reason=None: roles.append(
-        SimpleNamespace(name=name)
-    ))
+    guild.create_role = AsyncMock(
+        side_effect=lambda name, reason=None: roles.append(SimpleNamespace(name=name))
+    )
     guild._members = members or {}
     guild.get_member = lambda uid: guild._members.get(uid)
     return guild
@@ -198,6 +202,7 @@ async def test_sync_member_gives_up_if_fetch_fails():
 
 
 # --- Health web handler -----------------------------------------------------
+
 
 async def test_health_handler_healthy():
     checker = HealthChecker()

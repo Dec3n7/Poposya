@@ -1,5 +1,6 @@
 """Диагностика старта: сводка конфигурации (что вкл/выкл) и проверка связи
 с внешними сервисами через фейковый aiohttp — без сети."""
+
 import logging
 
 import aiohttp
@@ -23,6 +24,7 @@ def make_settings(**over):
 
 # --- _db_label --------------------------------------------------------------
 
+
 def test_db_label_sqlite_shows_path():
     assert _db_label("sqlite+aiosqlite:////app/data/poposya.db") == "/app/data/poposya.db"
 
@@ -34,6 +36,7 @@ def test_db_label_hides_postgres_credentials():
 
 
 # --- log_boot_summary -------------------------------------------------------
+
 
 def test_boot_summary_ai_on(caplog):
     settings = make_settings(groq_api_key="k", ai_model="m1", ai_fallback_model="m2")
@@ -55,9 +58,14 @@ def test_boot_summary_ai_off_explains_why(caplog):
 
 def test_boot_summary_reports_toggles(caplog):
     settings = make_settings(
-        groq_api_key="", voice_points_per_hour=0, music_prefetch_tracks=0,
-        finds_min_interval_hours=4, finds_max_interval_hours=6,
-        movie_provider="kinopoisk", kinopoisk_api_key="kp", tmdb_api_key="",
+        groq_api_key="",
+        voice_points_per_hour=0,
+        music_prefetch_tracks=0,
+        finds_min_interval_hours=4,
+        finds_max_interval_hours=6,
+        movie_provider="kinopoisk",
+        kinopoisk_api_key="kp",
+        tmdb_api_key="",
     )
     with caplog.at_level(logging.INFO, logger="boot"):
         log_boot_summary(settings)
@@ -77,6 +85,7 @@ def test_boot_summary_masks_db_password(caplog):
 
 
 # --- probe_dependencies -----------------------------------------------------
+
 
 def ok_factory():
     return lambda: FakeSession(response=FakeResponse(200))

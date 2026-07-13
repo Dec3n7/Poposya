@@ -35,8 +35,10 @@ class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь 
     """Окно ввода названия при сохранении текущей очереди из плеера."""
 
     name = discord.ui.TextInput(
-        label="Название плейлиста", placeholder="например: вечерний чилл",
-        max_length=50, required=True,
+        label="Название плейлиста",
+        placeholder="например: вечерний чилл",
+        max_length=50,
+        required=True,
     )
 
     def __init__(self, cog: "MusicCog"):
@@ -45,6 +47,7 @@ class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь 
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await self.cog._do_save_queue(interaction, str(self.name.value))
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +62,10 @@ class MusicCog(commands.Cog):
         # композиция музыкального модуля: сервисы и их взаимные связи
         self.service = MusicPlayerService(bot, container)
         self.lyrics = LyricsService(
-            LrclibLyricsClient(), self.settings,
-            self.service.get_session, self.service.spawn,
+            LrclibLyricsClient(),
+            self.settings,
+            self.service.get_session,
+            self.service.spawn,
             guild_settings=guild_settings,
         )
         self.radio = RadioService(bot, container, self.service.get_session)
@@ -92,7 +97,9 @@ class MusicCog(commands.Cog):
 
     # --- воспроизведение ---
 
-    @app_commands.command(name="play", description="Включить трек: YouTube/Spotify-ссылка или поиск")
+    @app_commands.command(
+        name="play", description="Включить трек: YouTube/Spotify-ссылка или поиск"
+    )
     @app_commands.describe(query="Ссылка (YouTube, Spotify-трек) или название трека")
     @app_commands.guild_only()
     async def play(self, interaction: discord.Interaction, query: str) -> None:
@@ -188,7 +195,9 @@ class MusicCog(commands.Cog):
             return
         view = QueueView(player)
         await interaction.response.send_message(
-            embed=view.build_embed(), view=view, ephemeral=True,
+            embed=view.build_embed(),
+            view=view,
+            ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -327,9 +336,7 @@ class MusicCog(commands.Cog):
     @app_commands.command(name="lyrics", description="Текст текущего трека")
     @app_commands.describe(live="Караоке-режим: текст абзацами синхронно с треком")
     @app_commands.guild_only()
-    async def lyrics_command(
-        self, interaction: discord.Interaction, live: bool = False
-    ) -> None:
+    async def lyrics_command(self, interaction: discord.Interaction, live: bool = False) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or player.current is None:
             await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
@@ -355,26 +362,20 @@ class MusicCog(commands.Cog):
                 "Текста не нашла. Или его нет, или назван криво.", ephemeral=True
             )
             return
-        await interaction.followup.send(
-            embed=self.lyrics.plain_embed(track, plain), ephemeral=True
-        )
+        await interaction.followup.send(embed=self.lyrics.plain_embed(track, plain), ephemeral=True)
 
     @app_commands.command(
         name="lyricsfile", description="Загрузить свой .lrc для караоке текущего трека"
     )
     @app_commands.describe(file="Файл .lrc с таймкодами [mm:ss.xx]")
     @app_commands.guild_only()
-    async def lyrics_file(
-        self, interaction: discord.Interaction, file: discord.Attachment
-    ) -> None:
+    async def lyrics_file(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or player.current is None:
             await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
             return
         if not file.filename.lower().endswith(".lrc") or file.size > 200_000:
-            await interaction.response.send_message(
-                "Нужен файл .lrc (до 200 КБ).", ephemeral=True
-            )
+            await interaction.response.send_message("Нужен файл .lrc (до 200 КБ).", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         try:
@@ -425,9 +426,7 @@ class MusicCog(commands.Cog):
             )
             return
         await interaction.response.defer(ephemeral=True)
-        tracks = await self.container.load_playlist.execute(
-            interaction.guild_id, name, member.id
-        )
+        tracks = await self.container.load_playlist.execute(interaction.guild_id, name, member.id)
         if tracks is None:
             await interaction.followup.send("Такого плейлиста нет.", ephemeral=True)
             return
@@ -442,7 +441,9 @@ class MusicCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         items = await self.container.list_playlists.execute(interaction.guild_id)
         if not items:
-            await interaction.followup.send("Плейлистов пока нет — `/playlist save`.", ephemeral=True)
+            await interaction.followup.send(
+                "Плейлистов пока нет — `/playlist save`.", ephemeral=True
+            )
             return
         lines = [
             f"`{i}.` **{name}** — {count} треков (<@{creator}>)"
@@ -460,7 +461,9 @@ class MusicCog(commands.Cog):
     async def playlist_delete(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
         result = await self.container.delete_playlist.execute(
-            interaction.guild_id, name, interaction.user.id,
+            interaction.guild_id,
+            name,
+            interaction.user.id,
             interaction.user.guild_permissions.administrator,
         )
         replies = {
@@ -480,9 +483,7 @@ class MusicCog(commands.Cog):
         (0, "Ноль общих треков. Вы вообще на одном сервере сидите?"),
     )
 
-    @app_commands.command(
-        name="taste", description="Совместимость музыкальных вкусов — по лайкам"
-    )
+    @app_commands.command(name="taste", description="Совместимость музыкальных вкусов — по лайкам")
     @app_commands.describe(user="С кем сравнить вкусы")
     @app_commands.guild_only()
     async def taste(self, interaction: discord.Interaction, user: discord.Member) -> None:
@@ -528,9 +529,7 @@ class MusicCog(commands.Cog):
             description="\n".join(parts)[:4000],
             color=EMBED_COLOR,
         )
-        embed.set_footer(
-            text=f"Лайков: {len(mine)} у тебя · {len(theirs)} у {user.display_name}"
-        )
+        embed.set_footer(text=f"Лайков: {len(mine)} у тебя · {len(theirs)} у {user.display_name}")
         await interaction.followup.send(
             embed=embed, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -599,25 +598,19 @@ class MusicCog(commands.Cog):
         for item in liked:
             label = f"{item.title} — {item.uploader}" if item.uploader else item.title
             if needle in label.lower():
-                choices.append(
-                    app_commands.Choice(name=trim(label, 100), value=item.video_id)
-                )
+                choices.append(app_commands.Choice(name=trim(label, 100), value=item.video_id))
             if len(choices) == 25:
                 break
         return choices
 
-    @liked_group.command(
-        name="list", description="Лайкнутые треки — свои или другого участника"
-    )
+    @liked_group.command(name="list", description="Лайкнутые треки — свои или другого участника")
     @app_commands.describe(user="Чьи лайки посмотреть (по умолчанию — свои)")
     async def liked_list(
         self, interaction: discord.Interaction, user: discord.Member | None = None
     ) -> None:
         target = user or interaction.user
         if target.bot:
-            await interaction.response.send_message(
-                "У ботов нет лайков. И вкуса.", ephemeral=True
-            )
+            await interaction.response.send_message("У ботов нет лайков. И вкуса.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         liked = await self.container.list_liked.execute(target.id)
@@ -697,9 +690,7 @@ class MusicCog(commands.Cog):
             ephemeral=True,
         )
 
-    @liked_group.command(
-        name="save", description="Сохранить свои лайки как плейлист сервера"
-    )
+    @liked_group.command(name="save", description="Сохранить свои лайки как плейлист сервера")
     @app_commands.describe(name="Название плейлиста")
     async def liked_save(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)

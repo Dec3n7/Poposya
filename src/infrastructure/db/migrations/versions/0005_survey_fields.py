@@ -5,6 +5,7 @@ Revises: 0004
 Create Date: 2026-07-09
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -16,10 +17,18 @@ depends_on = None
 
 def upgrade() -> None:
     with op.batch_alter_table("relationship_profiles") as batch_op:
-        batch_op.add_column(sa.Column("survey_gender", sa.Text(), nullable=False, server_default=""))
-        batch_op.add_column(sa.Column("survey_contact", sa.Text(), nullable=False, server_default=""))
-        batch_op.add_column(sa.Column("survey_interests", sa.Text(), nullable=False, server_default=""))
-        batch_op.add_column(sa.Column("survey_season", sa.Text(), nullable=False, server_default=""))
+        batch_op.add_column(
+            sa.Column("survey_gender", sa.Text(), nullable=False, server_default="")
+        )
+        batch_op.add_column(
+            sa.Column("survey_contact", sa.Text(), nullable=False, server_default="")
+        )
+        batch_op.add_column(
+            sa.Column("survey_interests", sa.Text(), nullable=False, server_default="")
+        )
+        batch_op.add_column(
+            sa.Column("survey_season", sa.Text(), nullable=False, server_default="")
+        )
         batch_op.add_column(sa.Column("survey_completed_at", sa.DateTime(), nullable=True))
 
 

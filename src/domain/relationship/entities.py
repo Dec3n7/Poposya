@@ -38,17 +38,17 @@ class RelationshipProfile:
     user_notes: str = ""
     # анкета знакомства (то, что человек сам о себе сказал; заметки — то,
     # что персона узнала сама: в промпт подаются раздельно)
-    survey_gender: str = ""       # "парень" | "девушка" | "инкогнито"
-    survey_contact: str = ""      # "quiet" | "normal" | "attention" ("" = normal)
-    survey_interests: str = ""    # через запятую
-    survey_season: str = ""       # "весна" | "лето" | "осень" | "зима"
+    survey_gender: str = ""  # "парень" | "девушка" | "инкогнито"
+    survey_contact: str = ""  # "quiet" | "normal" | "attention" ("" = normal)
+    survey_interests: str = ""  # через запятую
+    survey_season: str = ""  # "весна" | "лето" | "осень" | "зима"
     survey_completed_at: datetime | None = None
     # день рождения (без года) и дедупликация уведомлений по годам
     birthday_day: int | None = None
     birthday_month: int | None = None
     birthday_reminded_at: date | None = None
     birthday_congratulated_at: date | None = None
-    deep_dialogs: int = 0          # «глубина»: сколько было долгих разговоров
+    deep_dialogs: int = 0  # «глубина»: сколько было долгих разговоров
     last_decay_at: date | None = None  # дедупликация угасания очков
 
     def award_point(self, now: datetime, daily_cap: int, amount: int = 1) -> bool:

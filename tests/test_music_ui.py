@@ -17,6 +17,7 @@ from src.infrastructure.discord.cogs.music.session import GuildMusicSession
 
 # --- форматирование ---
 
+
 def test_fmt_duration():
     assert fmt_duration(None) == "🔴 эфир"
     assert fmt_duration(65) == "1:05"
@@ -26,7 +27,7 @@ def test_fmt_duration():
 
 
 def test_progress_bar():
-    assert progress_bar(10, 0) == "▬" * 14      # эфир: без позиции
+    assert progress_bar(10, 0) == "▬" * 14  # эфир: без позиции
     assert progress_bar(0, 100).startswith("🔘")
     assert progress_bar(100, 100).endswith("🔘")  # позиция зажата в границы
     assert progress_bar(50, 100).count("🔘") == 1
@@ -48,6 +49,7 @@ def test_block_index():
 
 
 # --- кэш текстов ---
+
 
 def make_track(video_id: str) -> Track:
     return Track(
@@ -104,7 +106,7 @@ async def test_lyrics_cache_evicts_oldest():
     for i in range(101):
         await service.get(make_track(f"v{i}"))
     assert client.calls == 101
-    await service.get(make_track("v0"))   # самый старый вытеснен — новый запрос
+    await service.get(make_track("v0"))  # самый старый вытеснен — новый запрос
     assert client.calls == 102
     await service.get(make_track("v100"))  # свежий ещё в кэше
     assert client.calls == 102
@@ -124,6 +126,7 @@ async def test_prefetch_deduplicates():
 
 
 # --- сессия ---
+
 
 async def test_session_cancel_tasks():
     async def forever():

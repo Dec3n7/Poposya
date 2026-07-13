@@ -1,5 +1,6 @@
 """FindsCog: хелперы, отслеживание активности, кнопка «Сходить туда» во всех
 исходах, команды /finds /collection /gift (+autocomplete) /walk."""
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -20,14 +21,19 @@ from src.infrastructure.discord.cogs.finds import FindsCog, _ts
 from tests.cog_fakes import make_interaction
 
 NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
-COMMON = catalog.get_item("postcard_90s")       # COMMON
-LEGENDARY = catalog.get_item("unsent_letter")   # LEGENDARY
+COMMON = catalog.get_item("postcard_90s")  # COMMON
+LEGENDARY = catalog.get_item("unsent_letter")  # LEGENDARY
 
 
 def make_settings(**over):
-    base = dict(finds_channel="", finds_channel_id=0, main_channel="основной",
-                holidays={"01-01": "НГ"}, finds_min_interval_hours=12,
-                finds_max_interval_hours=48)
+    base = dict(
+        finds_channel="",
+        finds_channel_id=0,
+        main_channel="основной",
+        holidays={"01-01": "НГ"},
+        finds_min_interval_hours=12,
+        finds_max_interval_hours=48,
+    )
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -46,8 +52,7 @@ def make_container():
 
 def make_cog(container=None, settings=None):
     bot = MagicMock()
-    return FindsCog(bot, container or make_container(), settings or make_settings(),
-                    MoodTracker())
+    return FindsCog(bot, container or make_container(), settings or make_settings(), MoodTracker())
 
 
 def claim_interaction():
@@ -61,6 +66,7 @@ def claim_interaction():
 
 
 # --- хелперы ----------------------------------------------------------------
+
 
 def test_ts_format():
     assert _ts(NOW) == f"<t:{int(NOW.timestamp())}:R>"
@@ -83,6 +89,7 @@ def test_announce_channel_by_name():
 def test_announce_channel_prefers_config_id():
     import discord
     from unittest.mock import MagicMock as MM
+
     gs = MM()
     gs.get = MM(return_value=555)  # /config finds_channel_id
     cog = make_cog()
@@ -105,10 +112,17 @@ async def test_spawnfind_no_channel():
 async def test_spawnfind_active_exists():
     container = make_container()
     from src.application.finds.use_cases import ActiveFindView
-    find = NightFind(guild_id=10, location_id="nezu_square", item_id="postcard_90s",
-                     created_at=NOW, expires_at=NOW + timedelta(hours=1))
+
+    find = NightFind(
+        guild_id=10,
+        location_id="nezu_square",
+        item_id="postcard_90s",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+    )
     container.get_active_find.execute.return_value = ActiveFindView(
-        find=find, location=catalog.get_location("nezu_square"), item=COMMON)
+        find=find, location=catalog.get_location("nezu_square"), item=COMMON
+    )
     cog = make_cog(container, settings=make_settings(main_channel="c"))
     interaction = make_interaction()
     ch = SimpleNamespace(name="c")
@@ -119,17 +133,25 @@ async def test_spawnfind_active_exists():
 
 async def test_spawnfind_forces_spawn(monkeypatch):
     from unittest.mock import AsyncMock as AM
+
     cog = make_cog(settings=make_settings(main_channel="c"))
     interaction = make_interaction()
     channel = SimpleNamespace(name="c", mention="#c")
     interaction.guild.text_channels = [channel]
     cog.finds.get_active_find.execute = AM(return_value=None)
-    find = NightFind(guild_id=10, location_id="x", item_id="y", created_at=NOW,
-                     expires_at=NOW + timedelta(hours=1))
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+    )
     cog._try_spawn = AM(return_value=find)
     await type(cog).spawn_find_command.callback(cog, interaction)
     cog._try_spawn.assert_awaited_once()
-    assert cog._try_spawn.await_args.kwargs.get("force") is True or cog._try_spawn.await_args.args[1:] == (True,)
+    assert cog._try_spawn.await_args.kwargs.get("force") is True or cog._try_spawn.await_args.args[
+        1:
+    ] == (True,)
     assert "заспавнена" in interaction.followup.send.await_args.args[0]
 
 
@@ -144,6 +166,7 @@ async def test_on_message_tracks_main_activity():
 
 
 # --- handle_claim: все исходы ----------------------------------------------
+
 
 async def test_claim_gone():
     container = make_container()
@@ -166,7 +189,8 @@ async def test_claim_already():
 async def test_claim_cooldown():
     container = make_container()
     container.claim_find.execute.return_value = ClaimResult(
-        status="cooldown", retry_at=NOW + timedelta(hours=2))
+        status="cooldown", retry_at=NOW + timedelta(hours=2)
+    )
     cog = make_cog(container)
     interaction = claim_interaction()
     await cog.handle_claim(interaction)
@@ -176,7 +200,8 @@ async def test_claim_cooldown():
 async def test_claim_fail():
     container = make_container()
     container.claim_find.execute.return_value = ClaimResult(
-        status="fail", points_delta=-5, points_total=20)
+        status="fail", points_delta=-5, points_total=20
+    )
     cog = make_cog(container)
     interaction = claim_interaction()
     await cog.handle_claim(interaction)
@@ -186,7 +211,8 @@ async def test_claim_fail():
 async def test_claim_success_announces():
     container = make_container()
     container.claim_find.execute.return_value = ClaimResult(
-        status="success", item=LEGENDARY, points_delta=150, points_total=500, level=6)
+        status="success", item=LEGENDARY, points_delta=150, points_total=500, level=6
+    )
     cog = make_cog(container)
     interaction = claim_interaction()
     await cog.handle_claim(interaction)
@@ -197,6 +223,7 @@ async def test_claim_success_announces():
 
 # --- /finds -----------------------------------------------------------------
 
+
 async def test_finds_command_none():
     cog = make_cog()
     interaction = make_interaction()
@@ -206,9 +233,15 @@ async def test_finds_command_none():
 
 async def test_finds_command_active():
     container = make_container()
-    find = NightFind(guild_id=10, location_id="nezu_square", item_id="postcard_90s",
-                     created_at=NOW, expires_at=NOW + timedelta(hours=2),
-                     channel_id=100, message_id=200)
+    find = NightFind(
+        guild_id=10,
+        location_id="nezu_square",
+        item_id="postcard_90s",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=2),
+        channel_id=100,
+        message_id=200,
+    )
     view = ActiveFindView(find=find, location=catalog.get_location("nezu_square"), item=COMMON)
     container.get_active_find.execute.return_value = view
     cog = make_cog(container)
@@ -219,6 +252,7 @@ async def test_finds_command_active():
 
 
 # --- /collection ------------------------------------------------------------
+
 
 async def test_collection_empty():
     cog = make_cog()
@@ -243,6 +277,7 @@ async def test_collection_grouped_by_rarity():
 
 # --- /gift + autocomplete ---------------------------------------------------
 
+
 async def test_gift_not_owned():
     container = make_container()
     container.gift_item.execute.return_value = GiftResult(status="no_item")
@@ -255,7 +290,8 @@ async def test_gift_not_owned():
 async def test_gift_success():
     container = make_container()
     container.gift_item.execute.return_value = GiftResult(
-        status="ok", item=COMMON, bonus=20, points_total=100)
+        status="ok", item=COMMON, bonus=20, points_total=100
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     await type(cog).gift_command.callback(cog, interaction, "postcard_90s")
@@ -279,10 +315,12 @@ async def test_gift_autocomplete_filters():
 
 # --- /walk ------------------------------------------------------------------
 
+
 async def test_walk_cooldown():
     container = make_container()
     container.special_walk.execute.return_value = WalkResult(
-        status="cooldown", retry_at=NOW + timedelta(days=3))
+        status="cooldown", retry_at=NOW + timedelta(days=3)
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     await type(cog).walk_command.callback(cog, interaction)
@@ -292,7 +330,8 @@ async def test_walk_cooldown():
 async def test_walk_poor():
     container = make_container()
     container.special_walk.execute.return_value = WalkResult(
-        status="poor", cost=60, points_total=10)
+        status="poor", cost=60, points_total=10
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     await type(cog).walk_command.callback(cog, interaction)
@@ -302,7 +341,8 @@ async def test_walk_poor():
 async def test_walk_success():
     container = make_container()
     container.special_walk.execute.return_value = WalkResult(
-        status="success", item=COMMON, points_delta=-40, points_total=100, cost=60)
+        status="success", item=COMMON, points_delta=-40, points_total=100, cost=60
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     await type(cog).walk_command.callback(cog, interaction)

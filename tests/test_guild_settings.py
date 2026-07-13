@@ -1,5 +1,6 @@
 """GuildSettingsService: реестр, парсинг/валидация, кэш, get/current/override,
 set/reset поверх реального SQLite."""
+
 import pytest
 
 from src.config import Settings
@@ -20,6 +21,7 @@ def service(session_factory):
 
 
 # --- реестр / парсинг -------------------------------------------------------
+
 
 def test_registry_keys_are_settings_attrs():
     s = make_settings()
@@ -48,6 +50,7 @@ def test_parse_channel_accepts_mention_id_zero():
 
 
 # --- get / current / default ------------------------------------------------
+
 
 async def test_get_returns_default_without_override(service):
     await service.load_all()

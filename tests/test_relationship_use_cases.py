@@ -1,5 +1,6 @@
 """Сценарии отношений поверх реального UoW+SQLite: ранг, админ-коррекция,
 заморозка, заметки, ДР, лидерборд, угасание, анкета, секретные комнаты."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -32,6 +33,7 @@ POLICY = PointsToLevelPolicy()
 
 
 # --- GetRank / SetPoints / Freeze ------------------------------------------
+
 
 async def test_get_rank_for_unknown_user(uow_factory):
     rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
@@ -82,17 +84,18 @@ async def test_update_user_notes_trimmed_and_capped(uow_factory):
 
 # --- Birthdays --------------------------------------------------------------
 
+
 async def test_set_birthday_valid_and_invalid(uow_factory):
     setter = SetBirthdayUseCase(uow_factory)
-    assert await setter.execute(1, 10, 29, 2) is True   # високосный допустим
+    assert await setter.execute(1, 10, 29, 2) is True  # високосный допустим
     assert await setter.execute(1, 10, 31, 2) is False  # 31 февраля нет
     rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
     assert (rank.birthday_day, rank.birthday_month) == (29, 2)
 
 
 async def test_birthday_tick_reminds_and_congratulates(uow_factory):
-    await SetBirthdayUseCase(uow_factory).execute(1, 10, 14, 7)   # ДР 14 июля
-    await SetBirthdayUseCase(uow_factory).execute(2, 10, 11, 7)   # ДР сегодня 11 июля
+    await SetBirthdayUseCase(uow_factory).execute(1, 10, 14, 7)  # ДР 14 июля
+    await SetBirthdayUseCase(uow_factory).execute(2, 10, 11, 7)  # ДР сегодня 11 июля
 
     tick = BirthdayTickUseCase(uow_factory, remind_days=3)  # напоминаем за 3 дня -> 14 июля
     events = await tick.execute(NOW)
@@ -105,6 +108,7 @@ async def test_birthday_tick_reminds_and_congratulates(uow_factory):
 
 
 # --- Leaderboard ------------------------------------------------------------
+
 
 async def test_leaderboard_sorted_desc(uow_factory):
     setter = SetPointsUseCase(uow_factory, POLICY)
@@ -120,13 +124,17 @@ async def test_leaderboard_sorted_desc(uow_factory):
 
 # --- Decay ------------------------------------------------------------------
 
+
 async def test_decay_reduces_points_after_inactivity(uow_factory):
     # профиль с очками и старым диалогом
     await SetPointsUseCase(uow_factory, POLICY).execute(1, 10, 300)
     # проставим last_dialog_at напрямую в прошлом
     from src.application.relationship.use_cases import AwardPointUseCase
+
     old = NOW - timedelta(days=40)
-    await AwardPointUseCase(uow_factory, POLICY, daily_cap=20, absence_days=30).execute(1, 10, 0, old)
+    await AwardPointUseCase(uow_factory, POLICY, daily_cap=20, absence_days=30).execute(
+        1, 10, 0, old
+    )
 
     decay = DecayPointsUseCase(uow_factory, POLICY, after_days=30, every_days=7, amount=10)
     result = await decay.execute(NOW)
@@ -137,13 +145,17 @@ async def test_decay_reduces_points_after_inactivity(uow_factory):
 
 async def test_decay_skips_recent_activity(uow_factory):
     from src.application.relationship.use_cases import AwardPointUseCase
-    await AwardPointUseCase(uow_factory, POLICY, daily_cap=20, absence_days=30).execute(1, 10, 0, NOW)
+
+    await AwardPointUseCase(uow_factory, POLICY, daily_cap=20, absence_days=30).execute(
+        1, 10, 0, NOW
+    )
     decay = DecayPointsUseCase(uow_factory, POLICY, after_days=30, every_days=7, amount=10)
     result = await decay.execute(NOW)
     assert result.decayed == 0
 
 
 # --- Deep dialogs / summaries ----------------------------------------------
+
 
 async def test_record_deep_dialog_increments(uow_factory):
     rec = RecordDeepDialogUseCase(uow_factory)
@@ -164,6 +176,7 @@ async def test_dialog_summaries_keep_last_n(uow_factory):
 
 
 # --- Survey -----------------------------------------------------------------
+
 
 async def test_survey_choice_and_interest_toggle(uow_factory):
     await SetSurveyChoiceUseCase(uow_factory).execute(1, 10, "gender", "девушка")
@@ -197,6 +210,7 @@ async def test_complete_survey_frozen_no_bonus(uow_factory):
 
 
 # --- Secret rooms -----------------------------------------------------------
+
 
 async def test_issue_secret_code_stable_until_used(uow_factory):
     issue = IssueSecretCodeUseCase(uow_factory)
@@ -239,7 +253,9 @@ async def test_register_room_marks_code_used_and_blocks_new_redeem(uow_factory):
     # когда комната истекла и убрана — виден статус использованного ключа
     later = NOW + timedelta(hours=7)
     await PopExpiredSecretRoomsUseCase(uow_factory).execute(later)
-    assert (await ValidateSecretCodeUseCase(uow_factory).execute(1, 10, code, later)).reason == "used"
+    assert (
+        await ValidateSecretCodeUseCase(uow_factory).execute(1, 10, code, later)
+    ).reason == "used"
 
 
 async def test_pop_expired_secret_rooms(uow_factory):

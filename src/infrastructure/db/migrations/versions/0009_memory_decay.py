@@ -5,6 +5,7 @@ Revises: 0008
 Create Date: 2026-07-09
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -31,7 +32,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_dialog_summaries_user", "dialog_summaries",
+        "ix_dialog_summaries_user",
+        "dialog_summaries",
         ["guild_id", "user_id", "created_at"],
     )
 

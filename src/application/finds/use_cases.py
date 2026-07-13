@@ -49,23 +49,23 @@ async def _adjust_points(
     previous_holder = None
     if delta > 0:
         holder = await uow.relationships.get_exclusive_holder(guild_id)
-        previous_holder = _reevaluate_exclusive(
-            profile, holder, policy.exclusive_threshold
-        )
+        previous_holder = _reevaluate_exclusive(profile, holder, policy.exclusive_threshold)
     new_role = policy.role_index(profile.points, profile.is_exclusive)
     await uow.relationships.save(profile)
     if previous_holder is not None:
         await uow.relationships.save(previous_holder)
     if new_role != old_role:
-        uow.add_event(RelationshipRoleChanged(
-            aggregate_id=f"{guild_id}:{user_id}",
-            guild_id=guild_id,
-            user_id=user_id,
-            channel_id=channel_id,
-            old_role_index=old_role,
-            new_role_index=new_role,
-            points=profile.points,
-        ))
+        uow.add_event(
+            RelationshipRoleChanged(
+                aggregate_id=f"{guild_id}:{user_id}",
+                guild_id=guild_id,
+                user_id=user_id,
+                channel_id=channel_id,
+                old_role_index=old_role,
+                new_role_index=new_role,
+                points=profile.points,
+            )
+        )
     return profile.points
 
 
@@ -84,21 +84,27 @@ class SpawnFindUseCase:
         self._rng = rng or random.Random()
 
     async def execute(
-        self, guild_id: int, now: datetime, season: str | None = None,
-        boosted: bool = False, holiday: str | None = None,
+        self,
+        guild_id: int,
+        now: datetime,
+        season: str | None = None,
+        boosted: bool = False,
+        holiday: str | None = None,
     ) -> tuple[NightFind, Location, Item] | None:
         async with self._uow_factory() as uow:
             if await uow.night_finds.get_active(guild_id, now) is not None:
                 return None
             location = roll_location(self._rng)
             item = roll_item(self._rng, season=season, boosted=boosted, holiday=holiday)
-            find = await uow.night_finds.add(NightFind(
-                guild_id=guild_id,
-                location_id=location.id,
-                item_id=item.id,
-                created_at=now,
-                expires_at=now + self._lifetime,
-            ))
+            find = await uow.night_finds.add(
+                NightFind(
+                    guild_id=guild_id,
+                    location_id=location.id,
+                    item_id=item.id,
+                    created_at=now,
+                    expires_at=now + self._lifetime,
+                )
+            )
             await uow.commit()
             return find, location, item
 
@@ -158,10 +164,14 @@ class ClaimFindUseCase:
         self, guild_id: int, user_id: int, message_id: int, now: datetime
     ) -> ClaimResult:
         if self._settings is not None:
-            cooldown = timedelta(hours=self._settings.get(
-                guild_id, "finds_claim_cooldown_hours", self._cooldown_hours))
+            cooldown = timedelta(
+                hours=self._settings.get(
+                    guild_id, "finds_claim_cooldown_hours", self._cooldown_hours
+                )
+            )
             fail_penalty = self._settings.get(
-                guild_id, "finds_fail_penalty", self._fail_penalty_default)
+                guild_id, "finds_fail_penalty", self._fail_penalty_default
+            )
         else:
             cooldown = timedelta(hours=self._cooldown_hours)
             fail_penalty = self._fail_penalty_default
@@ -190,14 +200,24 @@ class ClaimFindUseCase:
                 total = await _adjust_points(
                     uow, self._policy, guild_id, user_id, +reward, find.channel_id
                 )
-                await uow.collections.add(CollectionItem(
-                    guild_id=guild_id, user_id=user_id,
-                    item_id=item.id, obtained_at=now,
-                ))
-                await uow.find_attempts.add(FindAttempt(
-                    guild_id=guild_id, user_id=user_id, kind="claim",
-                    success=True, attempted_at=now, find_id=find.id,
-                ))
+                await uow.collections.add(
+                    CollectionItem(
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        item_id=item.id,
+                        obtained_at=now,
+                    )
+                )
+                await uow.find_attempts.add(
+                    FindAttempt(
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        kind="claim",
+                        success=True,
+                        attempted_at=now,
+                        find_id=find.id,
+                    )
+                )
                 # легендарная находка — «она запоминает этот момент надолго»
                 if item.rarity is Rarity.LEGENDARY and not profile.frozen_by_admin:
                     profile.user_notes = _append_note(
@@ -207,32 +227,58 @@ class ClaimFindUseCase:
                         self._notes_max_chars,
                     )
                     await uow.relationships.save(profile)
-                uow.add_event(FindClaimed(
-                    aggregate_id=str(find.id), guild_id=guild_id,
-                    find_id=find.id, user_id=user_id, item_id=item.id, reward=reward,
-                ))
+                uow.add_event(
+                    FindClaimed(
+                        aggregate_id=str(find.id),
+                        guild_id=guild_id,
+                        find_id=find.id,
+                        user_id=user_id,
+                        item_id=item.id,
+                        reward=reward,
+                    )
+                )
                 await uow.commit()
                 return ClaimResult(
-                    status="success", item=item,
-                    points_delta=reward, points_total=total, level=level,
+                    status="success",
+                    item=item,
+                    points_delta=reward,
+                    points_total=total,
+                    level=level,
                 )
 
             total = await _adjust_points(
-                uow, self._policy, guild_id, user_id,
-                -fail_penalty, find.channel_id,
+                uow,
+                self._policy,
+                guild_id,
+                user_id,
+                -fail_penalty,
+                find.channel_id,
             )
-            await uow.find_attempts.add(FindAttempt(
-                guild_id=guild_id, user_id=user_id, kind="claim",
-                success=False, attempted_at=now, find_id=find.id,
-            ))
-            uow.add_event(FindFailed(
-                aggregate_id=str(find.id), guild_id=guild_id,
-                find_id=find.id, user_id=user_id, penalty=fail_penalty,
-            ))
+            await uow.find_attempts.add(
+                FindAttempt(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    kind="claim",
+                    success=False,
+                    attempted_at=now,
+                    find_id=find.id,
+                )
+            )
+            uow.add_event(
+                FindFailed(
+                    aggregate_id=str(find.id),
+                    guild_id=guild_id,
+                    find_id=find.id,
+                    user_id=user_id,
+                    penalty=fail_penalty,
+                )
+            )
             await uow.commit()
             return ClaimResult(
-                status="fail", points_delta=-fail_penalty,
-                points_total=total, level=level,
+                status="fail",
+                points_delta=-fail_penalty,
+                points_total=total,
+                level=level,
             )
 
 
@@ -249,16 +295,12 @@ class GiftItemUseCase:
     """/gift: предмет уходит Попосе (остаётся в истории с отметкой),
     бонус очков и тёплая строчка в её заметках о пользователе."""
 
-    def __init__(
-        self, uow_factory: UowFactory, policy: PointsToLevelPolicy, notes_max_chars: int
-    ):
+    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy, notes_max_chars: int):
         self._uow_factory = uow_factory
         self._policy = policy
         self._notes_max_chars = notes_max_chars
 
-    async def execute(
-        self, guild_id: int, user_id: int, item_id: str, now: datetime
-    ) -> GiftResult:
+    async def execute(self, guild_id: int, user_id: int, item_id: str, now: datetime) -> GiftResult:
         async with self._uow_factory() as uow:
             entry = await uow.collections.get_ungifted(guild_id, user_id, item_id)
             item = get_item(item_id)
@@ -276,10 +318,15 @@ class GiftItemUseCase:
             )
             await uow.relationships.save(profile)
 
-            uow.add_event(ItemGifted(
-                aggregate_id=f"{guild_id}:{user_id}", guild_id=guild_id,
-                user_id=user_id, item_id=item.id, bonus=bonus,
-            ))
+            uow.add_event(
+                ItemGifted(
+                    aggregate_id=f"{guild_id}:{user_id}",
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    item_id=item.id,
+                    bonus=bonus,
+                )
+            )
             await uow.commit()
             return GiftResult(status="ok", item=item, bonus=bonus, points_total=total)
 
@@ -340,8 +387,12 @@ class SpecialWalkUseCase:
         self._rng = rng or random.Random()
 
     async def execute(
-        self, guild_id: int, user_id: int, now: datetime,
-        season: str | None = None, holiday: str | None = None,
+        self,
+        guild_id: int,
+        user_id: int,
+        now: datetime,
+        season: str | None = None,
+        holiday: str | None = None,
     ) -> WalkResult:
         async with self._uow_factory() as uow:
             last = await uow.find_attempts.last_attempt_at(guild_id, user_id, "walk")
@@ -363,18 +414,30 @@ class SpecialWalkUseCase:
                 reward = roll_reward(self._rng, item.rarity, profile.is_exclusive)
                 total = await _adjust_points(uow, self._policy, guild_id, user_id, +reward)
                 delta += reward
-                await uow.collections.add(CollectionItem(
-                    guild_id=guild_id, user_id=user_id,
-                    item_id=item.id, obtained_at=now,
-                ))
-            await uow.find_attempts.add(FindAttempt(
-                guild_id=guild_id, user_id=user_id, kind="walk",
-                success=success, attempted_at=now,
-            ))
+                await uow.collections.add(
+                    CollectionItem(
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        item_id=item.id,
+                        obtained_at=now,
+                    )
+                )
+            await uow.find_attempts.add(
+                FindAttempt(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    kind="walk",
+                    success=success,
+                    attempted_at=now,
+                )
+            )
             await uow.commit()
             return WalkResult(
                 status="success" if success else "fail",
-                item=item, points_delta=delta, points_total=total, cost=self._cost,
+                item=item,
+                points_delta=delta,
+                points_total=total,
+                cost=self._cost,
             )
 
 

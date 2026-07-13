@@ -1,5 +1,6 @@
 """Общие фикстуры: SQLite-движок в файле tmp_path, фабрика сессий и
 фабрика UnitOfWork с in-memory шиной событий."""
+
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 

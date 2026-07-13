@@ -1,5 +1,6 @@
 """AIChatCog: адресация к боту, очистка контента, сбор истории, обработка
 сообщения (ответ/оскорбление/ошибка) и комментарий к включённому треку."""
+
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -28,32 +29,54 @@ class Typing:
 
 
 def make_award(**over):
-    base = dict(points=10, level=2, role_index=0, previous_role_index=0,
-                point_awarded=True, is_exclusive=False, became_exclusive=False,
-                returning_after_absence=False, user_notes="", survey=SurveyData(),
-                recent_summaries=())
+    base = dict(
+        points=10,
+        level=2,
+        role_index=0,
+        previous_role_index=0,
+        point_awarded=True,
+        is_exclusive=False,
+        became_exclusive=False,
+        returning_after_absence=False,
+        user_notes="",
+        survey=SurveyData(),
+        recent_summaries=(),
+    )
     base.update(over)
     return AwardResult(**base)
 
 
 def make_settings(**over):
-    base = dict(bot_insult_words=["дурак", "тупая"], ai_context_messages=25,
-                ai_notes_update_every=10, ai_event_comment_chance=0.5,
-                ai_event_comment_cooldown=900)
+    base = dict(
+        bot_insult_words=["дурак", "тупая"],
+        ai_context_messages=25,
+        ai_notes_update_every=10,
+        ai_event_comment_chance=0.5,
+        ai_event_comment_cooldown=900,
+    )
     base.update(over)
     return SimpleNamespace(**base)
 
 
 def make_service(reply=None):
     svc = MagicMock()
-    svc.respond = AsyncMock(return_value=reply or ChatReply(
-        text="ответ", rate_limited=False, award=make_award()))
+    svc.respond = AsyncMock(
+        return_value=reply or ChatReply(text="ответ", rate_limited=False, award=make_award())
+    )
     svc.summarize_dialog = AsyncMock()
     svc.refresh_notes = AsyncMock()
     svc.comment_on_event = AsyncMock(return_value="крутой трек")
-    svc.get_rank = AsyncMock(return_value=RankInfo(
-        points=10, level=2, role_index=0, is_exclusive=False, frozen=False,
-        next_threshold=100, survey=SurveyData()))
+    svc.get_rank = AsyncMock(
+        return_value=RankInfo(
+            points=10,
+            level=2,
+            role_index=0,
+            is_exclusive=False,
+            frozen=False,
+            next_threshold=100,
+            survey=SurveyData(),
+        )
+    )
     return svc
 
 
@@ -61,8 +84,14 @@ def make_cog(service=None, settings=None):
     bot = MagicMock()
     bot.user = SimpleNamespace(id=999)
     role_sync = MagicMock(sync_member=AsyncMock())
-    return AIChatCog(bot, service or make_service(), settings or make_settings(),
-                     role_sync, InMemoryEventBus(), MoodTracker())
+    return AIChatCog(
+        bot,
+        service or make_service(),
+        settings or make_settings(),
+        role_sync,
+        InMemoryEventBus(),
+        MoodTracker(),
+    )
 
 
 def make_message(content="привет", author_id=1, mentions_bot=True, guild_id=10):
@@ -82,6 +111,7 @@ def make_message(content="привет", author_id=1, mentions_bot=True, guild_i
 
 # --- _is_addressed_to_bot / _clean_content ---------------------------------
 
+
 def test_is_addressed_by_mention():
     cog = make_cog()
     msg = make_message(mentions_bot=True)
@@ -91,6 +121,7 @@ def test_is_addressed_by_mention():
 
 def test_is_addressed_by_reply():
     import discord
+
     cog = make_cog()
     msg = make_message(mentions_bot=False)
     replied = MagicMock(spec=discord.Message)
@@ -112,6 +143,7 @@ def test_clean_content_strips_mention():
 
 
 # --- on_message -------------------------------------------------------------
+
 
 async def test_on_message_ignores_bots():
     cog = make_cog()
@@ -159,22 +191,33 @@ async def test_on_message_provider_error_sends_fallback():
 
 # --- _on_track_started ------------------------------------------------------
 
+
 async def test_track_comment_quiet_survey_silent():
     service = make_service()
-    service.get_rank = AsyncMock(return_value=RankInfo(
-        points=10, level=2, role_index=0, is_exclusive=False, frozen=False,
-        next_threshold=100, survey=SurveyData(contact="quiet")))
+    service.get_rank = AsyncMock(
+        return_value=RankInfo(
+            points=10,
+            level=2,
+            role_index=0,
+            is_exclusive=False,
+            frozen=False,
+            next_threshold=100,
+            survey=SurveyData(contact="quiet"),
+        )
+    )
     cog = make_cog(service)
-    event = TrackStarted(aggregate_id="10", guild_id=10, channel_id=100,
-                         title="Song", url="u", requested_by=1)
+    event = TrackStarted(
+        aggregate_id="10", guild_id=10, channel_id=100, title="Song", url="u", requested_by=1
+    )
     await cog._on_track_started(event)
     service.comment_on_event.assert_not_awaited()
 
 
 async def test_track_comment_zero_channel_skipped():
     cog = make_cog()
-    event = TrackStarted(aggregate_id="10", guild_id=10, channel_id=0,
-                         title="Song", url="u", requested_by=1)
+    event = TrackStarted(
+        aggregate_id="10", guild_id=10, channel_id=0, title="Song", url="u", requested_by=1
+    )
     await cog._on_track_started(event)
     cog.service.comment_on_event.assert_not_awaited()
 
@@ -188,8 +231,9 @@ async def test_track_comment_posts(monkeypatch):
     channel.guild = MagicMock()
     channel.guild.get_member.return_value = SimpleNamespace(display_name="Гость")
     cog.bot.get_channel.return_value = channel
-    event = TrackStarted(aggregate_id="10", guild_id=10, channel_id=100,
-                         title="Nirvana", url="u", requested_by=1)
+    event = TrackStarted(
+        aggregate_id="10", guild_id=10, channel_id=100, title="Nirvana", url="u", requested_by=1
+    )
     await cog._on_track_started(event)
     service.comment_on_event.assert_awaited_once()
     channel.send.assert_awaited_once()
@@ -199,23 +243,23 @@ async def test_track_comment_respects_cooldown(monkeypatch):
     monkeypatch.setattr("src.infrastructure.discord.cogs.ai_chat.random.random", lambda: 0.0)
     service = make_service()
     cog = make_cog(service)
-    cog._event_cooldowns[100] = 10 ** 9  # «только что» комментировали
-    monkeypatch.setattr("src.infrastructure.discord.cogs.ai_chat.time.monotonic", lambda: 10 ** 9)
-    event = TrackStarted(aggregate_id="10", guild_id=10, channel_id=100,
-                         title="Song", url="u", requested_by=1)
+    cog._event_cooldowns[100] = 10**9  # «только что» комментировали
+    monkeypatch.setattr("src.infrastructure.discord.cogs.ai_chat.time.monotonic", lambda: 10**9)
+    event = TrackStarted(
+        aggregate_id="10", guild_id=10, channel_id=100, title="Song", url="u", requested_by=1
+    )
     await cog._on_track_started(event)
     service.comment_on_event.assert_not_awaited()
 
 
 # --- чистка памяти ----------------------------------------------------------
 
+
 def test_prune_event_cooldowns_drops_expired(monkeypatch):
     cog = make_cog()  # ai_event_comment_cooldown = 900
-    monkeypatch.setattr(
-        "src.infrastructure.discord.cogs.ai_chat.time.monotonic", lambda: 10_000.0
-    )
+    monkeypatch.setattr("src.infrastructure.discord.cogs.ai_chat.time.monotonic", lambda: 10_000.0)
     cog._event_cooldowns[1] = 10_000.0 - 5000  # старше кулдауна — выбросить
-    cog._event_cooldowns[2] = 10_000.0 - 100   # свежий — оставить
+    cog._event_cooldowns[2] = 10_000.0 - 100  # свежий — оставить
     cog._prune_event_cooldowns()
     assert 1 not in cog._event_cooldowns
     assert 2 in cog._event_cooldowns
@@ -236,9 +280,7 @@ async def test_sweep_loop_summarizes_evicted_sessions(monkeypatch):
         await cog._sweep_loop()
     service.evict_stale_sessions.assert_called_once()
     # summarize запускается через _spawn (фоновая задача) — фиксируем факт вызова
-    service.summarize_dialog.assert_called_once_with(
-        10, 1, "Аня", [("a", "b"), ("c", "d")], ANY
-    )
+    service.summarize_dialog.assert_called_once_with(10, 1, "Аня", [("a", "b"), ("c", "d")], ANY)
     for task in list(cog._background):
         task.cancel()
 

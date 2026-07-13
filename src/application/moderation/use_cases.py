@@ -26,16 +26,19 @@ class WarnUserUseCase:
     ) -> WarnResult:
         threshold = (
             self._settings.get(guild_id, "warn_threshold", self._threshold)
-            if self._settings is not None else self._threshold
+            if self._settings is not None
+            else self._threshold
         )
         async with self._uow_factory() as uow:
-            await uow.warns.add(Warn(
-                guild_id=guild_id,
-                user_id=user_id,
-                moderator_id=moderator_id,
-                reason=reason,
-                created_at=now,
-            ))
+            await uow.warns.add(
+                Warn(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    moderator_id=moderator_id,
+                    reason=reason,
+                    created_at=now,
+                )
+            )
             count = await uow.warns.count(user_id, guild_id)
             mute = count >= threshold
             if mute:
@@ -72,20 +75,27 @@ class TempBanUserUseCase:
         self._uow_factory = uow_factory
 
     async def execute(
-        self, user_id: int, guild_id: int, moderator_id: int,
-        reason: str, minutes: int, now: datetime,
+        self,
+        user_id: int,
+        guild_id: int,
+        moderator_id: int,
+        reason: str,
+        minutes: int,
+        now: datetime,
     ) -> datetime:
         expires_at = now + timedelta(minutes=minutes)
         async with self._uow_factory() as uow:
             # повторный бан заменяет предыдущую запись
             await uow.temp_bans.remove(user_id, guild_id)
-            await uow.temp_bans.add(TempBan(
-                guild_id=guild_id,
-                user_id=user_id,
-                moderator_id=moderator_id,
-                reason=reason,
-                expires_at=expires_at,
-            ))
+            await uow.temp_bans.add(
+                TempBan(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    moderator_id=moderator_id,
+                    reason=reason,
+                    expires_at=expires_at,
+                )
+            )
             await uow.commit()
             return expires_at
 

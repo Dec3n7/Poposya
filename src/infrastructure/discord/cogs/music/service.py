@@ -73,7 +73,8 @@ class MusicPlayerService:
         try:
             activity = (
                 discord.Activity(type=discord.ActivityType.listening, name=desired)
-                if desired is not None else None
+                if desired is not None
+                else None
             )
             await self.bot.change_presence(activity=activity)
         except Exception:
@@ -215,9 +216,7 @@ class MusicPlayerService:
             embed.add_field(name="Далее", value=preview, inline=False)
         return embed
 
-    async def _ensure_message(
-        self, guild_id: int, channel: discord.abc.Messageable
-    ) -> None:
+    async def _ensure_message(self, guild_id: int, channel: discord.abc.Messageable) -> None:
         session = self.sessions.get(guild_id)
         if session is None:
             return
@@ -325,9 +324,7 @@ class MusicPlayerService:
         # за warn секунд до выхода — спросить, не включить ли ещё
         if warn > 0:
             channel = (
-                self.bot.get_channel(player.text_channel_id)
-                if player.text_channel_id
-                else None
+                self.bot.get_channel(player.text_channel_id) if player.text_channel_id else None
             )
             if channel is not None:
                 try:

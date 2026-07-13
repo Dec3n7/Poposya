@@ -5,6 +5,7 @@ Revises: 0012
 Create Date: 2026-07-10
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -38,13 +39,9 @@ def upgrade() -> None:
         sa.Column("watched_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_cinema_entries_guild_status", "cinema_entries", ["guild_id", "status"]
-    )
+    op.create_index("ix_cinema_entries_guild_status", "cinema_entries", ["guild_id", "status"])
     op.create_index("ix_cinema_entries_message", "cinema_entries", ["message_id"])
-    op.create_index(
-        "ix_cinema_entries_rating_message", "cinema_entries", ["rating_message_id"]
-    )
+    op.create_index("ix_cinema_entries_rating_message", "cinema_entries", ["rating_message_id"])
 
     op.create_table(
         "cinema_votes",
@@ -71,9 +68,7 @@ def upgrade() -> None:
         sa.Column("winner_entry_id", sa.Integer(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_cinema_nights_guild_status", "cinema_nights", ["guild_id", "status"]
-    )
+    op.create_index("ix_cinema_nights_guild_status", "cinema_nights", ["guild_id", "status"])
 
     op.create_table(
         "cinema_night_votes",

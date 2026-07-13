@@ -52,9 +52,7 @@ class MovieVoteModel(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)  # +1 / -1
 
-    __table_args__ = (
-        UniqueConstraint("entry_id", "user_id", name="uq_cinema_vote"),
-    )
+    __table_args__ = (UniqueConstraint("entry_id", "user_id", name="uq_cinema_vote"),)
 
 
 class MovieNightModel(Base):
@@ -72,9 +70,7 @@ class MovieNightModel(Base):
     winner_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     winner_entry_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    __table_args__ = (
-        Index("ix_cinema_nights_guild_status", "guild_id", "status"),
-    )
+    __table_args__ = (Index("ix_cinema_nights_guild_status", "guild_id", "status"),)
 
 
 class MovieNightVoteModel(Base):
@@ -85,9 +81,7 @@ class MovieNightVoteModel(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     entry_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("night_id", "user_id", name="uq_cinema_night_vote"),
-    )
+    __table_args__ = (UniqueConstraint("night_id", "user_id", name="uq_cinema_night_vote"),)
 
 
 class MovieRatingModel(Base):
@@ -101,6 +95,4 @@ class MovieRatingModel(Base):
     review: Mapped[str | None] = mapped_column(Text, nullable=True)
     rated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("entry_id", "user_id", name="uq_cinema_rating"),
-    )
+    __table_args__ = (UniqueConstraint("entry_id", "user_id", name="uq_cinema_rating"),)

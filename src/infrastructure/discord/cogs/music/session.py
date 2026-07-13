@@ -22,11 +22,11 @@ async def delete_message_quiet(message: discord.Message) -> None:
 @dataclass
 class GuildMusicSession:
     player: GuildPlayer
-    message: discord.Message | None = None          # сообщение-плеер
-    updater_task: asyncio.Task | None = None        # живой прогресс трека
-    idle_task: asyncio.Task | None = None           # отсчёт до авто-выхода
-    idle_prompt: discord.Message | None = None      # «включить что-то ещё?»
-    karaoke_task: asyncio.Task | None = None        # цикл живого текста
+    message: discord.Message | None = None  # сообщение-плеер
+    updater_task: asyncio.Task | None = None  # живой прогресс трека
+    idle_task: asyncio.Task | None = None  # отсчёт до авто-выхода
+    idle_prompt: discord.Message | None = None  # «включить что-то ещё?»
+    karaoke_task: asyncio.Task | None = None  # цикл живого текста
     karaoke_message: discord.Message | None = None  # сообщение караоке
 
     def cancel_tasks(self) -> None:

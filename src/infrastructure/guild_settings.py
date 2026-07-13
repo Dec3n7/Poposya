@@ -7,6 +7,7 @@
 
 Что редактируемо — задаёт SETTING_SPECS; изменить через /config можно только
 эти ключи, секреты (токен, ключи API, БД) сюда не входят по определению."""
+
 import logging
 from dataclasses import dataclass
 
@@ -24,10 +25,10 @@ logger = logging.getLogger(__name__)
 class SettingSpec:
     key: str
     label: str
-    kind: str          # "int" | "channel"
+    kind: str  # "int" | "channel"
     min: int | None = None
     max: int | None = None
-    unit: str = ""     # для подсказки: «ч», «мин», «сек», «очков»…
+    unit: str = ""  # для подсказки: «ч», «мин», «сек», «очков»…
 
     def parse(self, raw: str) -> int:
         """Текст из команды -> валидное значение или ValueError с понятным текстом."""
@@ -78,7 +79,9 @@ _SPECS: list[SettingSpec] = [
     # --- музыка ---
     SettingSpec("music_karaoke_ansi", "Цветное караоке (ANSI)", "bool"),
     SettingSpec("lonely_hours", "Часов тишины до «скучаю»", "int", 1, 168, "ч"),
-    SettingSpec("absent_days_threshold", "Дней отсутствия до «с возвращением»", "int", 1, 365, "дн"),
+    SettingSpec(
+        "absent_days_threshold", "Дней отсутствия до «с возвращением»", "int", 1, 365, "дн"
+    ),
 ]
 
 SETTING_SPECS: dict[str, SettingSpec] = {s.key: s for s in _SPECS}
@@ -135,12 +138,14 @@ class GuildSettingsService(ISettingsProvider):
         spec = SETTING_SPECS[key]
         value = spec.parse(raw)
         async with self._session_factory() as session:
-            existing = (await session.execute(
-                select(GuildSettingModel).where(
-                    GuildSettingModel.guild_id == guild_id,
-                    GuildSettingModel.key == key,
+            existing = (
+                await session.execute(
+                    select(GuildSettingModel).where(
+                        GuildSettingModel.guild_id == guild_id,
+                        GuildSettingModel.key == key,
+                    )
                 )
-            )).scalar_one_or_none()
+            ).scalar_one_or_none()
             if existing is None:
                 session.add(GuildSettingModel(guild_id=guild_id, key=key, value=str(value)))
             else:

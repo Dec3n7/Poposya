@@ -1,5 +1,6 @@
 """Доп. покрытие GuildPlayer: громкость, shuffle, повтор-циклы, пауза,
 тайминг, стоп-очистка, all_tracks, enqueue в начало, скип мёртвого трека."""
+
 import asyncio
 
 import pytest
@@ -14,9 +15,11 @@ from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 
 def make_track(video_id, duration=180):
     return Track(
-        video_id=video_id, title=video_id,
+        video_id=video_id,
+        title=video_id,
         url=f"https://youtube.com/watch?v={video_id}",
-        duration=duration, requested_by=1,
+        duration=duration,
+        requested_by=1,
     )
 
 

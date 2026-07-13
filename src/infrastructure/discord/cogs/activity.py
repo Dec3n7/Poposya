@@ -52,10 +52,10 @@ class ActivityCog(commands.Cog):
         self.gs = guild_settings
         self.calendar = HolidayCalendar(settings.holidays)
         self._holiday_announced: set[tuple[int, str]] = set()
-        self._main_last_activity: dict[int, float] = {}   # guild_id -> monotonic
+        self._main_last_activity: dict[int, float] = {}  # guild_id -> monotonic
         self._lonely_notified: set[int] = set()
         self._touch_throttle: dict[tuple[int, int], float] = {}
-        self._mood_bump_throttle: dict[int, float] = {}   # guild_id -> monotonic
+        self._mood_bump_throttle: dict[int, float] = {}  # guild_id -> monotonic
         self._voice_minutes: dict[tuple[int, int], float] = {}  # накопленные минуты в войсе
         self._loops_started = False
         self._tasks: list[asyncio.Task] = []
@@ -217,7 +217,8 @@ class ActivityCog(commands.Cog):
 
         if self.settings.album_reaction_emoji:
             counts = [
-                r.count for r in message.reactions
+                r.count
+                for r in message.reactions
                 if str(r.emoji) == self.settings.album_reaction_emoji
             ]
         else:
@@ -259,9 +260,7 @@ class ActivityCog(commands.Cog):
             if not image_set and (attachment.content_type or "").startswith("image/"):
                 embed.set_image(url=attachment.url)
                 image_set = True
-        embed.add_field(
-            name="​", value=f"[Перейти к сообщению]({message.jump_url})", inline=False
-        )
+        embed.add_field(name="​", value=f"[Перейти к сообщению]({message.jump_url})", inline=False)
         embed.set_footer(text=f"{max(counts)} реакций • #{channel.name}")
         try:
             await album.send(
@@ -334,9 +333,7 @@ class ActivityCog(commands.Cog):
                         )
                     except Exception:
                         logger.warning("Праздничное объявление не сгенерировалось", exc_info=True)
-                text += (
-                    f"\n-# 🎉 Весь день очки идут ×{self.settings.holiday_points_multiplier}"
-                )
+                text += f"\n-# 🎉 Весь день очки идут ×{self.settings.holiday_points_multiplier}"
                 await self._send(self._main_channel(guild), text)
 
         # мягкое угасание очков при долгой неактивности
@@ -344,7 +341,8 @@ class ActivityCog(commands.Cog):
         if decay.decayed:
             logger.info(
                 "Угасание очков: %d профилей, передач титула: %d",
-                decay.decayed, len(decay.transfers),
+                decay.decayed,
+                len(decay.transfers),
             )
 
         # дни рождения: напоминание за N дней и поздравление в сам день
@@ -373,7 +371,9 @@ class ActivityCog(commands.Cog):
                 continue
             member = guild.get_member(user_id)
             name = member.display_name if member else "именинник"
-            text = f"🎂 <@{user_id}> — с днём рождения. Сегодня можешь даже немного поныть. Один раз."
+            text = (
+                f"🎂 <@{user_id}> — с днём рождения. Сегодня можешь даже немного поныть. Один раз."
+            )
             if self.chat is not None:
                 try:
                     generated = await self.chat.freeform_remark(
@@ -429,7 +429,10 @@ class ActivityCog(commands.Cog):
                     if minutes >= 60:
                         minutes -= 60
                         await self.relationship.award_point.execute(
-                            member.id, guild.id, 0, now,
+                            member.id,
+                            guild.id,
+                            0,
+                            now,
                             base_amount=per_hour,
                         )
                     self._voice_minutes[key] = minutes

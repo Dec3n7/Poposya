@@ -1,5 +1,6 @@
 """Прямые тесты SQL-репозиториев модуля finds на SQLite: находки, коллекция,
 попытки/кулдаун, атомарный claim."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -16,15 +17,20 @@ NOW = datetime(2026, 7, 11, 22, 0, tzinfo=timezone.utc)
 
 def make_find(**over):
     base = dict(
-        guild_id=10, location_id="park", item_id="acorn",
-        created_at=NOW, expires_at=NOW + timedelta(hours=1),
-        channel_id=100, message_id=200,
+        guild_id=10,
+        location_id="park",
+        item_id="acorn",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+        channel_id=100,
+        message_id=200,
     )
     base.update(over)
     return NightFind(**base)
 
 
 # --- NightFind --------------------------------------------------------------
+
 
 async def test_add_assigns_id_and_get(session_factory):
     async with session_factory() as s:
@@ -102,14 +108,19 @@ async def test_save_new_without_id_inserts(session_factory):
 
 # --- Collection -------------------------------------------------------------
 
+
 async def test_collection_add_list_and_gift(session_factory):
     async with session_factory() as s:
         repo = SqlAlchemyCollectionRepository(s)
         await repo.add(CollectionItem(guild_id=10, user_id=1, item_id="acorn", obtained_at=NOW))
-        await repo.add(CollectionItem(
-            guild_id=10, user_id=1, item_id="leaf",
-            obtained_at=NOW + timedelta(minutes=1),
-        ))
+        await repo.add(
+            CollectionItem(
+                guild_id=10,
+                user_id=1,
+                item_id="leaf",
+                obtained_at=NOW + timedelta(minutes=1),
+            )
+        )
         await s.commit()
 
         items = await repo.list_for_user(10, 1)
@@ -131,17 +142,30 @@ async def test_collection_get_ungifted_missing(session_factory):
 
 # --- FindAttempt ------------------------------------------------------------
 
+
 async def test_attempt_last_at_and_cooldown(session_factory):
     async with session_factory() as s:
         repo = SqlAlchemyFindAttemptRepository(s)
         assert await repo.last_attempt_at(10, 1, "walk") is None
-        await repo.add(FindAttempt(
-            guild_id=10, user_id=1, kind="walk", success=True, attempted_at=NOW,
-        ))
+        await repo.add(
+            FindAttempt(
+                guild_id=10,
+                user_id=1,
+                kind="walk",
+                success=True,
+                attempted_at=NOW,
+            )
+        )
         later = NOW + timedelta(hours=1)
-        await repo.add(FindAttempt(
-            guild_id=10, user_id=1, kind="walk", success=False, attempted_at=later,
-        ))
+        await repo.add(
+            FindAttempt(
+                guild_id=10,
+                user_id=1,
+                kind="walk",
+                success=False,
+                attempted_at=later,
+            )
+        )
         await s.commit()
         # берётся самая свежая попытка
         assert await repo.last_attempt_at(10, 1, "walk") == later
@@ -152,10 +176,16 @@ async def test_attempt_last_at_and_cooldown(session_factory):
 async def test_has_attempted(session_factory):
     async with session_factory() as s:
         repo = SqlAlchemyFindAttemptRepository(s)
-        await repo.add(FindAttempt(
-            guild_id=10, user_id=1, kind="claim", success=False,
-            attempted_at=NOW, find_id=55,
-        ))
+        await repo.add(
+            FindAttempt(
+                guild_id=10,
+                user_id=1,
+                kind="claim",
+                success=False,
+                attempted_at=NOW,
+                find_id=55,
+            )
+        )
         await s.commit()
         assert await repo.has_attempted(55, 1) is True
         assert await repo.has_attempted(55, 2) is False

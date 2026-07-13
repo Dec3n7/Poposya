@@ -32,9 +32,9 @@ class SqlAlchemyMemberActivityRepository(IMemberActivityRepository):
         naive = at.replace(tzinfo=None)
         row = await self._session.get(MemberActivityModel, (user_id, guild_id))
         if row is None:
-            self._session.add(MemberActivityModel(
-                user_id=user_id, guild_id=guild_id, last_message_at=naive
-            ))
+            self._session.add(
+                MemberActivityModel(user_id=user_id, guild_id=guild_id, last_message_at=naive)
+            )
         else:
             row.last_message_at = naive
 
@@ -48,11 +48,13 @@ class SqlAlchemyAlbumRepository(IAlbumRepository):
         return row is not None
 
     async def mark_posted(self, guild_id: int, message_id: int, at: datetime) -> None:
-        self._session.add(AlbumPostModel(
-            guild_id=guild_id,
-            message_id=message_id,
-            posted_at=at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            AlbumPostModel(
+                guild_id=guild_id,
+                message_id=message_id,
+                posted_at=at.replace(tzinfo=None),
+            )
+        )
 
 
 class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
@@ -70,10 +72,15 @@ class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
         for (guild_id, user_id), minutes in progress.items():
             row = await self._session.get(VoiceProgressModel, (guild_id, user_id))
             if row is None:
-                self._session.add(VoiceProgressModel(
-                    guild_id=guild_id, user_id=user_id,
-                    minutes=minutes, total_minutes=accrued_minutes, updated_at=now,
-                ))
+                self._session.add(
+                    VoiceProgressModel(
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        minutes=minutes,
+                        total_minutes=accrued_minutes,
+                        updated_at=now,
+                    )
+                )
             else:
                 row.minutes = minutes
                 row.total_minutes += accrued_minutes
@@ -89,12 +96,14 @@ class SqlAlchemyReminderRepository(IReminderRepository):
         self._session = session
 
     async def add(self, reminder: Reminder) -> None:
-        self._session.add(ReminderModel(
-            user_id=reminder.user_id,
-            guild_id=reminder.guild_id,
-            text=reminder.text,
-            due_at=reminder.due_at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            ReminderModel(
+                user_id=reminder.user_id,
+                guild_id=reminder.guild_id,
+                text=reminder.text,
+                due_at=reminder.due_at.replace(tzinfo=None),
+            )
+        )
 
     async def pop_due(self, now: datetime) -> list[Reminder]:
         naive_now = now.replace(tzinfo=None)

@@ -1,5 +1,6 @@
 """Playlist use-cases поверх реального UoW+SQLite (покрывает и music-репозиторий)
 плюс доменные свойства Track/LikedTrack."""
+
 from datetime import datetime, timezone
 
 from src.application.music.use_cases import (
@@ -15,13 +16,17 @@ NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
 
 def make_track(vid, title=None):
     return Track(
-        video_id=vid, title=title or vid,
+        video_id=vid,
+        title=title or vid,
         url=f"https://youtube.com/watch?v={vid}",
-        duration=200, requested_by=1, uploader="Artist",
+        duration=200,
+        requested_by=1,
+        uploader="Artist",
     )
 
 
 # --- Track / LikedTrack domain ---------------------------------------------
+
 
 def test_track_is_live():
     assert make_track("a").is_live is False
@@ -30,8 +35,9 @@ def test_track_is_live():
 
 
 def test_liked_to_track_builds_url_and_thumbnail():
-    liked = LikedTrack(user_id=1, video_id="abc", title="Song",
-                       uploader="Art", duration=100, liked_at=NOW)
+    liked = LikedTrack(
+        user_id=1, video_id="abc", title="Song", uploader="Art", duration=100, liked_at=NOW
+    )
     track = liked.to_track(requested_by=5)
     assert track.url == "https://www.youtube.com/watch?v=abc"
     assert track.requested_by == 5
@@ -39,6 +45,7 @@ def test_liked_to_track_builds_url_and_thumbnail():
 
 
 # --- SavePlaylist -----------------------------------------------------------
+
 
 async def test_save_empty_returns_empty_code(uow_factory):
     code = await SavePlaylistUseCase(uow_factory, max_per_guild=5, max_tracks=100).execute(
@@ -89,6 +96,7 @@ async def test_list_playlists(uow_factory):
 
 
 # --- DeletePlaylist ---------------------------------------------------------
+
 
 async def test_delete_by_author(uow_factory):
     save = SavePlaylistUseCase(uow_factory, max_per_guild=5, max_tracks=100)

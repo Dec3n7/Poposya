@@ -25,8 +25,11 @@ def _now() -> datetime:
 
 class ModerationCog(commands.Cog):
     def __init__(
-        self, bot: commands.Bot, container: ModerationContainer,
-        settings: Settings, guild_settings=None,
+        self,
+        bot: commands.Bot,
+        container: ModerationContainer,
+        settings: Settings,
+        guild_settings=None,
     ):
         self.bot = bot
         self.container = container
@@ -47,7 +50,9 @@ class ModerationCog(commands.Cog):
         # восстановление наказаний: цикл авторазбана читает сроки из БД,
         # поэтому рестарт бота не сбрасывает таймеры
         self._unban_task = asyncio.create_task(self._unban_loop())
-        logger.info("Модерация: цикл авторазбана запущен (проверка каждые %d с)", _UNBAN_CHECK_INTERVAL)
+        logger.info(
+            "Модерация: цикл авторазбана запущен (проверка каждые %d с)", _UNBAN_CHECK_INTERVAL
+        )
 
     def cog_unload(self) -> None:
         if self._unban_task is not None:
@@ -96,9 +101,7 @@ class ModerationCog(commands.Cog):
         try:
             await target.send(
                 text,
-                allowed_mentions=discord.AllowedMentions(
-                    everyone=False, roles=False, users=True
-                ),
+                allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
             )
         except discord.Forbidden:
             await interaction.response.send_message(
@@ -106,7 +109,9 @@ class ModerationCog(commands.Cog):
             )
             return
         await interaction.response.send_message(f"Отправлено в {target.mention}.", ephemeral=True)
-        await self._log(interaction.guild, f"💬 /say от {interaction.user} в #{target.name}: {text[:200]}")
+        await self._log(
+            interaction.guild, f"💬 /say от {interaction.user} в #{target.name}: {text[:200]}"
+        )
 
     # --- антиспам: первое срабатывание — предупреждение, второе — мут ---
 
@@ -153,8 +158,7 @@ class ModerationCog(commands.Cog):
         if await self._timeout(member, spam_mute, "Спам (повторно)"):
             try:
                 await message.channel.send(
-                    f"{member.mention} — я предупреждала. "
-                    f"{spam_mute} мин тишины. ✂️👁🖤",
+                    f"{member.mention} — я предупреждала. {spam_mute} мин тишины. ✂️👁🖤",
                     allowed_mentions=discord.AllowedMentions(users=True),
                 )
             except discord.HTTPException:
@@ -303,7 +307,8 @@ class ModerationCog(commands.Cog):
         await interaction.response.defer()
         try:
             await interaction.guild.ban(
-                user, reason=f"{reason} (до {minutes} мин, {interaction.user})",
+                user,
+                reason=f"{reason} (до {minutes} мин, {interaction.user})",
                 delete_message_seconds=0,
             )
         except discord.Forbidden:
@@ -315,8 +320,7 @@ class ModerationCog(commands.Cog):
             user.id, interaction.guild_id, interaction.user.id, reason, minutes, _now()
         )
         await interaction.followup.send(
-            f"🔨 {user.mention} забанен до "
-            f"<t:{int(expires_at.timestamp())}:f>. Причина: {reason}",
+            f"🔨 {user.mention} забанен до <t:{int(expires_at.timestamp())}:f>. Причина: {reason}",
             allowed_mentions=discord.AllowedMentions.none(),
         )
         await self._log(
@@ -335,7 +339,9 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message("Это не ID.", ephemeral=True)
             return
         try:
-            await interaction.guild.unban(discord.Object(id=uid), reason=f"Досрочно: {interaction.user}")
+            await interaction.guild.unban(
+                discord.Object(id=uid), reason=f"Досрочно: {interaction.user}"
+            )
         except discord.NotFound:
             await interaction.response.send_message("Этот пользователь не в бане.", ephemeral=True)
             return
@@ -343,7 +349,9 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message("Нет права Ban Members.", ephemeral=True)
             return
         await self.container.remove_ban.execute(uid, interaction.guild_id)
-        await interaction.response.send_message(f"✅ <@{uid}> разбанен.", allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.send_message(
+            f"✅ <@{uid}> разбанен.", allowed_mentions=discord.AllowedMentions.none()
+        )
         await self._log(interaction.guild, f"✅ Досрочный разбан: <@{uid}> — {interaction.user}")
 
     @app_commands.command(name="bans", description="Список активных временных банов")
@@ -449,9 +457,7 @@ class ModerationCog(commands.Cog):
                 await user.move_to(channel, reason="/rage")
                 await asyncio.sleep(1)
             await interaction.guild.kick(user, reason=f"/rage — {interaction.user}")
-            await interaction.channel.send(
-                f"Вышвырнула. Пусть подумает о своём поведении. ✂️👁🖤"
-            )
+            await interaction.channel.send(f"Вышвырнула. Пусть подумает о своём поведении. ✂️👁🖤")
             await self._log(interaction.guild, f"😤 /rage: {user} кикнут — {interaction.user}")
         except discord.Forbidden:
             await interaction.channel.send(

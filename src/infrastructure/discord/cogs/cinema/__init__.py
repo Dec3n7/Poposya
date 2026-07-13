@@ -3,6 +3,7 @@ formatting (чистые хелперы), views (Discord-компоненты), 
 
 Публичные имена сохранены на уровне пакета, чтобы прежние импорты
 `from ...cogs.cinema import CinemaCog` продолжали работать."""
+
 from .cog import CinemaCog
 from .formatting import _title_of, _trim, _ts
 from .views import (

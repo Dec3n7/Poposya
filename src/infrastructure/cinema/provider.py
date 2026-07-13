@@ -44,9 +44,7 @@ class FallbackMovieSearch:
             try:
                 results = await client.search(query, limit)
             except Exception:
-                logger.warning(
-                    "Провайдер поиска фильмов упал, пробую следующий", exc_info=True
-                )
+                logger.warning("Провайдер поиска фильмов упал, пробую следующий", exc_info=True)
                 continue
             if results:
                 return results

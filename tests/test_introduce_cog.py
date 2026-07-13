@@ -1,5 +1,6 @@
 """IntroduceCog + SurveyView: эмбеды знакомства/анкеты, кнопки выбора/интереса/
 «Готово», публикация /introduce."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,9 +21,15 @@ def make_container():
     c = SimpleNamespace()
     c.set_survey_choice = SimpleNamespace(execute=AsyncMock())
     c.toggle_survey_interest = SimpleNamespace(execute=AsyncMock(return_value=(True, ["Игры"])))
-    c.complete_survey = SimpleNamespace(execute=AsyncMock(return_value=SurveyCompleteResult(
-        first_time=True, bonus_awarded=5,
-        survey=SurveyData(gender="девушка", interests="Игры", season="лето"))))
+    c.complete_survey = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=SurveyCompleteResult(
+                first_time=True,
+                bonus_awarded=5,
+                survey=SurveyData(gender="девушка", interests="Игры", season="лето"),
+            )
+        )
+    )
     return c
 
 
@@ -31,6 +38,7 @@ def find_button(view, custom_id):
 
 
 # --- SurveyView кнопки ------------------------------------------------------
+
 
 async def test_gender_choice_button():
     container = make_container()
@@ -84,7 +92,8 @@ async def test_done_button_first_time_bonus():
 async def test_done_button_repeat_no_bonus():
     container = make_container()
     container.complete_survey.execute.return_value = SurveyCompleteResult(
-        first_time=False, bonus_awarded=0, survey=SurveyData(gender="парень"))
+        first_time=False, bonus_awarded=0, survey=SurveyData(gender="парень")
+    )
     view = SurveyView(container, make_settings())
     done = find_button(view, "survey:done")
     interaction = make_interaction()
@@ -93,6 +102,7 @@ async def test_done_button_repeat_no_bonus():
 
 
 # --- IntroduceCog -----------------------------------------------------------
+
 
 def make_cog(container=None):
     bot = MagicMock()

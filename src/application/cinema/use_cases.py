@@ -25,7 +25,8 @@ class AddMovieUseCase:
     async def execute(self, entry: MovieEntry) -> AddMovieResult:
         watchlist_max = (
             self._settings.get(entry.guild_id, "cinema_watchlist_max", self._watchlist_max)
-            if self._settings is not None else self._watchlist_max
+            if self._settings is not None
+            else self._watchlist_max
         )
         async with self._uow_factory() as uow:
             duplicate = await uow.movies.find_listed_duplicate(
@@ -171,13 +172,15 @@ class StartMovieNightUseCase:
                 now + timedelta(minutes=10),
                 min(scheduled_at - timedelta(hours=1), now + timedelta(hours=24)),
             )
-            night = await uow.movie_nights.add(MovieNight(
-                guild_id=guild_id,
-                created_by=created_by,
-                scheduled_at=scheduled_at,
-                poll_ends_at=poll_ends,
-                candidate_ids=[e.id for e in candidates],
-            ))
+            night = await uow.movie_nights.add(
+                MovieNight(
+                    guild_id=guild_id,
+                    created_by=created_by,
+                    scheduled_at=scheduled_at,
+                    poll_ends_at=poll_ends,
+                    candidate_ids=[e.id for e in candidates],
+                )
+            )
             await uow.commit()
             return StartNightResult(status="ok", night=night, candidates=candidates)
 
@@ -193,8 +196,11 @@ class VoteNightUseCase:
         async with self._uow_factory() as uow:
             night = await uow.movie_nights.get_by_poll_message(poll_message_id)
             if (
-                night is None or night.id is None or night.status != "poll"
-                or now >= night.poll_ends_at or entry_id not in night.candidate_ids
+                night is None
+                or night.id is None
+                or night.status != "poll"
+                or now >= night.poll_ends_at
+                or entry_id not in night.candidate_ids
             ):
                 return "closed"
             await uow.movie_nights.set_night_vote(night.id, user_id, entry_id)
@@ -248,9 +254,7 @@ class CloseNightPollUseCase:
             night.winner_entry_id = winner_id
             await uow.movie_nights.save(night)
             await uow.commit()
-            return ClosePollResult(
-                status="winner", night=night, winner=winner, votes=votes
-            )
+            return ClosePollResult(status="winner", night=night, winner=winner, votes=votes)
 
 
 class CancelNightUseCase:
@@ -278,8 +282,11 @@ class OpenRatingUseCase:
     /movie watched). Возвращает entry или None, если фильм не в вотчлисте."""
 
     def __init__(
-        self, uow_factory: UowFactory, rating_hours: int,
-        rating_minutes: int = 0, settings_provider=None,
+        self,
+        uow_factory: UowFactory,
+        rating_hours: int,
+        rating_minutes: int = 0,
+        settings_provider=None,
     ):
         self._uow_factory = uow_factory
         self._rating_hours = rating_hours
@@ -292,7 +299,8 @@ class OpenRatingUseCase:
             return timedelta(minutes=self._rating_minutes)
         hours = (
             self._settings.get(guild_id, "cinema_rating_hours", self._rating_hours)
-            if self._settings is not None else self._rating_hours
+            if self._settings is not None
+            else self._rating_hours
         )
         return timedelta(hours=hours)
 
@@ -307,16 +315,11 @@ class OpenRatingUseCase:
             await uow.commit()
             return entry
 
-    async def execute_by_winner_message(
-        self, message_id: int, now: datetime
-    ) -> MovieEntry | None:
+    async def execute_by_winner_message(self, message_id: int, now: datetime) -> MovieEntry | None:
         """Кнопка «Мы посмотрели» под анонсом победителя киновечера."""
         async with self._uow_factory() as uow:
             night = await uow.movie_nights.get_by_winner_message(message_id)
-        if (
-            night is None or night.status != "scheduled"
-            or night.winner_entry_id is None
-        ):
+        if night is None or night.status != "scheduled" or night.winner_entry_id is None:
             return None
         return await self.execute(night.winner_entry_id, now)
 
@@ -326,8 +329,8 @@ class RateResult:
     # ok | closed
     status: str
     first_time: bool = False
-    count: int = 0        # выставленных баллов
-    reviews: int = 0      # текстовых отзывов
+    count: int = 0  # выставленных баллов
+    reviews: int = 0  # текстовых отзывов
 
 
 class RateMovieUseCase:
@@ -362,9 +365,7 @@ class ReviewMovieUseCase:
             entry = await uow.movies.get_by_rating_message(rating_message_id)
             if entry is None or entry.id is None or entry.status != "rating":
                 return RateResult(status="closed")
-            first = await uow.movie_ratings.set_review(
-                entry.id, user_id, review.strip()[:500], now
-            )
+            first = await uow.movie_ratings.set_review(entry.id, user_id, review.strip()[:500], now)
             _, count = await uow.movie_ratings.stats(entry.id)
             reviews = await uow.movie_ratings.review_count(entry.id)
             await uow.commit()
@@ -415,8 +416,11 @@ class FinalizeRatingUseCase:
         self._uow_factory = uow_factory
 
     async def execute(
-        self, entry_id: int, now: datetime,
-        poposya_score: int | None = None, poposya_review: str = "",
+        self,
+        entry_id: int,
+        now: datetime,
+        poposya_score: int | None = None,
+        poposya_review: str = "",
     ) -> FinalizeResult | None:
         async with self._uow_factory() as uow:
             entry = await uow.movies.get(entry_id)
@@ -438,9 +442,9 @@ class FinalizeRatingUseCase:
 
 @dataclass(frozen=True)
 class PendingCinema:
-    polls: list[MovieNight]        # идёт голосование
-    scheduled: list[MovieNight]    # ждём сеанса
-    ratings: list[MovieEntry]      # идёт сбор оценок
+    polls: list[MovieNight]  # идёт голосование
+    scheduled: list[MovieNight]  # ждём сеанса
+    ratings: list[MovieEntry]  # идёт сбор оценок
 
 
 class ListPendingCinemaUseCase:
@@ -461,9 +465,9 @@ class ListPendingCinemaUseCase:
 
 @dataclass(frozen=True)
 class CinemaProfile:
-    proposed: int              # сколько фильмов предложил
-    ratings_count: int         # сколько оценок поставил
-    avg_given: float | None    # его средняя оценка
+    proposed: int  # сколько фильмов предложил
+    ratings_count: int  # сколько оценок поставил
+    avg_given: float | None  # его средняя оценка
 
 
 class GetCinemaProfileUseCase:

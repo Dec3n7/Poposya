@@ -137,9 +137,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             uow_factory, policy, bonus=settings.survey_bonus_points
         ),
         set_birthday=SetBirthdayUseCase(uow_factory),
-        birthday_tick=BirthdayTickUseCase(
-            uow_factory, remind_days=settings.birthday_remind_days
-        ),
+        birthday_tick=BirthdayTickUseCase(uow_factory, remind_days=settings.birthday_remind_days),
         leaderboard=GetLeaderboardUseCase(uow_factory, policy),
         decay_points=DecayPointsUseCase(
             uow_factory,
@@ -258,9 +256,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         load_playlist=LoadPlaylistUseCase(uow_factory),
         list_playlists=ListPlaylistsUseCase(uow_factory),
         delete_playlist=DeletePlaylistUseCase(uow_factory),
-        toggle_like=ToggleLikeUseCase(
-            uow_factory, max_per_user=settings.music_liked_max_per_user
-        ),
+        toggle_like=ToggleLikeUseCase(uow_factory, max_per_user=settings.music_liked_max_per_user),
         list_liked=ListLikedUseCase(uow_factory),
         remove_liked=RemoveLikedUseCase(uow_factory),
         resolve_liked=ResolveLikedUseCase(uow_factory, audio_source),
@@ -268,7 +264,8 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     moderation = ModerationContainer(
         warn_user=WarnUserUseCase(
-            uow_factory, threshold=settings.warn_threshold,
+            uow_factory,
+            threshold=settings.warn_threshold,
             settings_provider=guild_settings,
         ),
         get_warns=GetWarnsUseCase(uow_factory),
@@ -280,7 +277,8 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
     activity = ActivityContainer(
         touch_activity=TouchMemberActivityUseCase(
-            uow_factory, absent_days_threshold=settings.absent_days_threshold,
+            uow_factory,
+            absent_days_threshold=settings.absent_days_threshold,
             settings_provider=guild_settings,
         ),
         add_reminder=AddReminderUseCase(uow_factory),
@@ -303,9 +301,7 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
 
     finds = FindsContainer(
-        spawn_find=SpawnFindUseCase(
-            uow_factory, lifetime_hours=settings.finds_lifetime_hours
-        ),
+        spawn_find=SpawnFindUseCase(uow_factory, lifetime_hours=settings.finds_lifetime_hours),
         register_find_message=RegisterFindMessageUseCase(uow_factory),
         claim_find=ClaimFindUseCase(
             uow_factory,
@@ -353,7 +349,8 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     cinema = CinemaContainer(
         add_movie=AddMovieUseCase(
-            uow_factory, watchlist_max=settings.cinema_watchlist_max,
+            uow_factory,
+            watchlist_max=settings.cinema_watchlist_max,
             settings_provider=guild_settings,
         ),
         register_message=RegisterMovieMessageUseCase(uow_factory),
@@ -361,9 +358,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         list_watchlist=ListWatchlistUseCase(uow_factory),
         top_watched=TopWatchedUseCase(uow_factory),
         remove_movie=RemoveMovieUseCase(uow_factory),
-        start_night=StartMovieNightUseCase(
-            uow_factory, poll_options=settings.cinema_poll_options
-        ),
+        start_night=StartMovieNightUseCase(uow_factory, poll_options=settings.cinema_poll_options),
         vote_night=VoteNightUseCase(uow_factory),
         close_poll=CloseNightPollUseCase(uow_factory),
         cancel_night=CancelNightUseCase(uow_factory),

@@ -15,6 +15,4 @@ class GuildSettingModel(Base):
     key: Mapped[str] = mapped_column(Text, nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("guild_id", "key", name="uq_guild_setting"),
-    )
+    __table_args__ = (UniqueConstraint("guild_id", "key", name="uq_guild_setting"),)

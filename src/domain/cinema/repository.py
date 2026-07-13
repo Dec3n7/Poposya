@@ -104,16 +104,12 @@ class IMovieNightRepository(ABC):
 
 class IMovieRatingRepository(ABC):
     @abstractmethod
-    async def upsert(
-        self, entry_id: int, user_id: int, score: int, at: datetime
-    ) -> bool:
+    async def upsert(self, entry_id: int, user_id: int, score: int, at: datetime) -> bool:
         """Ставит балл, сохраняя уже оставленный отзыв.
         True — первая оценка пользователя (для начисления очков)."""
 
     @abstractmethod
-    async def set_review(
-        self, entry_id: int, user_id: int, review: str, at: datetime
-    ) -> bool:
+    async def set_review(self, entry_id: int, user_id: int, review: str, at: datetime) -> bool:
         """Пишет текстовый отзыв, сохраняя уже выставленный балл.
         True — отзыв добавлен впервые (раньше у пользователя его не было)."""
 
@@ -126,15 +122,11 @@ class IMovieRatingRepository(ABC):
         """Сколько текстовых отзывов оставлено к фильму."""
 
     @abstractmethod
-    async def list_reviews(
-        self, entry_id: int
-    ) -> list[tuple[int, int | None, str]]:
+    async def list_reviews(self, entry_id: int) -> list[tuple[int, int | None, str]]:
         """Отзывы к фильму: (user_id, балл-или-None, текст), по времени."""
 
     @abstractmethod
-    async def list_ratings(
-        self, entry_id: int
-    ) -> list[tuple[int, int | None, str]]:
+    async def list_ratings(self, entry_id: int) -> list[tuple[int, int | None, str]]:
         """Все, кто оценил или написал: (user_id, балл-или-None, текст-или-''),
         по времени. Для публикации итогов в форум."""
 

@@ -66,12 +66,10 @@ class AIChatCog(commands.Cog):
             await asyncio.sleep(_SWEEP_INTERVAL_SECONDS)
             try:
                 now = datetime.now(timezone.utc)
-                for guild_id, user_id, display, exchanges in (
-                    self.service.evict_stale_sessions(now)
-                ):
-                    self._spawn(self.service.summarize_dialog(
-                        guild_id, user_id, display, exchanges, now
-                    ))
+                for guild_id, user_id, display, exchanges in self.service.evict_stale_sessions(now):
+                    self._spawn(
+                        self.service.summarize_dialog(guild_id, user_id, display, exchanges, now)
+                    )
                 self._prune_event_cooldowns()
             except Exception:
                 logger.exception("Цикл чистки ai_chat упал на проходе")
@@ -79,9 +77,7 @@ class AIChatCog(commands.Cog):
     def _prune_event_cooldowns(self) -> None:
         horizon = self.settings.ai_event_comment_cooldown
         mono = time.monotonic()
-        for channel_id in [
-            cid for cid, ts in self._event_cooldowns.items() if mono - ts > horizon
-        ]:
+        for channel_id in [cid for cid, ts in self._event_cooldowns.items() if mono - ts > horizon]:
             del self._event_cooldowns[channel_id]
 
     def _spawn(self, coro) -> None:
@@ -130,23 +126,24 @@ class AIChatCog(commands.Cog):
             logger.exception("Ошибка обработки сообщения ai_chat")
             return
 
-        await message.reply(
-            reply.text[:2000], allowed_mentions=discord.AllowedMentions.none()
-        )
+        await message.reply(reply.text[:2000], allowed_mentions=discord.AllowedMentions.none())
         self.mood.bump(message.guild.id, +1)  # ответ на упоминание
 
         # прошлый диалог закончился — сохраняем резюме в память
         if reply.stale_session:
-            self._spawn(self.service.summarize_dialog(
-                message.guild.id, message.author.id, message.author.display_name,
-                reply.stale_session, now,
-            ))
+            self._spawn(
+                self.service.summarize_dialog(
+                    message.guild.id,
+                    message.author.id,
+                    message.author.display_name,
+                    reply.stale_session,
+                    now,
+                )
+            )
 
         award = reply.award
         # сверка Discord-роли с очками при каждом сообщении (самовосстановление)
-        self._spawn(
-            self.role_sync.sync_member(message.guild, message.author.id, award.role_index)
-        )
+        self._spawn(self.role_sync.sync_member(message.guild, message.author.id, award.role_index))
         # периодическое обновление заметки о пользователе
         if (
             not reply.rate_limited

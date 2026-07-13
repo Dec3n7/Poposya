@@ -13,17 +13,21 @@ class SqlAlchemyWarnRepository(IWarnRepository):
         self._session = session
 
     async def add(self, warn: Warn) -> None:
-        self._session.add(WarnModel(
-            guild_id=warn.guild_id,
-            user_id=warn.user_id,
-            moderator_id=warn.moderator_id,
-            reason=warn.reason,
-            created_at=warn.created_at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            WarnModel(
+                guild_id=warn.guild_id,
+                user_id=warn.user_id,
+                moderator_id=warn.moderator_id,
+                reason=warn.reason,
+                created_at=warn.created_at.replace(tzinfo=None),
+            )
+        )
 
     async def count(self, user_id: int, guild_id: int) -> int:
-        stmt = select(func.count()).select_from(WarnModel).where(
-            WarnModel.user_id == user_id, WarnModel.guild_id == guild_id
+        stmt = (
+            select(func.count())
+            .select_from(WarnModel)
+            .where(WarnModel.user_id == user_id, WarnModel.guild_id == guild_id)
         )
         return (await self._session.execute(stmt)).scalar_one()
 
@@ -48,9 +52,7 @@ class SqlAlchemyWarnRepository(IWarnRepository):
 
     async def clear(self, user_id: int, guild_id: int) -> None:
         await self._session.execute(
-            delete(WarnModel).where(
-                WarnModel.user_id == user_id, WarnModel.guild_id == guild_id
-            )
+            delete(WarnModel).where(WarnModel.user_id == user_id, WarnModel.guild_id == guild_id)
         )
 
 
@@ -70,13 +72,15 @@ class SqlAlchemyTempBanRepository(ITempBanRepository):
         self._session = session
 
     async def add(self, ban: TempBan) -> None:
-        self._session.add(TempBanModel(
-            guild_id=ban.guild_id,
-            user_id=ban.user_id,
-            moderator_id=ban.moderator_id,
-            reason=ban.reason,
-            expires_at=ban.expires_at.replace(tzinfo=None),
-        ))
+        self._session.add(
+            TempBanModel(
+                guild_id=ban.guild_id,
+                user_id=ban.user_id,
+                moderator_id=ban.moderator_id,
+                reason=ban.reason,
+                expires_at=ban.expires_at.replace(tzinfo=None),
+            )
+        )
 
     async def list_active(self, guild_id: int, now: datetime) -> list[TempBan]:
         stmt = (

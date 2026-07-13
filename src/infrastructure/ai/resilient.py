@@ -28,13 +28,15 @@ class ResilientAIProvider(IAIProvider):
                 last_error = exc
                 if not exc.retryable or attempt == self._attempts - 1:
                     raise
-                delay = self._base_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                delay = self._base_delay * (2**attempt) + random.uniform(0, 0.5)
                 if exc.retry_after is not None:
                     delay = max(delay, exc.retry_after)
                 delay = min(delay, _MAX_SINGLE_DELAY)
                 logger.info(
                     "AI-запрос не удался, повтор через %.1f c (попытка %d/%d)",
-                    delay, attempt + 2, self._attempts,
+                    delay,
+                    attempt + 2,
+                    self._attempts,
                 )
                 await asyncio.sleep(delay)
         raise last_error  # недостижимо, но успокаивает типизацию

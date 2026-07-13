@@ -1,5 +1,6 @@
 """Глобальная сеть безопасности для слеш-команд: ожидаемые ошибки прав
 получают спокойный ответ без трейса, неожиданные — код + трейс в логах."""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,9 +24,7 @@ def _interaction(done=False):
 async def test_missing_permissions_answers_calmly_without_logging(caplog):
     interaction = _interaction()
     with caplog.at_level("ERROR"):
-        await on_app_command_error(
-            interaction, app_commands.MissingPermissions(["administrator"])
-        )
+        await on_app_command_error(interaction, app_commands.MissingPermissions(["administrator"]))
     text, kwargs = interaction.response.send_message.call_args
     assert "прав" in text[0].lower()
     assert kwargs["ephemeral"] is True

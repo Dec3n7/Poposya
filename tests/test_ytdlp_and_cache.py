@@ -1,5 +1,6 @@
 """YtDlpAudioSource с замоканным _extract (без yt-dlp/сети), AudioCache на диске,
 чистые функции lyrics (clean_track_title/build_queries/parse_lrc/group_blocks)."""
+
 import time
 from pathlib import Path
 
@@ -18,16 +19,27 @@ from src.infrastructure.audio.lyrics import (
 
 
 def make_track(video_id="abc", duration=180):
-    return Track(video_id=video_id, title="T", url=f"https://youtu.be/{video_id}",
-                 duration=duration, requested_by=1)
+    return Track(
+        video_id=video_id,
+        title="T",
+        url=f"https://youtu.be/{video_id}",
+        duration=duration,
+        requested_by=1,
+    )
 
 
 # --- YtDlpAudioSource: _entry_to_track --------------------------------------
 
+
 def test_entry_to_track_full():
     track = YtDlpAudioSource._entry_to_track(
-        {"id": "vid1", "title": "Песня", "duration": 200.7,
-         "webpage_url": "https://youtu.be/vid1", "uploader": "Chan"},
+        {
+            "id": "vid1",
+            "title": "Песня",
+            "duration": 200.7,
+            "webpage_url": "https://youtu.be/vid1",
+            "uploader": "Chan",
+        },
         requested_by=5,
     )
     assert track.video_id == "vid1"
@@ -48,13 +60,19 @@ def test_entry_to_track_defaults_and_live():
 
 # --- YtDlpAudioSource: search / resolve / get_stream_url --------------------
 
+
 async def test_search_maps_entries(monkeypatch):
     src = YtDlpAudioSource()
 
     async def fake_extract(target, flat):
         assert target == "ytsearch3:queen"
-        return {"entries": [{"id": "a", "title": "A", "duration": 100}, None,
-                            {"id": "b", "title": "B", "duration": 200}]}
+        return {
+            "entries": [
+                {"id": "a", "title": "A", "duration": 100},
+                None,
+                {"id": "b", "title": "B", "duration": 200},
+            ]
+        }
 
     monkeypatch.setattr(src, "_extract", fake_extract)
     tracks = await src.search("queen", requested_by=1, limit=3)
@@ -108,10 +126,12 @@ async def test_get_stream_url_from_formats(monkeypatch):
     src = YtDlpAudioSource()
 
     async def fake_extract(target, flat):
-        return {"formats": [
-            {"acodec": "none", "url": "http://video-only"},
-            {"acodec": "opus", "url": "http://audio"},
-        ]}
+        return {
+            "formats": [
+                {"acodec": "none", "url": "http://video-only"},
+                {"acodec": "opus", "url": "http://audio"},
+            ]
+        }
 
     monkeypatch.setattr(src, "_extract", fake_extract)
     # берётся с конца — первый годный аудиоформат
@@ -133,6 +153,7 @@ async def test_get_stream_url_remembers_metadata(monkeypatch):
 
 def test_fmt_count():
     from src.infrastructure.discord.cogs.music.formatting import fmt_count
+
     assert fmt_count(None) is None
     assert fmt_count(0) is None
     assert fmt_count(500) == "500"
@@ -154,6 +175,7 @@ async def test_get_stream_url_none_raises(monkeypatch):
 
 # --- cached_path / download без кэша ----------------------------------------
 
+
 def test_cached_path_no_cache():
     assert YtDlpAudioSource().cached_path(make_track()) is None
 
@@ -163,13 +185,13 @@ async def test_download_no_cache_returns_none():
 
 
 async def test_download_live_returns_none(tmp_path):
-    cache = AudioCache(tmp_path, max_bytes=10 ** 9)
+    cache = AudioCache(tmp_path, max_bytes=10**9)
     src = YtDlpAudioSource(cache=cache)
     assert await src.download(make_track(duration=None)) is None
 
 
 def test_cached_path_hits_cache(tmp_path):
-    cache = AudioCache(tmp_path, max_bytes=10 ** 9)
+    cache = AudioCache(tmp_path, max_bytes=10**9)
     (tmp_path / "abc.webm").write_bytes(b"x")
     src = YtDlpAudioSource(cache=cache)
     assert src.cached_path(make_track("abc")).endswith("abc.webm")
@@ -189,8 +211,9 @@ def test_opts_with_cookies_file():
 
 # --- AudioCache -------------------------------------------------------------
 
+
 def test_cache_find_and_skip_temp(tmp_path):
-    cache = AudioCache(tmp_path, max_bytes=10 ** 9)
+    cache = AudioCache(tmp_path, max_bytes=10**9)
     assert cache.find("missing") is None
     (tmp_path / "v1.part").write_bytes(b"x")  # недокачанный — не кэш
     assert cache.find("v1") is None
@@ -199,11 +222,12 @@ def test_cache_find_and_skip_temp(tmp_path):
 
 
 def test_cache_find_refreshes_mtime(tmp_path):
-    cache = AudioCache(tmp_path, max_bytes=10 ** 9)
+    cache = AudioCache(tmp_path, max_bytes=10**9)
     f = tmp_path / "v1.m4a"
     f.write_bytes(b"x")
     old = time.time() - 10_000
     import os
+
     os.utime(f, (old, old))
     cache.find("v1")  # должно обновить mtime
     assert f.stat().st_mtime > old + 1000
@@ -212,14 +236,15 @@ def test_cache_find_refreshes_mtime(tmp_path):
 def test_cache_prune_evicts_oldest(tmp_path):
     cache = AudioCache(tmp_path, max_bytes=150)  # влезает ~1.5 файла по 100 байт
     import os
+
     for i, name in enumerate(["old.m4a", "mid.m4a", "new.m4a"]):
         p = tmp_path / name
         p.write_bytes(b"x" * 100)
         os.utime(p, (1000 + i, 1000 + i))  # new — самый свежий
     cache.prune()
     names = {p.name for p in tmp_path.iterdir()}
-    assert "new.m4a" in names       # свежий остаётся
-    assert "old.m4a" not in names   # старейший вытеснен
+    assert "new.m4a" in names  # свежий остаётся
+    assert "old.m4a" not in names  # старейший вытеснен
 
 
 def test_cache_creates_directory(tmp_path):
@@ -229,6 +254,7 @@ def test_cache_creates_directory(tmp_path):
 
 
 # --- lyrics pure functions --------------------------------------------------
+
 
 def test_clean_track_title_strips_junk():
     assert clean_track_title("Lil Peep -- 16 Lines (Official Video)") == "Lil Peep 16 Lines"

@@ -1,5 +1,6 @@
 """Тесты HTTP-провайдеров с заглушками aiohttp (без сети): Groq, Spotify oEmbed,
 LRCLIB, TMDB, Кинопоиск + фолбэк-поиск фильмов."""
+
 import aiohttp
 import pytest
 
@@ -19,10 +20,9 @@ MSGS = [ChatMessage(role="user", content="привет")]
 
 # --- Groq -------------------------------------------------------------------
 
+
 async def test_groq_success(monkeypatch):
-    resp = FakeResponse(200, json_data={
-        "choices": [{"message": {"content": "ответ Groq"}}]
-    })
+    resp = FakeResponse(200, json_data={"choices": [{"message": {"content": "ответ Groq"}}]})
     capture = {}
     monkeypatch.setattr(
         "src.infrastructure.ai.groq_provider.aiohttp.ClientSession",
@@ -90,6 +90,7 @@ async def test_groq_close_is_safe():
 
 # --- Spotify ----------------------------------------------------------------
 
+
 def test_spotify_link_detection():
     assert SpotifyLinkResolver.is_spotify_link("https://open.spotify.com/track/xyz")
     assert not SpotifyLinkResolver.is_spotify_link("https://youtube.com/watch?v=1")
@@ -105,29 +106,31 @@ async def test_spotify_oembed_builds_query(monkeypatch):
 
 
 async def test_spotify_oembed_no_title(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.spotify",
-                  response=FakeResponse(200, json_data={"author_name": "A"}))
+    patch_session(
+        monkeypatch,
+        "src.infrastructure.audio.spotify",
+        response=FakeResponse(200, json_data={"author_name": "A"}),
+    )
     assert await SpotifyLinkResolver().search_query_for("url") is None
 
 
 async def test_spotify_oembed_http_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.spotify",
-                  response=FakeResponse(404))
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", response=FakeResponse(404))
     assert await SpotifyLinkResolver().search_query_for("url") is None
 
 
 async def test_spotify_oembed_network_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.spotify",
-                  exc=aiohttp.ClientError("down"))
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", exc=aiohttp.ClientError("down"))
     assert await SpotifyLinkResolver().search_query_for("url") is None
 
 
 # --- LRCLIB -----------------------------------------------------------------
 
+
 async def test_lyrics_find_plain_and_synced(monkeypatch):
-    resp = FakeResponse(200, json_data=[
-        {"plainLyrics": "текст песни", "syncedLyrics": "[00:01.00] строка"}
-    ])
+    resp = FakeResponse(
+        200, json_data=[{"plainLyrics": "текст песни", "syncedLyrics": "[00:01.00] строка"}]
+    )
     patch_session(monkeypatch, "src.infrastructure.audio.lyrics", response=resp)
     client = LrclibLyricsClient()
     assert await client.find_lyrics("Song") == "текст песни"
@@ -135,33 +138,31 @@ async def test_lyrics_find_plain_and_synced(monkeypatch):
 
 
 async def test_lyrics_find_both(monkeypatch):
-    resp = FakeResponse(200, json_data=[
-        {"plainLyrics": "p", "syncedLyrics": "s"}
-    ])
+    resp = FakeResponse(200, json_data=[{"plainLyrics": "p", "syncedLyrics": "s"}])
     patch_session(monkeypatch, "src.infrastructure.audio.lyrics", response=resp)
     synced, plain = await LrclibLyricsClient().find_both("Song")
     assert (synced, plain) == ("s", "p")
 
 
 async def test_lyrics_empty_results(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.lyrics",
-                  response=FakeResponse(200, json_data=[]))
+    patch_session(
+        monkeypatch, "src.infrastructure.audio.lyrics", response=FakeResponse(200, json_data=[])
+    )
     assert await LrclibLyricsClient().find_lyrics("Song") is None
 
 
 async def test_lyrics_http_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.lyrics",
-                  response=FakeResponse(500))
+    patch_session(monkeypatch, "src.infrastructure.audio.lyrics", response=FakeResponse(500))
     assert await LrclibLyricsClient().find_lyrics("Song") is None
 
 
 async def test_lyrics_network_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.audio.lyrics",
-                  exc=aiohttp.ClientError("down"))
+    patch_session(monkeypatch, "src.infrastructure.audio.lyrics", exc=aiohttp.ClientError("down"))
     assert await LrclibLyricsClient().find_lyrics("Song") is None
 
 
 # --- TMDB -------------------------------------------------------------------
+
 
 def test_tmdb_disabled_without_key():
     assert TmdbClient("").enabled is False
@@ -172,18 +173,34 @@ async def test_tmdb_disabled_returns_empty():
 
 
 async def test_tmdb_parses_results(monkeypatch):
-    resp = FakeResponse(200, json_data={"results": [
-        {"id": 27205, "title": "Начало", "release_date": "2010-07-16",
-         "overview": "сон во сне", "poster_path": "/abc.jpg"},
-        {"id": 2, "original_title": "Fallback", "release_date": "",
-         "overview": "", "poster_path": ""},
-    ]})
+    resp = FakeResponse(
+        200,
+        json_data={
+            "results": [
+                {
+                    "id": 27205,
+                    "title": "Начало",
+                    "release_date": "2010-07-16",
+                    "overview": "сон во сне",
+                    "poster_path": "/abc.jpg",
+                },
+                {
+                    "id": 2,
+                    "original_title": "Fallback",
+                    "release_date": "",
+                    "overview": "",
+                    "poster_path": "",
+                },
+            ]
+        },
+    )
     capture = {}
     patch_session(monkeypatch, "src.infrastructure.cinema.tmdb", response=resp, capture=capture)
     results = await TmdbClient("key").search("начало", limit=5)
     assert len(results) == 2
-    assert results[0] == MovieInfo(27205, "Начало", 2010, "сон во сне",
-                                   "https://image.tmdb.org/t/p/w500/abc.jpg")
+    assert results[0] == MovieInfo(
+        27205, "Начало", 2010, "сон во сне", "https://image.tmdb.org/t/p/w500/abc.jpg"
+    )
     # второй — без даты/постера
     assert results[1].year is None and results[1].poster_url == ""
     assert results[1].title == "Fallback"
@@ -191,31 +208,42 @@ async def test_tmdb_parses_results(monkeypatch):
 
 
 async def test_tmdb_http_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.cinema.tmdb",
-                  response=FakeResponse(401))
+    patch_session(monkeypatch, "src.infrastructure.cinema.tmdb", response=FakeResponse(401))
     assert await TmdbClient("key").search("q") == []
 
 
 async def test_tmdb_network_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.cinema.tmdb",
-                  exc=aiohttp.ClientError("down"))
+    patch_session(monkeypatch, "src.infrastructure.cinema.tmdb", exc=aiohttp.ClientError("down"))
     assert await TmdbClient("key").search("q") == []
 
 
 # --- Kinopoisk --------------------------------------------------------------
+
 
 def test_kinopoisk_disabled_without_key():
     assert KinopoiskClient("").enabled is False
 
 
 async def test_kinopoisk_parses_docs(monkeypatch):
-    resp = FakeResponse(200, json_data={"docs": [
-        {"id": 301, "name": "Матрица", "year": 1999,
-         "description": "красная таблетка", "poster": {"url": "http://p/1.jpg"}},
-        {"id": 0, "alternativeName": "Alt", "shortDescription": "кратко"},
-    ]})
+    resp = FakeResponse(
+        200,
+        json_data={
+            "docs": [
+                {
+                    "id": 301,
+                    "name": "Матрица",
+                    "year": 1999,
+                    "description": "красная таблетка",
+                    "poster": {"url": "http://p/1.jpg"},
+                },
+                {"id": 0, "alternativeName": "Alt", "shortDescription": "кратко"},
+            ]
+        },
+    )
     capture = {}
-    patch_session(monkeypatch, "src.infrastructure.cinema.kinopoisk", response=resp, capture=capture)
+    patch_session(
+        monkeypatch, "src.infrastructure.cinema.kinopoisk", response=resp, capture=capture
+    )
     results = await KinopoiskClient("tok").search("матрица", limit=5)
     assert results[0] == MovieInfo(301, "Матрица", 1999, "красная таблетка", "http://p/1.jpg")
     assert results[1].title == "Alt" and results[1].year is None
@@ -223,12 +251,12 @@ async def test_kinopoisk_parses_docs(monkeypatch):
 
 
 async def test_kinopoisk_http_error(monkeypatch):
-    patch_session(monkeypatch, "src.infrastructure.cinema.kinopoisk",
-                  response=FakeResponse(403))
+    patch_session(monkeypatch, "src.infrastructure.cinema.kinopoisk", response=FakeResponse(403))
     assert await KinopoiskClient("tok").search("q") == []
 
 
 # --- FallbackMovieSearch ----------------------------------------------------
+
 
 class StubSearch:
     def __init__(self, enabled=True, results=None, raise_exc=None):
@@ -280,7 +308,9 @@ async def test_fallback_skips_disabled_primary():
 
 
 def test_fallback_enabled_reflects_children():
-    assert FallbackMovieSearch(StubSearch(enabled=False), StubSearch(enabled=False)).enabled is False
+    assert (
+        FallbackMovieSearch(StubSearch(enabled=False), StubSearch(enabled=False)).enabled is False
+    )
     assert FallbackMovieSearch(StubSearch(enabled=False), StubSearch(enabled=True)).enabled is True
 
 

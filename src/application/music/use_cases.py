@@ -19,9 +19,7 @@ class SavePlaylistUseCase:
         self._max_per_guild = max_per_guild
         self._max_tracks = max_tracks
 
-    async def execute(
-        self, guild_id: int, name: str, created_by: int, tracks: list[Track]
-    ) -> str:
+    async def execute(self, guild_id: int, name: str, created_by: int, tracks: list[Track]) -> str:
         """Возвращает "" при успехе или код ошибки: empty | limit."""
         name = name.strip()[:50]
         if not tracks:
@@ -30,12 +28,14 @@ class SavePlaylistUseCase:
             existing = await uow.playlists.get(guild_id, name)
             if existing is None and await uow.playlists.count(guild_id) >= self._max_per_guild:
                 return "limit"
-            await uow.playlists.save(Playlist(
-                guild_id=guild_id,
-                name=name,
-                created_by=created_by,
-                tracks=tracks[: self._max_tracks],
-            ))
+            await uow.playlists.save(
+                Playlist(
+                    guild_id=guild_id,
+                    name=name,
+                    created_by=created_by,
+                    tracks=tracks[: self._max_tracks],
+                )
+            )
             await uow.commit()
             return ""
 
@@ -79,14 +79,16 @@ class ToggleLikeUseCase:
                 return "unliked"
             if await uow.liked_tracks.count(user_id) >= self._max_per_user:
                 return "limit"
-            await uow.liked_tracks.add(LikedTrack(
-                user_id=user_id,
-                video_id=track.video_id,
-                title=track.title,
-                uploader=track.uploader,
-                duration=track.duration,
-                liked_at=now,
-            ))
+            await uow.liked_tracks.add(
+                LikedTrack(
+                    user_id=user_id,
+                    video_id=track.video_id,
+                    title=track.title,
+                    uploader=track.uploader,
+                    duration=track.duration,
+                    liked_at=now,
+                )
+            )
             await uow.commit()
             return "liked"
 
@@ -120,9 +122,7 @@ class ResolveLikedUseCase:
         self._uow_factory = uow_factory
         self._audio = audio_source
 
-    async def execute(
-        self, user_id: int, video_id: str, requested_by: int
-    ) -> Track | None:
+    async def execute(self, user_id: int, video_id: str, requested_by: int) -> Track | None:
         async with self._uow_factory() as uow:
             liked = await uow.liked_tracks.get(user_id, video_id)
         if liked is None:
@@ -154,8 +154,11 @@ class ResolveLikedUseCase:
                     await uow.liked_tracks.remove(user_id, video_id)
                 else:
                     await uow.liked_tracks.update_resolution(
-                        row.id, fresh.video_id, fresh.title,
-                        fresh.uploader, fresh.duration,
+                        row.id,
+                        fresh.video_id,
+                        fresh.title,
+                        fresh.uploader,
+                        fresh.duration,
                     )
                 await uow.commit()
         return fresh
@@ -165,9 +168,7 @@ class DeletePlaylistUseCase:
     def __init__(self, uow_factory: UowFactory):
         self._uow_factory = uow_factory
 
-    async def execute(
-        self, guild_id: int, name: str, requester_id: int, is_admin: bool
-    ) -> str:
+    async def execute(self, guild_id: int, name: str, requester_id: int, is_admin: bool) -> str:
         """ok | not_found | forbidden — удалять может автор или админ."""
         async with self._uow_factory() as uow:
             playlist = await uow.playlists.get(guild_id, name.strip())

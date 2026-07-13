@@ -44,7 +44,8 @@ class CircuitBreakerAIProvider(IAIProvider):
             if self._state != "OPEN":
                 logger.warning(
                     "Circuit breaker: OPEN на %d c (сбоев подряд: %d)",
-                    self._timeout, self._failure_count,
+                    self._timeout,
+                    self._failure_count,
                 )
             self._state = "OPEN"
 

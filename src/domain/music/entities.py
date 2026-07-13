@@ -55,7 +55,6 @@ class LikedTrack:
             requested_by=requested_by,
             uploader=self.uploader,
             thumbnail=(
-                f"https://i.ytimg.com/vi/{self.video_id}/hqdefault.jpg"
-                if self.video_id else None
+                f"https://i.ytimg.com/vi/{self.video_id}/hqdefault.jpg" if self.video_id else None
             ),
         )

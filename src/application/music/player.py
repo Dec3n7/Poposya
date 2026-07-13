@@ -267,7 +267,8 @@ class GuildPlayer:
         while not self._stopping:
             target = next(
                 (
-                    t for t in list(self.queue)[: self._prefetch_files]
+                    t
+                    for t in list(self.queue)[: self._prefetch_files]
                     if t.duration is not None  # live не скачивается
                     and t.video_id not in self._download_failed
                     and self._audio.cached_path(t) is None
@@ -324,9 +325,7 @@ class GuildPlayer:
         # Вызывается из аудио-потока discord.py — переносим в event loop.
         if self._loop is None or self._loop.is_closed():
             return
-        self._loop.call_soon_threadsafe(
-            lambda: asyncio.ensure_future(self._advance(error))
-        )
+        self._loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._advance(error)))
 
     async def _advance(self, error: Exception | None) -> None:
         if error:

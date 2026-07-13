@@ -29,7 +29,7 @@ _CACHE_LIMIT = 100
 # ANSI для цветного караоке (Discord поддерживает ```ansi блоки)
 _ANSI_RESET = "[0m"
 _ANSI_CURRENT = "[1;36m"  # жирный голубой — текущая строка
-_ANSI_DIM = "[0;30m"      # приглушённый серый — остальное
+_ANSI_DIM = "[0;30m"  # приглушённый серый — остальное
 
 Blocks = list[tuple[float, list[str]]]
 
@@ -119,8 +119,7 @@ class LyricsService:
     ) -> discord.Embed:
         """Текущий абзац крупно, следующий — приглушённо. ansi — цветной режим."""
         description = (
-            self._karaoke_ansi(blocks, index) if ansi
-            else self._karaoke_plain(blocks, index)
+            self._karaoke_ansi(blocks, index) if ansi else self._karaoke_plain(blocks, index)
         )
         embed = discord.Embed(
             title=f"🎤 {trim(title, 200)}",
@@ -179,7 +178,10 @@ class LyricsService:
         return True
 
     async def start_karaoke(
-        self, channel: discord.abc.Messageable, guild_id: int, track: Track,
+        self,
+        channel: discord.abc.Messageable,
+        guild_id: int,
+        track: Track,
         synced: str | None,
     ) -> bool:
         blocks = group_blocks(parse_lrc(synced)) if synced else []
@@ -219,14 +221,16 @@ class LyricsService:
         if synced and await self.start_karaoke(interaction.channel, guild_id, track, synced):
             await interaction.followup.send("🎤 Караоке включено.", ephemeral=True)
         elif plain:
-            await interaction.followup.send(
-                embed=self.plain_embed(track, plain), ephemeral=True
-            )
+            await interaction.followup.send(embed=self.plain_embed(track, plain), ephemeral=True)
         else:
             await interaction.followup.send("Текста для этого трека не нашла.", ephemeral=True)
 
     async def _live_loop(
-        self, guild_id: int, message: discord.Message, blocks: Blocks, track_id: str,
+        self,
+        guild_id: int,
+        message: discord.Message,
+        blocks: Blocks,
+        track_id: str,
         current_index: int = -1,
     ) -> None:
         # Синхронизация: просыпаемся точно к началу следующего абзаца (позиция
@@ -257,9 +261,7 @@ class LyricsService:
                         return  # синхронного текста нет — караоке выключаем
                     blocks = new_blocks
                     track_id = track.video_id
-                    current_index = block_index(
-                        blocks, player.elapsed_precise() + offset
-                    )
+                    current_index = block_index(blocks, player.elapsed_precise() + offset)
                     try:
                         message = await message.channel.send(
                             embed=self._karaoke_embed(
@@ -292,9 +294,7 @@ class LyricsService:
                 if player.is_paused or index + 1 >= len(blocks):
                     delay = refresh
                 else:
-                    to_next = blocks[index + 1][0] - (
-                        player.elapsed_precise() + offset
-                    )
+                    to_next = blocks[index + 1][0] - (player.elapsed_precise() + offset)
                     delay = min(refresh, max(0.2, to_next))
                 await asyncio.sleep(delay)
         finally:
