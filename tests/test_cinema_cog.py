@@ -383,14 +383,14 @@ async def test_finalize_sends_pointer_when_forum_used():
     container.get_movie.execute.return_value = final
     container.finalize_rating.execute.return_value = FinalizeResult(entry=final, avg=8.0, count=2)
     cog = make_cog(container, settings=make_settings(cinema_forum_channel=555))
-    cog.chat = None  # без AI-вердикта
-    cog._disable_message = AsyncMock()
+    # make_cog передаёт chat=None -> AI-вердикт пропускается
+    cog.service.disable_message = AsyncMock()
     cog.forum.publish = AsyncMock(return_value="<#777>")
     watch = MagicMock()
     watch.send = AsyncMock()
     cog.bot.get_channel = MagicMock(return_value=watch)
 
-    await cog._finalize_rating(5)
+    await cog.service.finalize_rating(5)
     cog.forum.publish.assert_awaited_once()
     # в канал просмотра ушёл короткий указатель на форум
     pointer = watch.send.await_args.args[0]

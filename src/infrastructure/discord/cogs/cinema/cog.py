@@ -10,20 +10,20 @@ from src.application.ai_chat.service import ChatService
 from src.application.cinema.di import CinemaContainer
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
-from src.domain.cinema.entities import MovieEntry, MovieNight
+from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
 from src.infrastructure.discord.scheduler import DeferredScheduler
 
 from .formatting import (
     _DATE_RE,
     _EMBED_COLOR,
-    _SCORE_RE,
     _TIME_RE,
     _title_of,
     _trim,
     _ts,
 )
 from .forum import CinemaForum
+from .service import CinemaService
 from .views import (
     CinemaCardView,
     CinemaRatingView,
@@ -62,6 +62,16 @@ class CinemaCog(commands.Cog):
         self._scheduler = DeferredScheduler("cinema")
         self._restored = False
         self.forum = CinemaForum(self.bot, self.cinema, self._cfg)
+        self.service = CinemaService(
+            cinema=self.cinema,
+            bot=self.bot,
+            chat=self.chat,
+            mood=self.mood,
+            scheduler=self._scheduler,
+            forum=self.forum,
+            watched_view=lambda: CinemaWatchedView(self),
+            rating_view=lambda: CinemaRatingView(self),
+        )
 
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
@@ -101,20 +111,20 @@ class CinemaCog(commands.Cog):
             self._scheduler.schedule(
                 f"poll:{night.id}",
                 night.poll_ends_at,
-                lambda nid=night.id: self._close_poll(nid),
+                lambda nid=night.id: self.service.close_poll(nid),
             )
         for night in pending.scheduled:
             self._scheduler.schedule(
                 f"remind:{night.id}",
                 night.scheduled_at,
-                lambda n=night: self._remind(n),
+                lambda n=night: self.service.remind(n),
             )
         for entry in pending.ratings:
             if entry.rating_ends_at is not None:
                 self._scheduler.schedule(
                     f"rating:{entry.id}",
                     entry.rating_ends_at,
-                    lambda eid=entry.id: self._finalize_rating(eid),
+                    lambda eid=entry.id: self.service.finalize_rating(eid),
                 )
         logger.info(
             "Киноклуб: восстановлено из БД — опросов %d, вечеров %d, сборов оценок %d",
@@ -421,7 +431,7 @@ class CinemaCog(commands.Cog):
         self._scheduler.schedule(
             f"poll:{night.id}",
             night.poll_ends_at,
-            lambda nid=night.id: self._close_poll(nid),
+            lambda nid=night.id: self.service.close_poll(nid),
         )
         await interaction.followup.send("Киновечер объявлен. 🍿", ephemeral=True)
 
@@ -442,7 +452,7 @@ class CinemaCog(commands.Cog):
         if status == "ok" and night is not None:
             for key in (f"poll:{night.id}", f"remind:{night.id}"):
                 self._scheduler.cancel(key)
-            await self._disable_message(night.channel_id, night.poll_message_id)
+            await self.service.disable_message(night.channel_id, night.poll_message_id)
 
     async def handle_night_vote(self, interaction: discord.Interaction, entry_id: int) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -458,95 +468,6 @@ class CinemaCog(commands.Cog):
         entry = await self.cinema.get_movie.execute(entry_id)
         title = _trim(entry.title, 80) if entry else "фильм"
         await interaction.followup.send(f"Голос за **{title}** принят.", ephemeral=True)
-
-    async def _disable_message(self, channel_id: int, message_id: int) -> None:
-        if not channel_id or not message_id:
-            return
-        channel = self.bot.get_channel(channel_id)
-        if channel is None:
-            return
-        try:
-            message = await channel.fetch_message(message_id)
-            await message.edit(view=None)
-        except discord.HTTPException:
-            pass
-
-    async def _close_poll(self, night_id: int) -> None:
-        result = await self.cinema.close_poll.execute(night_id)
-        if result.status == "gone" or result.night is None:
-            return
-        night = result.night
-        await self._disable_message(night.channel_id, night.poll_message_id)
-        channel = self.bot.get_channel(night.channel_id)
-        if channel is None:
-            return
-        if result.status == "no_votes":
-            try:
-                await channel.send(
-                    "🍿 Никто не проголосовал — киновечер отменяется. "
-                    "Посмотрю одна. Мне не привыкать."
-                )
-            except discord.HTTPException:
-                pass
-            return
-        winner = result.winner
-        comment = ""
-        if self.chat is not None:
-            try:
-                comment = await self.chat.freeform_remark(
-                    f"Киноклуб сервера голосованием выбрал фильм для совместного "
-                    f"просмотра: «{winner.title}»"
-                    + (f" ({winner.year})" if winner.year else "")
-                    + ". Прокомментируй выбор одной-двумя фразами в своём стиле.",
-                    datetime.now(UTC),
-                    mood=self.mood.get(night.guild_id),
-                )
-            except Exception:
-                logger.warning("Комментарий к победителю не сгенерировался", exc_info=True)
-        votes_total = sum((result.votes or {}).values())
-        embed = discord.Embed(
-            title=f"🏆 Смотрим: {_trim(_title_of(winner), 200)}",
-            description=(
-                (f"{_trim(winner.overview, 300)}\n\n" if winner.overview else "")
-                + f"**Сеанс:** {_ts(night.scheduled_at, 'F')} ({_ts(night.scheduled_at)})\n"
-                + f"-# Голосов: {votes_total}. После просмотра жмите кнопку ниже."
-            )[:4000],
-            color=_EMBED_COLOR,
-        )
-        if winner.poster_url:
-            embed.set_thumbnail(url=winner.poster_url)
-        try:
-            message = await channel.send(
-                content=comment[:1500] or None,
-                embed=embed,
-                view=CinemaWatchedView(self),
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        except discord.HTTPException:
-            logger.warning("Не удалось объявить победителя киновечера", exc_info=True)
-            return
-        await self.cinema.register_message.execute("winner", night.id, channel.id, message.id)
-        self._scheduler.schedule(
-            f"remind:{night.id}", night.scheduled_at, lambda n=night: self._remind(n)
-        )
-
-    async def _remind(self, night: MovieNight) -> None:
-        pending = await self.cinema.list_pending.execute()
-        if not any(n.id == night.id for n in pending.scheduled):
-            return  # отменили или уже смотрят
-        winner = await self.cinema.get_movie.execute(night.winner_entry_id or 0)
-        if winner is None:
-            return
-        channel = self.bot.get_channel(night.channel_id)
-        if channel is None:
-            return
-        try:
-            await channel.send(
-                f"🍿 Время. Смотрим **{_trim(_title_of(winner), 120)}** — "
-                "как закончите, жмите «Мы посмотрели» под анонсом. Я уже с чаем."
-            )
-        except discord.HTTPException:
-            pass
 
     # --- оценки ---
 
@@ -564,37 +485,8 @@ class CinemaCog(commands.Cog):
             await interaction.message.edit(view=None)
         except discord.HTTPException:
             pass
-        await self._post_rating_message(interaction.channel, entry)
+        await self.service.post_rating_message(interaction.channel, entry)
         await interaction.followup.send("Открыла сбор оценок.", ephemeral=True)
-
-    async def _post_rating_message(
-        self, channel: discord.abc.Messageable, entry: MovieEntry
-    ) -> None:
-        embed = discord.Embed(
-            title=f"⭐ Оцениваем: {_trim(_title_of(entry), 200)}",
-            description=(
-                "Кнопки 1–10 — твоя оценка (можно передумать), "
-                "✍️ **Отзыв** — пара слов рецензии.\n"
-                f"Итоги {_ts(entry.rating_ends_at)}."
-            ),
-            color=_EMBED_COLOR,
-        )
-        if entry.poster_url:
-            embed.set_thumbnail(url=entry.poster_url)
-        embed.set_footer(text="Оценок: 0 · Отзывов: 0")
-        try:
-            message = await channel.send(embed=embed, view=CinemaRatingView(self))
-        except discord.HTTPException:
-            logger.warning("Не удалось открыть сбор оценок", exc_info=True)
-            return
-        await self.cinema.register_message.execute(
-            "rating", entry.id, message.channel.id, message.id
-        )
-        self._scheduler.schedule(
-            f"rating:{entry.id}",
-            entry.rating_ends_at,
-            lambda eid=entry.id: self._finalize_rating(eid),
-        )
 
     async def handle_rate(self, interaction: discord.Interaction, score: int) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -646,66 +538,3 @@ class CinemaCog(commands.Cog):
         await interaction.followup.send(
             "Отзыв записан — появится в ветке под итогами. ✂️👁🖤", ephemeral=True
         )
-
-    async def _poposya_verdict(self, entry: MovieEntry, guild_id: int) -> tuple[int | None, str]:
-        if self.chat is None:
-            return None, ""
-        try:
-            text = await self.chat.freeform_remark(
-                f"Киноклуб сервера посмотрел фильм «{entry.title}»"
-                + (f" ({entry.year})" if entry.year else "")
-                + ". Ты тоже смотрела. Ответь СТРОГО в формате «N/10 — комментарий», "
-                "где N — твоя оценка от 1 до 10, а комментарий — одна колкая "
-                "фраза-рецензия в твоём стиле.",
-                datetime.now(UTC),
-                mood=self.mood.get(guild_id),
-            )
-        except Exception:
-            logger.warning("Вердикт Попоси не сгенерировался", exc_info=True)
-            return None, ""
-        match = _SCORE_RE.search(text)
-        score = min(10, max(1, int(match.group(1)))) if match else None
-        return score, text.strip()[:300]
-
-    async def _finalize_rating(self, entry_id: int) -> None:
-        entry = await self.cinema.get_movie.execute(entry_id)
-        if entry is None or entry.status != "rating":
-            return
-        score, review = await self._poposya_verdict(entry, entry.guild_id)
-        result = await self.cinema.finalize_rating.execute(
-            entry_id,
-            datetime.now(UTC),
-            poposya_score=score,
-            poposya_review=review,
-        )
-        if result is None:
-            return
-        await self._disable_message(entry.channel_id, entry.rating_message_id)
-        final = result.entry
-        embed = self.forum.summary_embed(final, result.avg, result.count)
-        channel = self.bot.get_channel(entry.channel_id)
-
-        # приоритет — форум «золотой фонд»: отдельный пост по фильму со сводкой
-        # и всеми рецензиями. В канале просмотра остаётся короткий указатель.
-        forum_link = await self.forum.publish(final, embed)
-        if forum_link is not None:
-            if channel is not None:
-                try:
-                    await channel.send(
-                        f"🎬 **{_trim(_title_of(final), 100)}** — в золотом фонде. "
-                        f"Итоги и рецензии: {forum_link}",
-                        allowed_mentions=discord.AllowedMentions.none(),
-                    )
-                except discord.HTTPException:
-                    pass
-            return
-
-        # фолбэк (форум не задан/недоступен): итоги и ветка прямо в канале
-        if channel is None:
-            return
-        try:
-            summary_message = await channel.send(embed=embed)
-        except discord.HTTPException:
-            logger.warning("Не удалось отправить итоги оценок", exc_info=True)
-            return
-        await self.forum.post_reviews_thread(summary_message, final)
