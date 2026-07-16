@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import UTC, date, datetime, timedelta, timezone
 
@@ -13,6 +12,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.cinema.entities import MovieEntry, MovieNight
 from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
+from src.infrastructure.discord.scheduler import DeferredScheduler
 
 from .formatting import (
     _DATE_RE,
@@ -59,7 +59,7 @@ class CinemaCog(commands.Cog):
         self.mood = mood
         self.movie_search = movie_search
         self.gs = guild_settings
-        self._timers: dict[str, asyncio.Task] = {}
+        self._scheduler = DeferredScheduler("cinema")
         self._restored = False
         self.forum = CinemaForum(self.bot, self.cinema, self._cfg)
 
@@ -73,28 +73,9 @@ class CinemaCog(commands.Cog):
         self.bot.add_view(CinemaRatingView(self))
 
     def cog_unload(self) -> None:
-        for task in self._timers.values():
-            task.cancel()
+        self._scheduler.cancel_all()
 
-    # --- таймеры с восстановлением после рестарта ---
-
-    def _schedule(self, key: str, when: datetime, callback) -> None:
-        old = self._timers.pop(key, None)
-        if old is not None:
-            old.cancel()
-
-        async def run() -> None:
-            delay = (when - datetime.now(UTC)).total_seconds()
-            if delay > 0:
-                await asyncio.sleep(delay)
-            try:
-                await callback()
-            except Exception:
-                logger.exception("Таймер киноклуба упал", extra={"timer": key})
-
-        task = asyncio.create_task(run())
-        self._timers[key] = task
-        task.add_done_callback(lambda _: self._timers.pop(key, None))
+    # --- таймеры с восстановлением после рестарта (см. on_ready) ---
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -117,20 +98,20 @@ class CinemaCog(commands.Cog):
                     NightPollView(self, night.id, candidates),
                     message_id=night.poll_message_id,
                 )
-            self._schedule(
+            self._scheduler.schedule(
                 f"poll:{night.id}",
                 night.poll_ends_at,
                 lambda nid=night.id: self._close_poll(nid),
             )
         for night in pending.scheduled:
-            self._schedule(
+            self._scheduler.schedule(
                 f"remind:{night.id}",
                 night.scheduled_at,
                 lambda n=night: self._remind(n),
             )
         for entry in pending.ratings:
             if entry.rating_ends_at is not None:
-                self._schedule(
+                self._scheduler.schedule(
                     f"rating:{entry.id}",
                     entry.rating_ends_at,
                     lambda eid=entry.id: self._finalize_rating(eid),
@@ -437,7 +418,7 @@ class CinemaCog(commands.Cog):
         await self.cinema.register_message.execute(
             "poll", night.id, interaction.channel.id, message.id
         )
-        self._schedule(
+        self._scheduler.schedule(
             f"poll:{night.id}",
             night.poll_ends_at,
             lambda nid=night.id: self._close_poll(nid),
@@ -460,9 +441,7 @@ class CinemaCog(commands.Cog):
         await interaction.followup.send(replies[status], ephemeral=True)
         if status == "ok" and night is not None:
             for key in (f"poll:{night.id}", f"remind:{night.id}"):
-                task = self._timers.pop(key, None)
-                if task is not None:
-                    task.cancel()
+                self._scheduler.cancel(key)
             await self._disable_message(night.channel_id, night.poll_message_id)
 
     async def handle_night_vote(self, interaction: discord.Interaction, entry_id: int) -> None:
@@ -547,7 +526,9 @@ class CinemaCog(commands.Cog):
             logger.warning("Не удалось объявить победителя киновечера", exc_info=True)
             return
         await self.cinema.register_message.execute("winner", night.id, channel.id, message.id)
-        self._schedule(f"remind:{night.id}", night.scheduled_at, lambda n=night: self._remind(n))
+        self._scheduler.schedule(
+            f"remind:{night.id}", night.scheduled_at, lambda n=night: self._remind(n)
+        )
 
     async def _remind(self, night: MovieNight) -> None:
         pending = await self.cinema.list_pending.execute()
@@ -609,7 +590,7 @@ class CinemaCog(commands.Cog):
         await self.cinema.register_message.execute(
             "rating", entry.id, message.channel.id, message.id
         )
-        self._schedule(
+        self._scheduler.schedule(
             f"rating:{entry.id}",
             entry.rating_ends_at,
             lambda eid=entry.id: self._finalize_rating(eid),
