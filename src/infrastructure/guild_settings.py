@@ -68,6 +68,11 @@ _LABELS: dict[str, tuple[str, str]] = {
     "ai_dialog_summary_keep": ("Сколько резюме хранить", ""),
     "ai_event_comment_chance": ("Шанс реплики на событие (0..1)", ""),
     "ai_event_comment_cooldown": ("Кулдаун реплик на события", "сек"),
+    "ai_passive_enabled": ("Пассивное вклинивание в разговоры", ""),
+    "ai_passive_only_main_channel": ("Пассив только в главном канале", ""),
+    "ai_passive_min_users": ("Мин. людей в разговоре для пассива", ""),
+    "ai_passive_cooldown_minutes": ("Кулдаун пассивных реплик", "мин"),
+    "ai_passive_confidence_min": ("Порог уверенности «встрять» (0..1)", ""),
     # активность
     "voice_points_per_hour": ("Очки за час в войсе (0=выкл)", ""),
     "lonely_hours": ("Часов тишины до «скучаю»", "ч"),

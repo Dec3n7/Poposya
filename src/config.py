@@ -58,7 +58,17 @@ class Settings(BaseSettings):
     ai_dialog_summary_keep: int = 5  # сколько резюме хранить на человека
     ai_event_comment_chance: float = 0.12
     ai_event_comment_cooldown: int = 900
+    # пассивное вклинивание в чужие разговоры (Попося сама решает встрять):
+    # выключено по умолчанию; включается осознанно после обкатки
+    ai_passive_enabled: bool = False
+    ai_passive_only_main_channel: bool = True  # только главный канал
+    ai_passive_min_users: int = 2  # минимум разных людей в окне
+    ai_passive_max_messages: int = 20  # сколько сообщений брать в контекст
+    ai_passive_debounce_seconds: int = 45  # пауза в разговоре до решения
+    ai_passive_cooldown_minutes: int = 12  # не чаще раза в N минут на канал
+    ai_passive_confidence_min: float = 0.7  # порог уверенности «встрять»
     ai_prompt_path: str = "src/infrastructure/ai/prompts/poposya_v1.md"
+    ai_chime_prompt_path: str = "src/infrastructure/ai/prompts/poposya_chime_decision_v1.md"
     # реплик в час на пользователя по уровню отношений
     ai_rate_limits_by_level: dict[int, int] = {
         1: 5,

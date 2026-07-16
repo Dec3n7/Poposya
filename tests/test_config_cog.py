@@ -202,7 +202,8 @@ async def test_typed_autocomplete_filters_by_kind(service):
     assert "cinema_forum_channel" in channel_keys
     assert "warn_threshold" not in channel_keys  # не канал
     bool_keys = [c.value for c in await type(cog)._bool_key_ac(cog, interaction, "")]
-    assert bool_keys == ["music_karaoke_ansi"]
+    assert "music_karaoke_ansi" in bool_keys
+    assert "warn_threshold" not in bool_keys  # не bool
     number_keys = [c.value for c in await type(cog)._number_key_ac(cog, interaction, "")]
     assert "warn_threshold" in number_keys
     assert "music_karaoke_ansi" not in number_keys  # не число

@@ -78,6 +78,12 @@ class GuildSettings(BaseModel):
     ai_rate_limits_by_level: dict[int, int] = Field(
         default={1: 5, 2: 10, 3: 20, 4: 40, 5: 60, 6: 120, 7: 240}
     )
+    # пассивное вклинивание в разговоры
+    ai_passive_enabled: bool = False
+    ai_passive_only_main_channel: bool = True
+    ai_passive_min_users: int = Field(2, ge=2, le=10)
+    ai_passive_cooldown_minutes: int = Field(12, ge=1, le=180)
+    ai_passive_confidence_min: float = Field(0.7, ge=0.0, le=1.0)
 
     # --- активность ---
     voice_points_per_hour: int = Field(3, ge=0, le=100)
