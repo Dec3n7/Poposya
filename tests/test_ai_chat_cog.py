@@ -52,6 +52,14 @@ def make_settings(**over):
         ai_notes_update_every=10,
         ai_event_comment_chance=0.5,
         ai_event_comment_cooldown=900,
+        main_channel="общий",
+        ai_passive_enabled=False,
+        ai_passive_only_main_channel=True,
+        ai_passive_min_users=2,
+        ai_passive_max_messages=20,
+        ai_passive_debounce_seconds=45,
+        ai_passive_cooldown_minutes=12,
+        ai_passive_confidence_min=0.7,
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -65,6 +73,7 @@ def make_service(reply=None):
     svc.summarize_dialog = AsyncMock()
     svc.refresh_notes = AsyncMock()
     svc.comment_on_event = AsyncMock(return_value="крутой трек")
+    svc.maybe_chime = AsyncMock(return_value=None)
     svc.get_rank = AsyncMock(
         return_value=RankInfo(
             points=10,
@@ -287,3 +296,76 @@ async def test_sweep_loop_summarizes_evicted_sessions(monkeypatch):
 async def _empty_aiter():
     return
     yield  # pragma: no cover
+
+
+# --- пассивное вклинивание -------------------------------------------------
+
+
+def _fmsg(uid, text, bot=False):
+    return SimpleNamespace(
+        author=SimpleNamespace(id=uid, bot=bot, display_name=f"U{uid}"), content=text
+    )
+
+
+async def _msgs_aiter(msgs):
+    for m in msgs:
+        yield m
+
+
+def _chan_with_msgs(msgs):
+    ch = MagicMock()
+    ch.history = MagicMock(return_value=_msgs_aiter(msgs))
+    ch.send = AsyncMock()
+    return ch
+
+
+def test_passive_disabled_no_schedule():
+    cog = make_cog()  # ai_passive_enabled=False по умолчанию
+    cog._consider_passive(make_message(mentions_bot=False))
+    assert len(cog._chime_scheduler) == 0
+
+
+async def test_passive_schedules_when_enabled():
+    cog = make_cog(settings=make_settings(ai_passive_enabled=True))
+    cog._consider_passive(make_message(mentions_bot=False))
+    assert len(cog._chime_scheduler) == 1
+    cog._chime_scheduler.cancel_all()
+
+
+def test_passive_skips_non_main_channel():
+    cog = make_cog(settings=make_settings(ai_passive_enabled=True, main_channel="другой"))
+    cog._consider_passive(make_message(mentions_bot=False))  # канал «общий» != «другой»
+    assert len(cog._chime_scheduler) == 0
+
+
+async def test_try_chime_posts_when_decided():
+    svc = make_service()
+    svc.maybe_chime = AsyncMock(return_value="колкая реплика")
+    cog = make_cog(service=svc, settings=make_settings(ai_passive_enabled=True))
+    channel = _chan_with_msgs([_fmsg(1, "sekiro хорош"), _fmsg(2, "согласен")])
+    cog.bot.get_channel = MagicMock(return_value=channel)
+    await cog._try_chime(10, 100)
+    channel.send.assert_awaited_once()
+    assert channel.send.await_args.args[0] == "колкая реплика"
+    assert 100 in cog._chime_cooldowns  # кулдаун выставлен
+
+
+async def test_try_chime_skips_below_min_users():
+    svc = make_service()
+    cog = make_cog(service=svc, settings=make_settings(ai_passive_enabled=True))
+    channel = _chan_with_msgs([_fmsg(1, "один я тут")])  # один человек
+    cog.bot.get_channel = MagicMock(return_value=channel)
+    await cog._try_chime(10, 100)
+    svc.maybe_chime.assert_not_called()  # до модели не дошли
+    channel.send.assert_not_awaited()
+
+
+async def test_try_chime_silent_when_model_declines():
+    svc = make_service()
+    svc.maybe_chime = AsyncMock(return_value=None)  # решила промолчать
+    cog = make_cog(service=svc, settings=make_settings(ai_passive_enabled=True))
+    channel = _chan_with_msgs([_fmsg(1, "a"), _fmsg(2, "b")])
+    cog.bot.get_channel = MagicMock(return_value=channel)
+    await cog._try_chime(10, 100)
+    channel.send.assert_not_awaited()
+    assert 100 not in cog._chime_cooldowns

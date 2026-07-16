@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import discord
 from discord.ext import commands
@@ -14,6 +14,7 @@ from src.domain.ai_chat.exceptions import AIProviderError
 from src.domain.events.bus import IEventBus
 from src.domain.music.events import TrackStarted
 from src.infrastructure.discord.role_sync import RoleSyncService
+from src.infrastructure.discord.scheduler import DeferredScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ class AIChatCog(commands.Cog):
         self._event_cooldowns: dict[int, float] = {}  # channel_id -> monotonic
         self._background: set[asyncio.Task] = set()
         self._sweep_task: asyncio.Task | None = None
+        # пассивное вклинивание: дебаунс по паузе (таймер на канал) + кулдаун
+        self._chime_scheduler = DeferredScheduler("chime")
+        self._chime_cooldowns: dict[int, float] = {}  # channel_id -> monotonic
         event_bus.subscribe(TrackStarted, self._on_track_started)
 
     def _cfg(self, guild_id: int, key: str):
@@ -58,6 +62,7 @@ class AIChatCog(commands.Cog):
             self._sweep_task.cancel()
         for task in self._background:
             task.cancel()
+        self._chime_scheduler.cancel_all()
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -99,6 +104,8 @@ class AIChatCog(commands.Cog):
         if message.author.bot or message.guild is None:
             return
         if not self._is_addressed_to_bot(message):
+            # не к боту — возможно, повод пассивно вклиниться в разговор
+            self._consider_passive(message)
             return
 
         # оскорбление в адрес бота бьёт по настроению
@@ -186,6 +193,74 @@ class AIChatCog(commands.Cog):
             pass
         history.reverse()
         return history
+
+    # --- пассивное вклинивание в разговоры (Попося сама решает встрять) ---
+
+    def _consider_passive(self, message: discord.Message) -> None:
+        """На обычное сообщение (не к боту) взводим/сдвигаем дебаунс-таймер:
+        решение примем на паузе в разговоре, а не на каждой реплике."""
+        guild = message.guild
+        if not self._cfg(guild.id, "ai_passive_enabled"):
+            return
+        if self._cfg(guild.id, "ai_passive_only_main_channel"):
+            if getattr(message.channel, "name", None) != self.settings.main_channel:
+                return
+        channel_id = message.channel.id
+        # в кулдауне — таймер не взводим (всё равно бы промолчала)
+        cooldown = self._cfg(guild.id, "ai_passive_cooldown_minutes") * 60
+        if time.monotonic() - self._chime_cooldowns.get(channel_id, 0.0) < cooldown:
+            return
+        when = datetime.now(UTC) + timedelta(seconds=self.settings.ai_passive_debounce_seconds)
+        self._chime_scheduler.schedule(
+            f"chime:{channel_id}",
+            when,
+            lambda gid=guild.id, cid=channel_id: self._try_chime(gid, cid),
+        )
+
+    async def _try_chime(self, guild_id: int, channel_id: int) -> None:
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            return
+        history, users = await self._collect_passive_window(channel)
+        if not history or users < self._cfg(guild_id, "ai_passive_min_users"):
+            return
+        # повторная проверка кулдауна: пока ждали паузу, она могла заговорить
+        cooldown = self._cfg(guild_id, "ai_passive_cooldown_minutes") * 60
+        if time.monotonic() - self._chime_cooldowns.get(channel_id, 0.0) < cooldown:
+            return
+        text = await self.service.maybe_chime(
+            guild_id,
+            history,
+            datetime.now(UTC),
+            mood=self.mood.get(guild_id),
+            min_confidence=self._cfg(guild_id, "ai_passive_confidence_min"),
+        )
+        if not text:
+            return
+        try:
+            await channel.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
+            self._chime_cooldowns[channel_id] = time.monotonic()
+        except discord.HTTPException:
+            logger.warning("Не удалось отправить пассивную реплику", exc_info=True)
+
+    async def _collect_passive_window(
+        self, channel: discord.abc.Messageable
+    ) -> tuple[list[tuple[str, str]], int]:
+        """Последние сообщения канала (без реплик бота) + число разных людей."""
+        history: list[tuple[str, str]] = []
+        authors: set[int] = set()
+        try:
+            async for msg in channel.history(limit=self.settings.ai_passive_max_messages):
+                if msg.author.bot:
+                    continue
+                text = msg.content.strip()
+                if text:
+                    history.append((msg.author.display_name, text[:300]))
+                    authors.add(msg.author.id)
+        except discord.HTTPException:
+            return [], 0
+        history.reverse()
+        return history, len(authors)
 
     # --- событийный триггер: комментарий к включённому треку ---
 
