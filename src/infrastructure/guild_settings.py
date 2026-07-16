@@ -89,6 +89,9 @@ _LABELS: dict[str, tuple[str, str]] = {
     "finds_claim_cooldown_hours": ("Кулдаун похода", "ч"),
     # музыка
     "music_karaoke_ansi": ("Цветное караоке (ANSI)", ""),
+    # «остаться или уйти»
+    "staykick_enabled": ("ЛС новичку «остаться/уйти»", ""),
+    "staykick_hours": ("Через сколько часов авто-кик", "ч"),
 }
 
 

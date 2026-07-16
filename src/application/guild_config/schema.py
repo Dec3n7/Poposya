@@ -102,6 +102,10 @@ class GuildSettings(BaseModel):
     finds_fail_penalty: int = Field(5, ge=0, le=500)
     finds_claim_cooldown_hours: int = Field(8, ge=0, le=168)
 
+    # --- «остаться или уйти» ---
+    staykick_enabled: bool = False
+    staykick_hours: int = Field(12, ge=1, le=168)
+
     # --- музыка ---
     music_karaoke_ansi: bool = False
 

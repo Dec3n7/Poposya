@@ -24,6 +24,7 @@ from src.domain.relationship.repository import (
     IRelationshipRepository,
     ISecretRoomRepository,
 )
+from src.domain.staykick.repository import IPendingKickRepository
 
 
 class IUnitOfWork(ABC):
@@ -49,6 +50,7 @@ class IUnitOfWork(ABC):
     movies: IMovieEntryRepository
     movie_nights: IMovieNightRepository
     movie_ratings: IMovieRatingRepository
+    pending_kicks: IPendingKickRepository
 
     @abstractmethod
     async def __aenter__(self) -> "IUnitOfWork": ...

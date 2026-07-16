@@ -26,6 +26,7 @@ class RootContainer:
     activity: ActivityContainer
     finds: FindsContainer
     cinema: CinemaContainer
+    staykick: object  # StayKickContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
     ai_provider: object | None  # IAIProvider; закрывается в main
@@ -401,6 +402,21 @@ def build_root_container(settings: Settings) -> RootContainer:
         cinema_profile=GetCinemaProfileUseCase(uow_factory),
     )
 
+    from src.application.staykick.di import StayKickContainer
+    from src.application.staykick.use_cases import (
+        CancelPendingKickUseCase,
+        DueRemindersUseCase,
+        PopDueKicksUseCase,
+        SchedulePendingKickUseCase,
+    )
+
+    staykick = StayKickContainer(
+        schedule_kick=SchedulePendingKickUseCase(uow_factory),
+        cancel_kick=CancelPendingKickUseCase(uow_factory),
+        pop_due_kicks=PopDueKicksUseCase(uow_factory),
+        due_reminders=DueRemindersUseCase(uow_factory),
+    )
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -411,6 +427,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         activity=activity,
         finds=finds,
         cinema=cinema,
+        staykick=staykick,
         guild_settings=guild_settings,
         engine=engine,
         ai_provider=ai_provider,

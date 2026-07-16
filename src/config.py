@@ -153,6 +153,11 @@ class Settings(BaseSettings):
 
     auto_role: str = ""  # роль новичку при входе (название; пусто = выключено)
 
+    # --- «остаться или уйти»: ЛС новичку с кнопками (по умолчанию выкл) ---
+    staykick_enabled: bool = False
+    staykick_hours: int = 12  # через сколько часов авто-кик, если выбрал «уйти»
+    staykick_remind_before_minutes: int = 60  # за сколько до кика напомнить
+
     # слова, которые бот считает оскорблением в свой адрес (настроение −5)
     bot_insult_words: list[str] = [
         "дурак",
