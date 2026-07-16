@@ -97,6 +97,8 @@ async def run() -> None:
         await health_runner.cleanup()
         if container.ai_provider is not None:
             await container.ai_provider.close()
+        if container.chime_provider is not None:
+            await container.chime_provider.close()
         await container.engine.dispose()
 
 

@@ -55,6 +55,8 @@ async def test_build_with_groq_and_fallback(tmp_path):
     finally:
         if root.ai_provider is not None:
             await root.ai_provider.close()
+        if root.chime_provider is not None:
+            await root.chime_provider.close()
         await root.engine.dispose()
 
 
@@ -73,4 +75,6 @@ async def test_build_with_groq_no_fallback(tmp_path):
         assert isinstance(root.ai_provider, CircuitBreakerAIProvider)
     finally:
         await root.ai_provider.close()
+        if root.chime_provider is not None:
+            await root.chime_provider.close()
         await root.engine.dispose()

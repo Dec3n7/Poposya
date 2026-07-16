@@ -29,6 +29,7 @@ class RootContainer:
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
     ai_provider: object | None  # IAIProvider; закрывается в main
+    chime_provider: object | None  # IAIProvider решения (дешёвая модель); закрывается в main
     outbox_dispatcher: object  # OutboxDispatcher; цикл запускает main
 
 
@@ -174,6 +175,7 @@ def build_root_container(settings: Settings) -> RootContainer:
     # тип по интерфейсу: переменную по очереди оборачивают retry -> fallback ->
     # circuit breaker, каждый снова IAIProvider
     ai_provider: IAIProvider | None = None
+    chime_provider: IAIProvider | None = None
     chat_service = None
     if settings.groq_api_key:
         prompt_path = Path(settings.ai_prompt_path)
@@ -209,6 +211,16 @@ def build_root_container(settings: Settings) -> RootContainer:
             failure_threshold=settings.ai_cb_failure_threshold,
             timeout=settings.ai_cb_timeout_seconds,
         )
+        # пассивное вклинивание: решение — на дешёвой быстрой модели (фолбэк-
+        # модель), генерация — на основной; шаблон решения грузим отдельно
+        chime_template = None
+        chime_path = Path(settings.ai_chime_prompt_path)
+        if chime_path.exists():
+            chime_template = PromptTemplate(chime_path.read_text(encoding="utf-8"))
+            decision_model = settings.ai_fallback_model or settings.ai_model
+            chime_provider = ResilientAIProvider(
+                _groq(decision_model), attempts=2, base_delay=settings.ai_retry_base_delay
+            )
         chat_service = ChatService(
             provider=ai_provider,
             queue=AIQueue(settings.ai_max_concurrent),
@@ -227,6 +239,8 @@ def build_root_container(settings: Settings) -> RootContainer:
             dialog_min_exchanges=settings.ai_dialog_min_exchanges,
             deep_dialog_exchanges=settings.ai_deep_dialog_exchanges,
             settings_provider=guild_settings,
+            chime_template=chime_template,
+            chime_provider=chime_provider,
         )
     else:
         logger.warning("GROQ_API_KEY не задан — общение Попоси (ai_chat) отключено")
@@ -400,5 +414,6 @@ def build_root_container(settings: Settings) -> RootContainer:
         guild_settings=guild_settings,
         engine=engine,
         ai_provider=ai_provider,
+        chime_provider=chime_provider,
         outbox_dispatcher=outbox_dispatcher,
     )

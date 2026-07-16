@@ -425,3 +425,60 @@ async def test_get_rank_delegates():
     svc = make_service(rank=FakeRank(make_rank(points=42)))
     rank = await svc.get_rank(1, 10)
     assert rank.points == 42
+
+
+# --- пассивное вклинивание (maybe_chime) ------------------------------------
+
+CHIME_TEMPLATE = PromptTemplate("Реши, встрять ли. Дата {{current_date}}, настроение {{mood}}.")
+_HISTORY = [("Артём", "застрял на быке в sekiro"), ("Лена", "я дропнула лол")]
+
+
+def _chime_service(decision_reply, gen_reply="  колкая реплика  "):
+    return make_service(
+        provider=FakeProvider(gen_reply),
+        chime_template=CHIME_TEMPLATE,
+        chime_provider=FakeProvider(decision_reply),
+    )
+
+
+async def test_chime_disabled_without_template():
+    svc = make_service()  # chime_template не задан
+    assert await svc.maybe_chime(10, _HISTORY, NOW, mood=70) is None
+
+
+async def test_chime_returns_text_when_decided_yes():
+    svc = _chime_service('{"should_chime": true, "confidence": 0.9, "hook": "sekiro"}')
+    text = await svc.maybe_chime(10, _HISTORY, NOW, mood=70, min_confidence=0.7)
+    assert text == "колкая реплика"
+
+
+async def test_chime_silent_when_decided_no():
+    svc = _chime_service('{"should_chime": false, "confidence": 0.95}')
+    assert await svc.maybe_chime(10, _HISTORY, NOW, min_confidence=0.7) is None
+
+
+async def test_chime_silent_below_confidence():
+    svc = _chime_service('{"should_chime": true, "confidence": 0.4}')
+    assert await svc.maybe_chime(10, _HISTORY, NOW, min_confidence=0.7) is None
+
+
+async def test_chime_silent_on_malformed_json():
+    svc = _chime_service("не json, просто болтовня")
+    assert await svc.maybe_chime(10, _HISTORY, NOW, min_confidence=0.5) is None
+
+
+async def test_chime_silent_on_empty_history():
+    svc = _chime_service('{"should_chime": true, "confidence": 0.9}')
+    assert await svc.maybe_chime(10, [], NOW) is None
+
+
+def test_parse_chime_decision():
+    from src.application.ai_chat.service import _parse_chime_decision
+
+    d = _parse_chime_decision(
+        'текст вокруг {"should_chime": true, "confidence": 0.8, "hook": "х"} хвост'
+    )
+    assert d.should_chime is True and d.confidence == 0.8 and d.hook == "х"
+    assert _parse_chime_decision("нет скобок вообще") is None
+    # confidence вне диапазона зажимается
+    assert _parse_chime_decision('{"should_chime": true, "confidence": 5}').confidence == 1.0

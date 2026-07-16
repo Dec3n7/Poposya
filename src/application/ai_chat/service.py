@@ -1,5 +1,7 @@
+import json
 import logging
 import random
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -47,6 +49,34 @@ class ChatReply:
     stale_session: list[tuple[str, str]] | None = None
 
 
+@dataclass(frozen=True)
+class ChimeDecision:
+    should_chime: bool
+    confidence: float
+    hook: str = ""
+
+
+def _parse_chime_decision(raw: str) -> ChimeDecision | None:
+    """Лояльный разбор JSON-решения: находим первый {...}, вытаскиваем поля.
+    Любой сбой -> None (трактуется как «молчать»)."""
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if match is None:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    try:
+        confidence = float(data.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return ChimeDecision(
+        should_chime=bool(data.get("should_chime")),
+        confidence=max(0.0, min(1.0, confidence)),
+        hook=str(data.get("hook") or "")[:120],
+    )
+
+
 class AIQueue:
     """Глобальное ограничение конкурентности запросов к провайдеру (ТЗ 8.4).
     Определён здесь как application-компонент; семафор — деталь реализации.
@@ -92,6 +122,8 @@ class ChatService:
         dialog_min_exchanges: int = 3,
         deep_dialog_exchanges: int = 5,
         settings_provider=None,
+        chime_template: PromptTemplate | None = None,
+        chime_provider: IAIProvider | None = None,
     ):
         self._calendar = calendar
         self._add_summary = add_dialog_summary
@@ -100,6 +132,10 @@ class ChatService:
         self._dialog_min_exchanges = dialog_min_exchanges
         self._deep_exchanges = deep_dialog_exchanges
         self._settings = settings_provider
+        # пассивное вклинивание: шаблон решения и (дешёвый) провайдер для него;
+        # если шаблон не задан — фича выключена, maybe_chime всегда вернёт None
+        self._chime_template = chime_template
+        self._chime_provider = chime_provider
         # (guild_id, user_id) -> текущая сессия диалога (in-memory)
         self._sessions: dict[tuple[int, int], dict] = {}
         self._provider = provider
@@ -279,6 +315,75 @@ class ChatService:
             lambda: self._provider.generate(system_prompt, [ChatMessage("user", instruction)]),
             background=True,
         )
+        return text.strip()
+
+    # --- пассивное вклинивание в чужие разговоры ---
+
+    async def maybe_chime(
+        self,
+        guild_id: int,
+        history: list[tuple[str, str]],
+        now: datetime,
+        mood: int | None = None,
+        min_confidence: float = 0.7,
+    ) -> str | None:
+        """Дешёвая модель решает, встревать ли в разговор; если да и уверенность
+        не ниже порога — основная модель генерит реплику в характере. None —
+        молчим. Фича выключена, если шаблон решения не задан."""
+        if self._chime_template is None or not history:
+            return None
+        decision = await self._decide_chime(history, now, mood)
+        if decision is None or not decision.should_chime:
+            return None
+        if decision.confidence < min_confidence:
+            return None
+        text = await self._generate_chime(history, decision.hook, now, mood)
+        return text or None
+
+    async def _decide_chime(
+        self, history: list[tuple[str, str]], now: datetime, mood: int | None
+    ) -> ChimeDecision | None:
+        if self._chime_template is None:
+            return None
+        system = self._chime_template.render(
+            {"current_date": now.strftime("%d.%m.%Y"), "mood": mood if mood is not None else 50}
+        )
+        conversation = "\n".join(f"{author}: {text}" for author, text in history)
+        provider = self._chime_provider or self._provider
+        try:
+            raw = await self._queue.run(
+                lambda: provider.generate(system, [ChatMessage("user", conversation[:4000])]),
+                background=True,
+            )
+        except Exception:
+            logger.warning("Решение о вклинивании не получено", exc_info=True)
+            return None
+        return _parse_chime_decision(raw)
+
+    async def _generate_chime(
+        self, history: list[tuple[str, str]], hook: str, now: datetime, mood: int | None
+    ) -> str:
+        variables = self._base_variables(now, 2, False, "", False)
+        system = self._template.render(variables) + (
+            "\n---\n"
+            f"{self._mood_line(mood)}"
+            f"{self._holiday_line(now)}"
+            "Ты сама решила коротко вклиниться в разговор в канале — тебя не звали. "
+            + (f"Зацепись за это: {hook}. " if hook else "")
+            + "Ответь ОДНОЙ короткой репликой по существу разговора, в характере, "
+            "без обращения по @ и без префикса имени, не перетягивая внимание на себя."
+        )
+        conversation = "Разговор в канале:\n" + "\n".join(
+            f"{author}: {text}" for author, text in history
+        )
+        try:
+            text = await self._queue.run(
+                lambda: self._provider.generate(system, [ChatMessage("user", conversation[:4000])]),
+                background=True,
+            )
+        except Exception:
+            logger.warning("Реплика-вклинивание не сгенерировалась", exc_info=True)
+            return ""
         return text.strip()
 
     async def refresh_notes(self, request: ChatRequest, award: AwardResult, reply: str) -> None:
