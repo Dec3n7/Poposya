@@ -9,7 +9,7 @@ import pytest
 
 from src.config import Settings
 from src.infrastructure.guild_settings import GuildSettingsService
-from tests.test_chat_service import NOW, make_service
+from tests.test_chat_service import NOW, ROLE_NAMES, make_service
 
 
 def make_settings(**over):
@@ -44,3 +44,18 @@ async def test_min_exchanges_per_guild(gs):
     due_guilds = {g for g, _, _, _ in svc.evict_stale_sessions(NOW + timedelta(minutes=31))}
     assert 10 in due_guilds  # 1 обмен достаточно для сервера 10
     assert 20 not in due_guilds  # серверу 20 одного обмена мало
+
+
+async def test_role_names_per_guild(gs):
+    # сервер 10 переименовал роли; сервер 20 — дефолтные имена из ROLE_NAMES
+    await gs.set_many(
+        10,
+        {
+            "relationship_role_thresholds": [50, 150],
+            "relationship_role_names": ["Прохожий", "Приятель", "Единственный"],
+        },
+    )
+    svc = make_service(settings_provider=gs)
+    assert svc._role_name(10, 0) == "Прохожий"
+    assert svc._role_name(10, 2) == "Единственный"
+    assert svc._role_name(20, 0) == ROLE_NAMES[0]  # без оверрайда — дефолт

@@ -21,12 +21,20 @@ class RelationshipCog(commands.Cog):
         container: RelationshipContainer,
         role_sync: RoleSyncService,
         event_bus: IEventBus,
+        guild_settings=None,
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
+        self.gs = guild_settings
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
         event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)
+
+    def _names(self, guild_id: int) -> list[str]:
+        """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
+        if self.gs is not None:
+            return self.gs.resolved(guild_id).relationship_role_names
+        return self.container.role_names
 
     # --- реакция на доменные события: физическая выдача Discord-ролей ---
 
@@ -64,7 +72,7 @@ class RelationshipCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         info = await self.container.get_rank.execute(interaction.user.id, interaction.guild_id)
         role_name = (
-            self.container.role_names[info.role_index]
+            self._names(interaction.guild_id)[info.role_index]
             if info.role_index is not None
             else "без статуса (она тебя ещё не заметила)"
         )
@@ -98,7 +106,7 @@ class RelationshipCog(commands.Cog):
             member = interaction.guild.get_member(entry.user_id)
             name = member.display_name if member else f"<@{entry.user_id}>"
             role_name = (
-                self.container.role_names[entry.role_index]
+                self._names(interaction.guild_id)[entry.role_index]
                 if entry.role_index is not None
                 else "без статуса"
             )
@@ -126,7 +134,7 @@ class RelationshipCog(commands.Cog):
         info = await self.container.set_points.execute(user.id, interaction.guild_id, points)
         await self.role_sync.sync_member(interaction.guild, user.id, info.role_index)
         role_name = (
-            self.container.role_names[info.role_index]
+            self._names(interaction.guild_id)[info.role_index]
             if info.role_index is not None
             else "без статуса"
         )

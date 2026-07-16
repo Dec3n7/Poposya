@@ -40,7 +40,11 @@ class PoposyaBot(commands.Bot):
         # единая сеть безопасности для необработанных ошибок слеш-команд
         setup_error_handler(self)
 
-        role_sync = RoleSyncService(self, self.container.settings.relationship_role_names)
+        role_sync = RoleSyncService(
+            self,
+            self.container.settings.relationship_role_names,
+            self.container.guild_settings,
+        )
         mood = MoodTracker()
 
         gs = self.container.guild_settings
@@ -69,10 +73,13 @@ class PoposyaBot(commands.Bot):
                 finds=self.container.finds,
                 music=self.container.music,
                 cinema=self.container.cinema,
+                guild_settings=gs,
             )
         )
         await self.add_cog(
-            RelationshipCog(self, self.container.relationship, role_sync, self.container.event_bus)
+            RelationshipCog(
+                self, self.container.relationship, role_sync, self.container.event_bus, gs
+            )
         )
         await self.add_cog(FindsCog(self, self.container.finds, self.container.settings, mood, gs))
         tmdb = TmdbClient(self.container.settings.tmdb_api_key)
@@ -110,6 +117,7 @@ class PoposyaBot(commands.Bot):
                 self.container.relationship,
                 self.container.settings,
                 self.container.event_bus,
+                gs,
             )
         )
         if self.container.ai_chat.chat_service is not None:

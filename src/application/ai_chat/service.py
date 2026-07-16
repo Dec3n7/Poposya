@@ -362,10 +362,11 @@ class ChatService:
         """Доступ к рангу/анкете для когов (инициатива, фильтры внимания)."""
         return await self._get_rank.execute(user_id, guild_id)
 
-    def _role_name(self, index: int | None) -> str:
-        if index is None or not (0 <= index < len(self._role_names)):
+    def _role_name(self, guild_id: int, index: int | None) -> str:
+        names = self._cfg(guild_id, "relationship_role_names", self._role_names)
+        if index is None or not (0 <= index < len(names)):
             return "без статуса"
-        return self._role_names[index]
+        return names[index]
 
     @staticmethod
     def _mood_line(mood: int | None) -> str:
@@ -403,7 +404,8 @@ class ChatService:
             self._mood_line(mood).rstrip("\n"),
             self._holiday_line(now).rstrip("\n"),
             f"Сейчас ты в Discord-канале #{request.channel_name}. "
-            f"С тобой говорит {request.user_display} (статус: {self._role_name(award.role_index)}).",
+            f"С тобой говорит {request.user_display} "
+            f"(статус: {self._role_name(request.guild_id, award.role_index)}).",
             self._survey_block(award.survey),
             self._memory_block(award.recent_summaries),
         ]
@@ -415,7 +417,8 @@ class ChatService:
             )
         elif award.role_index != award.previous_role_index:
             extra.append(
-                f"Статус собеседника только что вырос до «{self._role_name(award.role_index)}» — "
+                "Статус собеседника только что вырос до "
+                f"«{self._role_name(request.guild_id, award.role_index)}» — "
                 "отметь это одной естественной фразой, не объясняя, как работают статусы."
             )
         extra.append("Ответь одним сообщением, в характере, без префикса своего имени.")

@@ -61,6 +61,7 @@ class FunCog(commands.Cog):
         finds=None,  # FindsContainer — витрина коллекции в /profile
         music=None,  # MusicContainer — лайки в /profile
         cinema=None,  # CinemaContainer — кино-статистика в /profile
+        guild_settings=None,  # GuildSettingsService — имена ролей per-guild
     ):
         self.bot = bot
         self.activity = activity
@@ -70,8 +71,15 @@ class FunCog(commands.Cog):
         self.finds = finds
         self.music = music
         self.cinema = cinema
+        self.gs = guild_settings
         self._reminder_task: asyncio.Task | None = None
         self._send_limiter = InMemoryRateLimiter()
+
+    def _names(self, guild_id: int) -> list[str]:
+        """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
+        if self.gs is not None:
+            return self.gs.resolved(guild_id).relationship_role_names
+        return self.relationship.role_names
 
     async def cog_load(self) -> None:
         # напоминания хранятся в БД — рестарт не сбрасывает таймеры
@@ -293,7 +301,7 @@ class FunCog(commands.Cog):
         await interaction.response.defer()
         info = await self.relationship.get_rank.execute(target.id, interaction.guild_id)
         role_name = (
-            self.relationship.role_names[info.role_index]
+            self._names(interaction.guild_id)[info.role_index]
             if info.role_index is not None
             else "☕ Случайный прохожий (пока без статуса)"
         )

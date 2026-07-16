@@ -317,9 +317,9 @@ def test_build_system_prompt_mood_and_holiday():
 
 def test_role_name_out_of_range():
     svc = make_service()
-    assert svc._role_name(None) == "без статуса"
-    assert svc._role_name(99) == "без статуса"
-    assert svc._role_name(0) == "Знакомый"
+    assert svc._role_name(10, None) == "без статуса"
+    assert svc._role_name(10, 99) == "без статуса"
+    assert svc._role_name(10, 0) == "Знакомый"
 
 
 def test_survey_block_empty():

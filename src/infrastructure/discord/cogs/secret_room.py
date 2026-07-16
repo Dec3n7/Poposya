@@ -41,15 +41,23 @@ class SecretRoomCog(commands.Cog):
         container: RelationshipContainer,
         settings: Settings,
         event_bus: IEventBus,
+        guild_settings=None,
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
+        self.gs = guild_settings
         # индекс роли, начиная с которого выдаётся ключ и виден канал:
         # тон роли с индексом i = i + 2 => уровень 5 = индекс 3
         self._min_role_index = max(0, settings.secret_room_min_level - 2)
         self._cleanup_task: asyncio.Task | None = None
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
+
+    def _role_names(self, guild_id: int) -> list[str]:
+        """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
+        if self.gs is not None:
+            return self.gs.resolved(guild_id).relationship_role_names
+        return self.settings.relationship_role_names
 
     async def cog_load(self) -> None:
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -147,7 +155,7 @@ class SecretRoomCog(commands.Cog):
                 view_channel=True, manage_channels=True, send_messages=True, connect=True
             ),
         }
-        for name in self.settings.relationship_role_names[self._min_role_index :]:
+        for name in self._role_names(guild.id)[self._min_role_index :]:
             role = discord.utils.get(guild.roles, name=name)
             if role is not None:
                 overwrites[role] = discord.PermissionOverwrite(

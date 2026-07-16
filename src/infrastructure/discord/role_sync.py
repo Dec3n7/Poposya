@@ -9,13 +9,20 @@ class RoleSyncService:
     """Создание и выдача ролей-статусов. Сверка вызывается при каждом
     начислении очков (самовосстановление после потерянных событий, ТЗ 8.5)."""
 
-    def __init__(self, bot: discord.Client, role_names: list[str]):
+    def __init__(self, bot: discord.Client, role_names: list[str], settings_provider=None):
         self._bot = bot
         self._role_names = role_names
+        self._settings = settings_provider
+
+    def _names_for(self, guild_id: int) -> list[str]:
+        """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
+        if self._settings is not None:
+            return self._settings.resolved(guild_id).relationship_role_names
+        return self._role_names
 
     async def ensure_roles(self, guild: discord.Guild) -> None:
         existing = {role.name for role in guild.roles}
-        for name in self._role_names:
+        for name in self._names_for(guild.id):
             if name in existing:
                 continue
             try:
@@ -40,10 +47,11 @@ class RoleSyncService:
             except discord.HTTPException:
                 return
 
-        managed = {name: discord.utils.get(guild.roles, name=name) for name in self._role_names}
+        names = self._names_for(guild.id)
+        managed = {name: discord.utils.get(guild.roles, name=name) for name in names}
         desired = (
-            managed.get(self._role_names[role_index])
-            if role_index is not None and 0 <= role_index < len(self._role_names)
+            managed.get(names[role_index])
+            if role_index is not None and 0 <= role_index < len(names)
             else None
         )
 
