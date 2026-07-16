@@ -285,7 +285,7 @@ async def test_finalize_posts_reviews_thread():
     thread.send = AsyncMock()
     summary.create_thread = AsyncMock(return_value=thread)
     entry = make_entry("Кино", id=5)
-    await cog._post_reviews_thread(summary, entry)
+    await cog.forum.post_reviews_thread(summary, entry)
     summary.create_thread.assert_awaited_once()
     thread.send.assert_awaited()  # отзывы отправлены в ветку
     sent = thread.send.await_args.args[0]
@@ -298,7 +298,7 @@ async def test_finalize_no_reviews_no_thread():
     cog = make_cog(container)
     summary = MagicMock()
     summary.create_thread = AsyncMock()
-    await cog._post_reviews_thread(summary, make_entry("Кино", id=5))
+    await cog.forum.post_reviews_thread(summary, make_entry("Кино", id=5))
     summary.create_thread.assert_not_awaited()  # нет отзывов — нет ветки
 
 
@@ -316,7 +316,7 @@ def test_build_summary_embed():
         poster_url="http://p",
         watched_at=NOW,
     )
-    embed = cog._build_summary_embed(final, avg=8.4, count=3)
+    embed = cog.forum.summary_embed(final, avg=8.4, count=3)
     names = [f.name for f in embed.fields]
     assert "⭐ Оценка сервера" in names
     assert any("Вердикт Попоси" in n for n in names)
@@ -326,7 +326,7 @@ def test_build_summary_embed():
 
 async def test_publish_forum_disabled_returns_none():
     cog = make_cog(settings=make_settings(cinema_forum_channel=0))
-    link = await cog._publish_to_forum(make_entry("A", id=1), MagicMock())
+    link = await cog.forum.publish(make_entry("A", id=1), MagicMock())
     assert link is None
 
 
@@ -346,7 +346,7 @@ async def test_publish_forum_creates_post_and_ratings():
     )
     cog.bot.get_channel = MagicMock(return_value=forum)
 
-    link = await cog._publish_to_forum(make_entry("Начало", id=5), MagicMock())
+    link = await cog.forum.publish(make_entry("Начало", id=5), MagicMock())
     assert link == "<#777>"
     forum.create_thread.assert_awaited_once()
     thread.send.assert_awaited()  # рецензии + строка «без рецензии»
@@ -365,7 +365,7 @@ async def test_publish_forum_text_channel_fallback():
     msg.create_thread = AsyncMock(return_value=MagicMock())
     text.send = AsyncMock(return_value=msg)
     cog.bot.get_channel = MagicMock(return_value=text)
-    link = await cog._publish_to_forum(make_entry("A", id=5), MagicMock())
+    link = await cog.forum.publish(make_entry("A", id=5), MagicMock())
     assert link == "http://jump/1"
     text.send.assert_awaited_once()
 
@@ -373,7 +373,7 @@ async def test_publish_forum_text_channel_fallback():
 async def test_publish_forum_wrong_type_returns_none():
     cog = make_cog(settings=make_settings(cinema_forum_channel=555))
     cog.bot.get_channel = MagicMock(return_value=MagicMock())  # не форум и не текст
-    link = await cog._publish_to_forum(make_entry("A", id=5), MagicMock())
+    link = await cog.forum.publish(make_entry("A", id=5), MagicMock())
     assert link is None
 
 
@@ -385,13 +385,13 @@ async def test_finalize_sends_pointer_when_forum_used():
     cog = make_cog(container, settings=make_settings(cinema_forum_channel=555))
     cog.chat = None  # без AI-вердикта
     cog._disable_message = AsyncMock()
-    cog._publish_to_forum = AsyncMock(return_value="<#777>")
+    cog.forum.publish = AsyncMock(return_value="<#777>")
     watch = MagicMock()
     watch.send = AsyncMock()
     cog.bot.get_channel = MagicMock(return_value=watch)
 
     await cog._finalize_rating(5)
-    cog._publish_to_forum.assert_awaited_once()
+    cog.forum.publish.assert_awaited_once()
     # в канал просмотра ушёл короткий указатель на форум
     pointer = watch.send.await_args.args[0]
     assert "золотом фонде" in pointer and "<#777>" in pointer

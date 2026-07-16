@@ -23,6 +23,7 @@ from .formatting import (
     _trim,
     _ts,
 )
+from .forum import CinemaForum
 from .views import (
     CinemaCardView,
     CinemaRatingView,
@@ -60,6 +61,7 @@ class CinemaCog(commands.Cog):
         self.gs = guild_settings
         self._timers: dict[str, asyncio.Task] = {}
         self._restored = False
+        self.forum = CinemaForum(self.bot, self.cinema, self._cfg)
 
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
@@ -699,12 +701,12 @@ class CinemaCog(commands.Cog):
             return
         await self._disable_message(entry.channel_id, entry.rating_message_id)
         final = result.entry
-        embed = self._build_summary_embed(final, result.avg, result.count)
+        embed = self.forum.summary_embed(final, result.avg, result.count)
         channel = self.bot.get_channel(entry.channel_id)
 
         # приоритет — форум «золотой фонд»: отдельный пост по фильму со сводкой
         # и всеми рецензиями. В канале просмотра остаётся короткий указатель.
-        forum_link = await self._publish_to_forum(final, embed)
+        forum_link = await self.forum.publish(final, embed)
         if forum_link is not None:
             if channel is not None:
                 try:
@@ -725,132 +727,4 @@ class CinemaCog(commands.Cog):
         except discord.HTTPException:
             logger.warning("Не удалось отправить итоги оценок", exc_info=True)
             return
-        await self._post_reviews_thread(summary_message, final)
-
-    def _build_summary_embed(
-        self, final: MovieEntry, avg: float | None, count: int
-    ) -> discord.Embed:
-        """Красивая сводка по фильму: оценка сервера + вердикт Попоси."""
-        embed = discord.Embed(
-            title=f"🎬 {_trim(_title_of(final), 200)}",
-            description=_trim(final.overview, 400) if final.overview else None,
-            color=_EMBED_COLOR,
-            timestamp=final.watched_at,
-        )
-        embed.add_field(
-            name="⭐ Оценка сервера",
-            value=(f"**{avg}/10** · {count} оцен." if avg is not None else "оценок нет"),
-            inline=True,
-        )
-        if final.poposya_score is not None or final.poposya_review:
-            head = f"**{final.poposya_score}/10** — " if final.poposya_score is not None else ""
-            embed.add_field(
-                name="✂️👁🖤 Вердикт Попоси",
-                value=_trim(f"{head}{final.poposya_review}", 500) or "—",
-                inline=False,
-            )
-        if final.poster_url:
-            embed.set_thumbnail(url=final.poster_url)
-        embed.set_footer(text="Золотой фонд · /movie top")
-        return embed
-
-    async def _publish_to_forum(self, final: MovieEntry, embed: discord.Embed) -> str | None:
-        """Публикует пост по фильму в форум-канал «золотой фонд». Возвращает
-        ссылку-указатель (mention/jump_url) или None, если форум не настроен
-        или публикация не удалась."""
-        forum_id = self._cfg(final.guild_id, "cinema_forum_channel")
-        if not forum_id:
-            return None
-        target = self.bot.get_channel(forum_id)
-        if target is None:
-            logger.warning("Форум киноклуба не найден", extra={"channel_id": forum_id})
-            return None
-        name = _trim(_title_of(final), 100)
-        try:
-            if isinstance(target, discord.ForumChannel):
-                created = await target.create_thread(
-                    name=name,
-                    embed=embed,
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-                thread = created.thread
-                await self._post_ratings_into(thread, final.id)
-                return thread.mention
-            if isinstance(target, discord.TextChannel):
-                # запасной вариант, если указали обычный текстовый канал
-                message = await target.send(embed=embed)
-                try:
-                    thread = await message.create_thread(name=name)
-                    await self._post_ratings_into(thread, final.id)
-                except discord.HTTPException:
-                    pass
-                return message.jump_url
-        except discord.Forbidden:
-            logger.warning("Нет прав публиковать в форум киноклуба", exc_info=True)
-            return None
-        except discord.HTTPException:
-            logger.warning("Не удалось опубликовать фильм в форум", exc_info=True)
-            return None
-        logger.warning(
-            "Канал форума киноклуба неподходящего типа",
-            extra={"channel_id": forum_id, "type": type(target).__name__},
-        )
-        return None
-
-    async def _post_ratings_into(self, thread: discord.Thread, entry_id: int) -> None:
-        """Все оценки и рецензии зрителей — сообщениями от лица бота."""
-        ratings = await self.cinema.list_ratings.execute(entry_id)
-        if not ratings:
-            return
-        reviewed = [r for r in ratings if r.text.strip()]
-        score_only = [r for r in ratings if not r.text.strip() and r.score is not None]
-
-        chunk = ""
-        for r in reviewed:
-            mark = f"{r.score}/10" if r.score is not None else "без оценки"
-            block = f"**<@{r.user_id}>** — {mark}\n> {_trim(r.text, 450)}\n\n"
-            if len(chunk) + len(block) > 1900:
-                await self._send_thread(thread, chunk)
-                chunk = ""
-            chunk += block
-        if chunk:
-            await self._send_thread(thread, chunk)
-
-        if score_only:
-            line = "**Оценили без рецензии:** " + " · ".join(
-                f"<@{r.user_id}> {r.score}/10" for r in score_only
-            )
-            await self._send_thread(thread, _trim(line, 1900))
-
-    async def _post_reviews_thread(
-        self, summary_message: discord.Message, entry: MovieEntry
-    ) -> None:
-        """Собирает отзывы зрителей в ветку под итоговым сообщением."""
-        reviews = await self.cinema.list_reviews.execute(entry.id)
-        if not reviews:
-            return
-        try:
-            thread = await summary_message.create_thread(
-                name=_trim(f"Рецензии: {entry.title}", 100),
-            )
-        except discord.HTTPException:
-            logger.warning("Не удалось создать ветку рецензий", exc_info=True)
-            return
-        # склеиваем отзывы в сообщения ≤2000 символов
-        chunk = ""
-        for review in reviews:
-            score = f"{review.score}/10" if review.score is not None else "без оценки"
-            block = f"**<@{review.user_id}>** ({score})\n> {_trim(review.text, 450)}\n\n"
-            if len(chunk) + len(block) > 1900:
-                await self._send_thread(thread, chunk)
-                chunk = ""
-            chunk += block
-        if chunk:
-            await self._send_thread(thread, chunk)
-
-    @staticmethod
-    async def _send_thread(thread: discord.Thread, text: str) -> None:
-        try:
-            await thread.send(text, allowed_mentions=discord.AllowedMentions.none())
-        except discord.HTTPException:
-            logger.warning("Не удалось отправить рецензию в ветку", exc_info=True)
+        await self.forum.post_reviews_thread(summary_message, final)
