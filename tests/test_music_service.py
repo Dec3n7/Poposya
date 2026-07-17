@@ -369,6 +369,7 @@ async def test_radio_fill_enqueues_liked_tracks():
 async def test_radio_fill_falls_back_to_empty():
     player = MagicMock()
     player.enqueue = AsyncMock()
+    player.history = []  # нечего играло — нет и сида для микса
     session = GuildMusicSession(player=player)
     channel = SimpleNamespace(members=[])  # никого в войсе
     guild = SimpleNamespace(voice_client=SimpleNamespace(channel=channel))
@@ -376,4 +377,38 @@ async def test_radio_fill_falls_back_to_empty():
     container.list_playlists.execute = AsyncMock(return_value=[])  # и плейлистов нет
     radio = make_radio(session=session, guild=guild, container=container)
     assert await radio.fill(10) is False
+    player.enqueue.assert_not_awaited()
+
+
+async def test_radio_fill_uses_youtube_mix_when_no_other_source():
+    player = MagicMock()
+    player.enqueue = AsyncMock()
+    player.history = [make_track("seed")]  # последний игравший — основа микса
+    session = GuildMusicSession(player=player)
+    channel = SimpleNamespace(members=[])  # ни лайков
+    guild = SimpleNamespace(voice_client=SimpleNamespace(channel=channel))
+    container = MagicMock()
+    container.list_playlists.execute = AsyncMock(return_value=[])  # ни плейлистов
+    container.audio_source.resolve = AsyncMock(
+        return_value=[make_track("seed"), make_track("sim1"), make_track("sim2")]
+    )
+    radio = make_radio(session=session, guild=guild, container=container)
+    assert await radio.fill(10) is True
+    url = container.audio_source.resolve.await_args.args[0]
+    assert "list=RDseed" in url  # резолвил Mix именно сида
+    enqueued = player.enqueue.await_args.args[0]
+    assert enqueued and all(t.video_id != "seed" for t in enqueued)  # сид не в очередь
+
+
+async def test_radio_fill_mix_failure_returns_false():
+    player = MagicMock()
+    player.enqueue = AsyncMock()
+    player.history = [make_track("seed")]
+    session = GuildMusicSession(player=player)
+    guild = SimpleNamespace(voice_client=SimpleNamespace(channel=SimpleNamespace(members=[])))
+    container = MagicMock()
+    container.list_playlists.execute = AsyncMock(return_value=[])
+    container.audio_source.resolve = AsyncMock(side_effect=RuntimeError("сеть"))
+    radio = make_radio(session=session, guild=guild, container=container)
+    assert await radio.fill(10) is False  # микс упал — не падаем, просто нечем добрать
     player.enqueue.assert_not_awaited()

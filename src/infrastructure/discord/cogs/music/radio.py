@@ -21,6 +21,7 @@ _HISTORY_LIMIT = 40
 # если предыдущая пачка кончилась быстрее — все треки мертвы, не зацикливаемся
 _REFILL_GUARD_SECONDS = 30
 _BATCH_SIZE = 3
+_MIX_LIMIT = 15  # сколько «похожих» брать из YouTube Mix
 
 
 class RadioService:
@@ -79,6 +80,10 @@ class RadioService:
                 )
                 fresh = [t for t in tracks or [] if t.video_id not in history] or (tracks or [])
         if not fresh:
+            # ни лайков, ни плейлистов — добираем «похожие» из YouTube Mix
+            # по последнему игравшему треку (без внешних API)
+            fresh = await self._from_mix(session, history)
+        if not fresh:
             return False
 
         batch = random.sample(fresh, min(_BATCH_SIZE, len(fresh)))
@@ -87,3 +92,24 @@ class RadioService:
         self._last_fill[guild_id] = time.monotonic()
         await session.player.enqueue(batch)
         return True
+
+    async def _from_mix(
+        self, session: GuildMusicSession, history: "deque[str]"
+    ) -> list[Track]:
+        """«Похожие» из YouTube Mix (watch?v=<id>&list=RD<id>) по последнему
+        игравшему треку. Пустой список — сида нет или микс не отдался."""
+        hist = session.player.history
+        seed = hist[-1].video_id if hist else None
+        if not seed:
+            return []
+        mix_url = f"https://www.youtube.com/watch?v={seed}&list=RD{seed}"
+        try:
+            tracks = await self._container.audio_source.resolve(
+                mix_url, self._bot.user.id, playlist_limit=_MIX_LIMIT
+            )
+        except Exception:
+            logger.warning("Радио: YouTube Mix не резолвится", exc_info=True)
+            return []
+        # сам сид и уже игравшее — мимо; если после фильтра пусто, второй круг
+        fresh = [t for t in tracks if t.video_id != seed and t.video_id not in history]
+        return fresh or [t for t in tracks if t.video_id != seed]
