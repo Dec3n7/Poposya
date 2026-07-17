@@ -36,6 +36,7 @@ from src.infrastructure.db.repositories.relationship import (
     SqlAlchemySecretRoomRepository,
 )
 from src.infrastructure.db.repositories.staykick import SqlAlchemyPendingKickRepository
+from src.infrastructure.db.repositories.tempvoice import SqlAlchemyTempVoiceRepository
 from src.infrastructure.events.outbox import outbox_row_for
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.movie_nights = SqlAlchemyMovieNightRepository(self._session)
         self.movie_ratings = SqlAlchemyMovieRatingRepository(self._session)
         self.pending_kicks = SqlAlchemyPendingKickRepository(self._session)
+        self.temp_voice = SqlAlchemyTempVoiceRepository(self._session)
         self._events = []
         self._committed = False
         return self

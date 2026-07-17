@@ -9,6 +9,7 @@ from src.application.finds.di import FindsContainer
 from src.application.moderation.di import ModerationContainer
 from src.application.music.di import MusicContainer
 from src.application.relationship.di import RelationshipContainer
+from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
 
@@ -27,6 +28,7 @@ class RootContainer:
     finds: FindsContainer
     cinema: CinemaContainer
     staykick: object  # StayKickContainer
+    tempvoice: TempVoiceContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
     ai_provider: object | None  # IAIProvider; закрывается в main
@@ -417,6 +419,24 @@ def build_root_container(settings: Settings) -> RootContainer:
         due_reminders=DueRemindersUseCase(uow_factory),
     )
 
+    from src.application.tempvoice.use_cases import (
+        ClaimTempChannelUseCase,
+        CountTempChannelsUseCase,
+        GetTempChannelUseCase,
+        ListTempChannelsUseCase,
+        RegisterTempChannelUseCase,
+        ReleaseTempChannelUseCase,
+    )
+
+    tempvoice = TempVoiceContainer(
+        register=RegisterTempChannelUseCase(uow_factory),
+        release=ReleaseTempChannelUseCase(uow_factory),
+        get=GetTempChannelUseCase(uow_factory),
+        claim=ClaimTempChannelUseCase(uow_factory),
+        count=CountTempChannelsUseCase(uow_factory),
+        list_channels=ListTempChannelsUseCase(uow_factory),
+    )
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -428,6 +448,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         finds=finds,
         cinema=cinema,
         staykick=staykick,
+        tempvoice=tempvoice,
         guild_settings=guild_settings,
         engine=engine,
         ai_provider=ai_provider,

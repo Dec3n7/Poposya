@@ -11,6 +11,7 @@ import src.infrastructure.db.models.moderation  # noqa: F401
 import src.infrastructure.db.models.music  # noqa: F401
 import src.infrastructure.db.models.outbox  # noqa: F401
 import src.infrastructure.db.models.relationship  # noqa: F401
+import src.infrastructure.db.models.tempvoice  # noqa: F401
 from src.config import Settings
 from src.infrastructure.db.models.base import Base
 

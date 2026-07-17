@@ -19,8 +19,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.domain.relationship.policies import PointsToLevelPolicy
 
-# ключи-каналы (ID; 0 = выключено) — /config покажет их пикером канала
-CHANNEL_KEYS: frozenset[str] = frozenset({"cinema_forum_channel", "finds_channel_id"})
+# ключи-каналы (ID; 0 = выключено) — /config покажет их пикером канала.
+# Пикер отдаёт discord.abc.GuildChannel, поэтому сюда годится и категория
+# (tempvoice_category), а не только текстовый/голосовой канал.
+CHANNEL_KEYS: frozenset[str] = frozenset(
+    {
+        "cinema_forum_channel",
+        "finds_channel_id",
+        "tempvoice_hub_channel",
+        "tempvoice_category",
+    }
+)
 
 
 class GuildSettings(BaseModel):
@@ -105,6 +114,13 @@ class GuildSettings(BaseModel):
     # --- «остаться или уйти» ---
     staykick_enabled: bool = False
     staykick_hours: int = Field(12, ge=1, le=168)
+
+    # --- временные голосовые каналы («каморки») ---
+    tempvoice_hub_channel: int = Field(0, ge=0)  # 0 = фича выключена
+    tempvoice_category: int = Field(0, ge=0)
+    # 50 — жёсткий лимит Discord на число каналов в одной категории
+    tempvoice_max_per_guild: int = Field(25, ge=1, le=50)
+    tempvoice_default_limit: int = Field(0, ge=0, le=99)  # 99 — максимум Discord
 
     # --- музыка ---
     music_karaoke_ansi: bool = False

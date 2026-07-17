@@ -42,6 +42,10 @@ def test_kinds_cover_all_keys():
     assert KEY_KINDS["relationship_role_names"] == "list"
     assert KEY_KINDS["ai_rate_limits_by_level"] == "dict"
     assert KEY_KINDS["warn_threshold"] == "int"
+    # ключи-каналы попадают в kind только через CHANNEL_KEYS: забыть их там —
+    # значит молча получить "int" и текстовый ввод ID вместо пикера канала
+    assert KEY_KINDS["tempvoice_hub_channel"] == "channel"
+    assert KEY_KINDS["tempvoice_category"] == "channel"
 
 
 def test_range_validation():

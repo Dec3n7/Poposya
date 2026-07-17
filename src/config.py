@@ -158,6 +158,14 @@ class Settings(BaseSettings):
     staykick_hours: int = 12  # через сколько часов авто-кик, если выбрал «уйти»
     staykick_remind_before_minutes: int = 60  # за сколько до кика напомнить
 
+    # --- временные голосовые каналы («каморки») ---
+    # хаб — он же выключатель: вошёл в него -> получил свою каморку, 0 = фича выкл
+    tempvoice_hub_channel: int = 0
+    tempvoice_category: int = 0  # куда создавать; 0 = категория самого хаба
+    # потолок живых каморок: у Discord жёсткий лимит 50 каналов в категории
+    tempvoice_max_per_guild: int = 25
+    tempvoice_default_limit: int = 0  # мест в новой каморке (0 = без лимита)
+
     # слова, которые бот считает оскорблением в свой адрес (настроение −5)
     bot_insult_words: list[str] = [
         "дурак",
