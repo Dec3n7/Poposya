@@ -15,6 +15,23 @@ def fmt_duration(seconds: int | None) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def parse_duration(text: str) -> int | None:
+    """«1:23» / «83» / «1:02:03» -> секунды. None — не разобрать (для /seek)."""
+    parts = text.strip().split(":")
+    if not 1 <= len(parts) <= 3:
+        return None
+    try:
+        nums = [int(p) for p in parts]
+    except ValueError:
+        return None
+    if any(n < 0 for n in nums):
+        return None
+    total = 0
+    for n in nums:  # старший разряд слева: [ч] [м] с
+        total = total * 60 + n
+    return total
+
+
 def progress_bar(elapsed: int, total: int, width: int = PROGRESS_WIDTH) -> str:
     if total <= 0:
         return "▬" * width

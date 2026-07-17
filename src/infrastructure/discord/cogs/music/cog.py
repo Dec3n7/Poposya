@@ -17,6 +17,7 @@ from src.infrastructure.audio.spotify import SpotifyLinkResolver
 from src.infrastructure.discord.cogs.music.formatting import (
     EMBED_COLOR,
     fmt_duration,
+    parse_duration,
     trim,
 )
 from src.infrastructure.discord.cogs.music.lyrics import LyricsService
@@ -265,6 +266,54 @@ class MusicCog(commands.Cog):
             return
         await player.shuffle()
         await interaction.response.send_message("🔀 Перемешал очередь.", ephemeral=True)
+
+    @app_commands.command(name="remove", description="Убрать трек из очереди по номеру")
+    @app_commands.describe(position="Номер трека в очереди (как в /queue)")
+    @app_commands.guild_only()
+    async def remove(self, interaction: discord.Interaction, position: int) -> None:
+        player = self.service.get_player(interaction.guild_id)
+        if player is None or not player.queue:
+            await interaction.response.send_message("Очередь пуста.", ephemeral=True)
+            return
+        count = len(player.queue)
+        removed = await player.remove_at(position)
+        if removed is None:
+            await interaction.response.send_message(
+                f"В очереди нет трека №{position} — их всего {count}.", ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            f"🗑️ Убрала из очереди: **{trim(removed.title, 100)}**.",
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @app_commands.command(name="seek", description="Перемотать текущий трек: 1:23, 83 или 1:02:03")
+    @app_commands.describe(position="Позиция: «1:23», секунды «83» или «1:02:03»")
+    @app_commands.guild_only()
+    async def seek(self, interaction: discord.Interaction, position: str) -> None:
+        player = self.service.get_player(interaction.guild_id)
+        if player is None or player.current is None:
+            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            return
+        seconds = parse_duration(position)
+        if seconds is None:
+            await interaction.response.send_message(
+                "Не поняла позицию. Пиши «1:23», «83» или «1:02:03».", ephemeral=True
+            )
+            return
+        if not await player.seek(seconds):
+            track = player.current
+            if track is not None and track.duration is None:
+                msg = "Живой эфир не перемотать."
+            else:
+                limit = fmt_duration(track.duration) if track else "?"
+                msg = f"За пределами трека — он длиной {limit}."
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"⏩ Перемотала на `{fmt_duration(seconds)}`.", ephemeral=True
+        )
 
     @app_commands.command(name="stop", description="Остановить музыку и выйти из канала")
     @app_commands.guild_only()

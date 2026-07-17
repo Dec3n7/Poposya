@@ -6,6 +6,7 @@ from src.domain.music.entities import Track
 from src.infrastructure.discord.cogs.music.formatting import (
     block_index,
     fmt_duration,
+    parse_duration,
     progress_bar,
     trim,
 )
@@ -21,6 +22,18 @@ def test_fmt_duration():
     assert fmt_duration(3600) == "1:00:00"
     assert fmt_duration(3725) == "1:02:05"
     assert fmt_duration(0) == "0:00"
+
+
+def test_parse_duration():
+    assert parse_duration("83") == 83  # голые секунды
+    assert parse_duration("1:23") == 83  # м:с
+    assert parse_duration("1:02:03") == 3723  # ч:м:с
+    assert parse_duration(" 0:00 ") == 0  # обрезка пробелов
+    # мусор и отрицательные — None (для внятного отказа /seek)
+    assert parse_duration("abc") is None
+    assert parse_duration("1:2:3:4") is None
+    assert parse_duration("-5") is None
+    assert parse_duration("") is None
 
 
 def test_progress_bar():

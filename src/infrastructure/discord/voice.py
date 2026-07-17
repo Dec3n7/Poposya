@@ -30,13 +30,18 @@ class DiscordVoiceConnection(IVoiceConnection):
         volume: float,
         on_finished: Callable[[Exception | None], None],
         headers: dict | None = None,
+        seek_seconds: float = 0.0,
     ) -> None:
         # reconnect-флаги + HTTP-заголовки (User-Agent) — только для HTTP-стрима;
         # локальному файлу из кэша они не нужны (и дали бы предупреждения ffmpeg)
         is_remote = stream_url.startswith(("http://", "https://"))
-        before = None
+        parts = []
         if is_remote:
-            before = " ".join(p for p in (_FFMPEG_BEFORE, _headers_arg(headers)) if p)
+            parts.extend((_FFMPEG_BEFORE, _headers_arg(headers)))
+        if seek_seconds > 0:
+            # -ss ДО -i: быстрый input-seeking (перемотка потока/файла для /seek)
+            parts.append(f"-ss {seek_seconds:.3f}")
+        before = " ".join(p for p in parts if p) or None
         audio = discord.FFmpegPCMAudio(
             stream_url,
             executable=self._ffmpeg_path,

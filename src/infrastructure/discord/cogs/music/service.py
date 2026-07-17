@@ -10,6 +10,8 @@
 import asyncio
 import functools
 import logging
+import random
+import time
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING
 
@@ -41,6 +43,16 @@ logger = logging.getLogger(__name__)
 # сколько ждать перед выходом, когда в войсе не осталось людей (пауза/переход)
 _EMPTY_GRACE_SECONDS = 120
 
+# не сыпать репликой на каждый мёртвый трек битого плейлиста
+_FAIL_NOTIFY_COOLDOWN = 15
+
+# реплики о не заигравшем треке — в характере, без дежурности
+_FAIL_PHRASES = (
+    "«{title}» включить не вышло — то ли удалили, то ли YouTube капризничает. Пропускаю.",
+    "«{title}» не запускается, хоть тресни. Ставь другую.",
+    "С «{title}» что-то не так — не отдаётся. Дальше по очереди.",
+)
+
 
 class MusicPlayerService:
     def __init__(self, bot: commands.Bot, container: MusicContainer):
@@ -51,6 +63,7 @@ class MusicPlayerService:
         self.sessions: dict[int, GuildMusicSession] = {}
         self._background: set[asyncio.Task] = set()
         self._empty_grace: dict[int, asyncio.Task] = {}  # таймеры выхода из пустого войса
+        self._last_fail_notify: dict[int, float] = {}  # антиспам реплик о провале трека
         self._presence_name: str | None = None  # что сейчас в статусе бота
         # внедряется композицией (MusicCog) после создания:
         self.radio: RadioService | None = None
@@ -158,6 +171,7 @@ class MusicPlayerService:
             )
             player.on_state_changed = functools.partial(self._on_player_state, guild.id)
             player.on_idle = functools.partial(self._on_idle, guild.id)
+            player.on_track_failed = functools.partial(self._on_track_failed, guild.id)
             session = GuildMusicSession(player=player)
             self.sessions[guild.id] = session
         return session
@@ -243,6 +257,27 @@ class MusicPlayerService:
         player = self.get_player(guild_id)
         if player is not None and player.current is not None and self.prefetch_lyrics:
             self.prefetch_lyrics(player.current)
+
+    async def _on_track_failed(self, guild_id: int, track: Track, reason: str) -> None:
+        """Трек не удалось включить — сказать об этом в чат вместо молчания.
+        С кулдауном: битый плейлист не должен породить залп реплик."""
+        now = time.monotonic()
+        if now - self._last_fail_notify.get(guild_id, 0.0) < _FAIL_NOTIFY_COOLDOWN:
+            return
+        self._last_fail_notify[guild_id] = now
+        player = self.get_player(guild_id)
+        channel = (
+            self.bot.get_channel(player.text_channel_id)
+            if player is not None and player.text_channel_id
+            else None
+        )
+        if channel is None:
+            return
+        text = random.choice(_FAIL_PHRASES).format(title=trim(track.title, 100))
+        try:
+            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
 
     async def _refresh_message(self, guild_id: int) -> None:
         session = self.sessions.get(guild_id)

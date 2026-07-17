@@ -47,14 +47,20 @@ class GuildPlayer:
         self.volume = volume
         self.is_paused = False
 
-        # UI-хуки (устанавливает ког): обновить сообщение плеера / очередь кончилась
+        # UI-хуки (устанавливает ког): обновить сообщение плеера / очередь кончилась /
+        # трек не удалось включить (ког сообщит об этом в чат от лица Попоси)
         self.on_state_changed: Callable[[], Awaitable[None]] | None = None
         self.on_idle: Callable[[], Awaitable[None]] | None = None
+        self.on_track_failed: Callable[[Track, str], Awaitable[None]] | None = None
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._skip_requested = False
         self._suppress_history = False
         self._stopping = False
+        # поток текущего трека (url, headers) — чтобы /seek перезапустил ffmpeg
+        # с -ss без повторного извлечения yt-dlp
+        self._current_stream: tuple[str, dict | None] | None = None
+        self._seek_to: int | None = None  # запрошенная позиция перемотки, сек
         self._started_mono: float | None = None
         self._paused_mono: float | None = None
         self._paused_total = 0.0
@@ -158,12 +164,43 @@ class GuildPlayer:
         await self._notify()
         return self.volume
 
+    async def seek(self, position: int) -> bool:
+        """Перемотать текущий трек на position секунд. False — нельзя:
+        нет трека, живой эфир (без длительности) или позиция вне диапазона.
+
+        Механика: ставим _seek_to и через stop() дёргаем after-callback —
+        _advance увидит флаг и перезапустит тот же трек с -ss, не продвигая
+        очередь и не публикуя TrackStarted заново."""
+        track = self.current
+        if track is None or track.duration is None:
+            return False
+        if not 0 <= position < track.duration:
+            return False
+        if self._current_stream is None:
+            return False
+        self._seek_to = position
+        self._voice.stop()
+        return True
+
     async def shuffle(self) -> None:
         items = list(self.queue)
         random.shuffle(items)
         self.queue = deque(items)
         await self._notify()
         self._prefetch_next()  # голова очереди сменилась
+
+    async def remove_at(self, position: int) -> Track | None:
+        """Убрать трек из очереди по 1-based позиции (как показывает /queue).
+        None — такого номера нет. Текущий трек не трогается: это очередь."""
+        index = position - 1
+        if not 0 <= index < len(self.queue):
+            return None
+        items = list(self.queue)
+        removed = items.pop(index)
+        self.queue = deque(items)
+        await self._notify()
+        self._prefetch_next()  # голова очереди могла смениться
+        return removed
 
     async def stop_and_clear(self) -> None:
         self._stopping = True
@@ -299,6 +336,7 @@ class GuildPlayer:
                     "Не удалось получить аудиопоток, пропускаю трек",
                     extra={"track": track.title, "reason": str(exc)},
                 )
+                await self._notify_failed(track, str(exc))
                 return False
             self._store_stream_url(track.video_id, stream_url)
         self._loop = asyncio.get_running_loop()
@@ -306,6 +344,7 @@ class GuildPlayer:
         self._reset_timing()
         self._started_mono = time.monotonic()
         headers = self._audio.stream_headers(track.video_id)
+        self._current_stream = (stream_url, headers)  # для возможной перемотки
         await self._voice.play(stream_url, self.volume, self._on_finished, headers)
         await self._bus.publish(
             TrackStarted(
@@ -321,6 +360,20 @@ class GuildPlayer:
         self._prefetch_next()
         return True
 
+    async def _restart_at(self, position: int) -> None:
+        """Перезапуск текущего трека с позиции position (для /seek): тот же поток,
+        ffmpeg с -ss, тайминг сдвинут так, чтобы elapsed() показал position."""
+        if self.current is None or self._current_stream is None:
+            await self._play_next()
+            return
+        stream_url, headers = self._current_stream
+        self._reset_timing()
+        self._started_mono = time.monotonic() - position
+        await self._voice.play(
+            stream_url, self.volume, self._on_finished, headers, seek_seconds=position
+        )
+        await self._notify()
+
     def _on_finished(self, error: Exception | None) -> None:
         # Вызывается из аудио-потока discord.py — переносим в event loop.
         if self._loop is None or self._loop.is_closed():
@@ -331,6 +384,10 @@ class GuildPlayer:
         if error:
             logger.error("Ошибка воспроизведения", extra={"error": str(error)})
         if self._stopping:
+            return
+        if self._seek_to is not None:
+            await self._restart_at(self._seek_to)
+            self._seek_to = None
             return
         skipped, self._skip_requested = self._skip_requested, False
         suppress, self._suppress_history = self._suppress_history, False
@@ -352,3 +409,10 @@ class GuildPlayer:
                 await self.on_state_changed()
             except Exception:
                 logger.exception("Ошибка обновления сообщения плеера")
+
+    async def _notify_failed(self, track: Track, reason: str) -> None:
+        if self.on_track_failed:
+            try:
+                await self.on_track_failed(track, reason)
+            except Exception:
+                logger.exception("Хук on_track_failed упал")

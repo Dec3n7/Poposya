@@ -22,13 +22,15 @@ def make_track(video_id: str, title: str | None = None) -> Track:
 class FakeVoice(IVoiceConnection):
     def __init__(self):
         self.played: list[str] = []
+        self.seeks: list[float] = []  # seek_seconds каждого play
         self.volume: float | None = None
         self.paused = False
         self.disconnected = False
         self._on_finished = None
 
-    async def play(self, stream_url, volume, on_finished, headers=None):
+    async def play(self, stream_url, volume, on_finished, headers=None, seek_seconds=0.0):
         self.played.append(stream_url)
+        self.seeks.append(seek_seconds)
         self.volume = volume
         self._on_finished = on_finished
 
@@ -92,6 +94,98 @@ async def test_enqueue_starts_playback(player, voice):
     assert player.current.video_id == "a"
     assert list(player.queue) == [make_track("b")]
     assert voice.played == ["stream:a"]
+
+
+class FailingAudio(FakeAudio):
+    """Источник, который не может выдать поток для перечисленных video_id."""
+
+    def __init__(self, dead: set[str]):
+        self._dead = dead
+
+    async def get_stream_url(self, track):
+        from src.domain.music.exceptions import TrackResolveError
+
+        if track.video_id in self._dead:
+            raise TrackResolveError("мертвяк")
+        return f"stream:{track.video_id}"
+
+
+async def test_failed_track_notifies_and_advances(voice):
+    player = GuildPlayer(
+        guild_id=1,
+        audio_source=FailingAudio(dead={"a"}),
+        voice=voice,
+        event_bus=InMemoryEventBus(),
+        volume=0.5,
+    )
+    failed: list[tuple[str, str]] = []
+
+    async def on_failed(track, reason):
+        failed.append((track.video_id, reason))
+
+    player.on_track_failed = on_failed
+    await player.enqueue([make_track("a"), make_track("b")])
+    # «a» мёртв: хук позвали, плеер перешёл к «b», в очереди «a» не застрял
+    assert failed == [("a", "мертвяк")]
+    assert player.current.video_id == "b"
+    assert voice.played == ["stream:b"]
+
+
+async def test_failed_hook_absent_still_advances(voice):
+    # без хука провал по-прежнему просто пропускается (обратная совместимость)
+    player = GuildPlayer(
+        guild_id=1,
+        audio_source=FailingAudio(dead={"a"}),
+        voice=voice,
+        event_bus=InMemoryEventBus(),
+        volume=0.5,
+    )
+    await player.enqueue([make_track("a"), make_track("b")])
+    assert player.current.video_id == "b"
+
+
+async def test_remove_at_takes_track_out_of_queue(player, voice):
+    await player.enqueue([make_track("a"), make_track("b"), make_track("c")])
+    # играет «a», в очереди [b, c]; убираем №2 (c)
+    removed = await player.remove_at(2)
+    assert removed.video_id == "c"
+    assert [t.video_id for t in player.queue] == ["b"]
+    assert player.current.video_id == "a"  # текущий не тронут
+
+
+async def test_remove_at_out_of_range_returns_none(player, voice):
+    await player.enqueue([make_track("a"), make_track("b")])
+    assert await player.remove_at(5) is None
+    assert await player.remove_at(0) is None  # 1-based, нуля нет
+    assert [t.video_id for t in player.queue] == ["b"]  # очередь цела
+
+
+async def test_seek_restarts_same_track_at_offset(player, voice):
+    await player.enqueue([make_track("a"), make_track("b")])
+    assert await player.seek(90) is True
+    await settle()
+    # тот же трек, без продвижения очереди; ffmpeg получил offset 90
+    assert player.current.video_id == "a"
+    assert list(player.queue) == [make_track("b")]  # «b» не тронут
+    assert voice.seeks[-1] == 90  # ffmpeg -ss 90
+    assert 89 <= player.elapsed() <= 91  # тайминг сдвинут на позицию
+
+
+async def test_seek_rejects_out_of_range(player, voice):
+    await player.enqueue([make_track("a")])  # duration=180
+    assert await player.seek(999) is False
+    assert await player.seek(-5) is False
+    assert player.current.video_id == "a"  # ничего не перезапустилось
+
+
+async def test_seek_rejects_live_stream(voice):
+    player = GuildPlayer(
+        guild_id=1, audio_source=FakeAudio(), voice=voice,
+        event_bus=InMemoryEventBus(), volume=0.5,
+    )
+    live = Track(video_id="live", title="эфир", url="u", duration=None, requested_by=1)
+    await player.enqueue([live])
+    assert await player.seek(10) is False  # у эфира нет длительности
 
 
 async def test_skip_advances_queue(player, voice):
