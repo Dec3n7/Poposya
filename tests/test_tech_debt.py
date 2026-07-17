@@ -3,13 +3,10 @@
 import sqlite3
 from datetime import UTC, datetime
 
-import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
 from src.infrastructure.db.backup import SqliteBackupService, sqlite_path_from_url
-from src.infrastructure.db.models.base import Base
 from src.infrastructure.db.models.outbox import OutboxEventModel
 from src.infrastructure.db.repositories.activity import SqlAlchemyVoiceProgressRepository
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -23,14 +20,11 @@ from src.infrastructure.events.outbox import (
 
 NOW = datetime(2026, 7, 10, 23, 0, tzinfo=UTC)
 
-
-@pytest.fixture
-async def session_factory(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield async_sessionmaker(engine, expire_on_commit=False)
-    await engine.dispose()
+# session_factory берётся из conftest: своя копия фикстуры держала бы outbox и
+# войс-прогресс на SQLite даже при TEST_DATABASE_URL, а это критичная
+# инфраструктура — её надо проверять на той БД, где живёт бот.
+# Тесты бэкапа ниже намеренно работают с sqlite3 напрямую: сам
+# SqliteBackupService умеет только SQLite, и это его контракт, а не недосмотр.
 
 
 # --- бэкап SQLite ---
