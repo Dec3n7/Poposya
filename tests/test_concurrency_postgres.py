@@ -29,7 +29,10 @@ from src.application.activity.use_cases import (
 )
 from src.application.relationship.use_cases import (
     AwardPointUseCase,
+    BirthdayTickUseCase,
+    DecayPointsUseCase,
     GetRankUseCase,
+    SetBirthdayUseCase,
     SetPointsUseCase,
 )
 from src.application.staykick.use_cases import SchedulePendingKickUseCase
@@ -193,3 +196,78 @@ async def test_admin_set_points_not_lost_to_concurrent_award(uow_factory):
 
     rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
     assert rank.points in (100, 101)  # админская правка пережила гонку
+
+
+# --- фоновые пути (угасание/ДР) под локом: full-row save не теряет чужой апдейт ---
+
+
+# Одиночная гонка двух писателей под gather часто сериализуется планировщиком
+# (короткая транзакция целиком проходит до переключения), поэтому фоновые фиксы
+# проверяем ПАКЕТНО: один фоновой проход (тик/угасание) ∥ N правок веб-панели на
+# тех же людей. Высокая контеншн реально перекрывает окна чтения и ловит потерю
+# апдейта. По-прежнему через gather (ручное чередование дедлочит под FOR UPDATE).
+
+
+async def test_birthday_tick_batch_and_awards_both_survive(uow_factory):
+    """Тик ДР пачкой (одна транзакция помечает всех именинников) ∥ N начислений
+    очков этим же людям. Тик и award пишут строку целиком, но трогают РАЗНЫЕ поля
+    (маркер поздравления vs очки). Без блокировки последний save затирал чужое:
+    либо терялось очко (award), либо сбрасывался маркер (двойное поздравление).
+    find_birthdays теперь под FOR UPDATE (как get_or_create у award) — оба поля
+    выживают. Падает на мутации (снятый лок), зелёный на фиксе."""
+    n = 12
+    for uid in range(1, n + 1):
+        await SetPointsUseCase(uow_factory, POLICY).execute(uid, 10, 5)
+        await SetBirthdayUseCase(uow_factory).execute(uid, 10, NOW.day, NOW.month)
+
+    tick = BirthdayTickUseCase(uow_factory, remind_days=3)
+    await asyncio.gather(
+        tick.execute(NOW),
+        *[
+            AwardPointUseCase(uow_factory, POLICY, daily_cap=1000, absence_days=30).execute(
+                uid, 10, 0, NOW
+            )
+            for uid in range(1, n + 1)
+        ],
+    )
+
+    async with uow_factory() as uow:
+        profiles = {uid: await uow.relationships.get(uid, 10) for uid in range(1, n + 1)}
+    points = {uid: p.points for uid, p in profiles.items()}
+    assert all(v == 6 for v in points.values()), points  # начисления не затёрты тиком
+    # ни один маркер не затёрт award'ом (иначе двойное поздравление)
+    assert all(p.birthday_congratulated_at is not None for p in profiles.values())
+
+
+async def test_decay_batch_not_lost_to_concurrent_set_points(uow_factory):
+    """Пакетное угасание (одна транзакция на все профили) ∥ админ правит очки
+    этих же людей через веб-панель. Высокая контеншн (1 угасание + N set-points),
+    поэтому потеря апдейта воспроизводится, а не маскируется планировщиком.
+
+    list_decayable без FOR UPDATE читал очки, потом Python-side save затирал
+    админскую правку старым значением (points=90 вместо 100/490/500). С локом
+    каждый профиль сериализуется: угасание видит либо исходные 100 (→90, потом
+    админ →500), либо уже выставленные админом (→490). Порча (90) исключена.
+
+    N=12 (set_points=0), NOW фиксирован. При старом коде хотя бы один профиль
+    ловит затёртую правку; падает на мутации, зелёный на фиксе."""
+    n = 12
+    old = NOW - timedelta(days=40)  # старый диалог -> все профили угасаемы
+    seed = AwardPointUseCase(uow_factory, POLICY, daily_cap=1000, absence_days=30)
+    setter = SetPointsUseCase(uow_factory, POLICY)
+    for uid in range(1, n + 1):
+        await seed.execute(uid, 10, 0, old)  # last_dialog в прошлом -> угасаем
+        await setter.execute(uid, 10, 100)  # старт со 100 очков
+
+    decay = DecayPointsUseCase(uow_factory, POLICY, after_days=30, every_days=7, amount=10)
+    # угасание пачкой ∥ N админских правок на 500 очков этим же людям
+    await asyncio.gather(
+        decay.execute(NOW),
+        *[SetPointsUseCase(uow_factory, POLICY).execute(uid, 10, 500) for uid in range(1, n + 1)],
+    )
+
+    async with uow_factory() as uow:
+        finals = {uid: (await uow.relationships.get(uid, 10)).points for uid in range(1, n + 1)}
+    # 500 = админ после угасания (или угасание пропустило); 490 = угасание после
+    # админа. Значения порчи 90 (админ затёрт) или 100 (угасание затёрто) — баг.
+    assert all(p in (490, 500) for p in finals.values()), finals

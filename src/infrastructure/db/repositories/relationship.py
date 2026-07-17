@@ -271,9 +271,17 @@ class SqlAlchemyRelationshipRepository(IRelationshipRepository):
         return profile
 
     async def find_birthdays(self, month: int, day: int) -> list[RelationshipProfile]:
-        stmt = select(RelationshipProfileModel).where(
-            RelationshipProfileModel.birthday_month == month,
-            RelationshipProfileModel.birthday_day == day,
+        # Только write-путь (BirthdayTickUseCase помечает дедуп-маркеры и save).
+        # FOR UPDATE: конкурентный award/set-points на тот же профиль ждёт
+        # коммита — иначе full-row save тика затирает чужие очки, а чужой save
+        # затирает наш маркер (двойное поздравление). На SQLite — no-op.
+        stmt = (
+            select(RelationshipProfileModel)
+            .where(
+                RelationshipProfileModel.birthday_month == month,
+                RelationshipProfileModel.birthday_day == day,
+            )
+            .with_for_update()
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         result = []
@@ -311,15 +319,25 @@ class SqlAlchemyRelationshipRepository(IRelationshipRepository):
     ) -> list[RelationshipProfile]:
         from sqlalchemy import or_
 
-        stmt = select(RelationshipProfileModel).where(
-            RelationshipProfileModel.points > 0,
-            RelationshipProfileModel.frozen_by_admin.is_(False),
-            RelationshipProfileModel.last_dialog_at.is_not(None),
-            RelationshipProfileModel.last_dialog_at < inactive_before.replace(tzinfo=None),
-            or_(
-                RelationshipProfileModel.last_decay_at.is_(None),
-                RelationshipProfileModel.last_decay_at <= decayed_before.date(),
-            ),
+        # Только write-путь (DecayPointsUseCase списывает очки и save). FOR UPDATE
+        # блокирует угасающие строки на время транзакции: конкурентный award/
+        # set-points ждёт, поэтому full-row save угасания не теряет чужой апдейт
+        # (и наоборот). Угасают неактивные профили — контеншн минимален. Переход
+        # титула «Единственного» ниже намеренно НЕ локируется (fail-loud через
+        # частичный unique-индекс — см. CONCURRENCY_PLAN). На SQLite — no-op.
+        stmt = (
+            select(RelationshipProfileModel)
+            .where(
+                RelationshipProfileModel.points > 0,
+                RelationshipProfileModel.frozen_by_admin.is_(False),
+                RelationshipProfileModel.last_dialog_at.is_not(None),
+                RelationshipProfileModel.last_dialog_at < inactive_before.replace(tzinfo=None),
+                or_(
+                    RelationshipProfileModel.last_decay_at.is_(None),
+                    RelationshipProfileModel.last_decay_at <= decayed_before.date(),
+                ),
+            )
+            .with_for_update()
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return self._cached(rows)
