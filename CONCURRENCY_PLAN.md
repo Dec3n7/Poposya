@@ -104,17 +104,30 @@ save(profile)                           # ПЕРЕЗАПИСЫВАЮТ ВСЮ С
 архитектуру, а edge-кейс «Единственного» уже прикрыт индексом (fail-loud).
 Если понадобится — B/C можно добавить точечно позже.
 
-### План реализации A
-1. `IRelationshipRepository.get_or_create` — читать через
-   `select(Model).where(pk).with_for_update()` вместо `session.get`.
-   `get()` (чтение) не трогать.
-2. Проверить, что identity-map репозитория не отдаёт незалоченный кэш там, где
-   нужен лок (первый `get_or_create` в транзакции должен реально взять лок).
-3. Тест-регрессия в `tests/test_concurrency_postgres.py` (только Postgres):
-   N параллельных `AwardPointUseCase` на одного юзера → `points == N`.
-   ДО фикса тест падает (доказать баг мутацией/старой версией), ПОСЛЕ — зелёный.
-   Плюс тест: бот-award ∥ web-set-points не теряет админскую правку.
-4. Полный прогон на SQLite и на Postgres (`TEST_DATABASE_URL`).
+### План реализации A — ✅ СДЕЛАНО (2026-07-18)
+Реализация в `get_or_create` вышла в ДВА шага, а не один — при написании
+регресс-теста всплыло, что чистого `FOR UPDATE` мало:
+
+1. **Гонка первой вставки.** `SELECT … FOR UPDATE` НЕ блокирует
+   несуществующую строку. Для нового профиля два первых писателя оба уходили в
+   `INSERT` → `UniqueViolation` (тест это поймал сразу). Поэтому шаг 0:
+   `INSERT … ON CONFLICT DO NOTHING` (диалект-хелпер `_upsert`, как в activity)
+   — строка гарантированно существует до блокировки.
+2. **Гонка апдейта.** Затем `SELECT … WHERE pk … .with_for_update()` — второй
+   писатель ждёт коммита первого и под READ COMMITTED **перечитывает** свежие
+   очки. `get()` (чистое чтение) не тронут.
+3. Identity-map: `get_or_create` — первый доступ к строке во всех write-путях
+   (проверено по всем 13 use-case'ам), поэтому лок реально берётся; повторный
+   вызов в той же транзакции отдаёт уже залоченный объект из кэша.
+4. Регресс-тесты в `tests/test_concurrency_postgres.py`:
+   - `test_award_points_no_lost_updates_under_concurrency` — 10 параллельных
+     award на нового юзера → `points == 10`; **строго падает на старом коде**
+     (доказано мутацией: откат `get_or_create` к `session.get` → UniqueViolation);
+   - `test_admin_set_points_not_lost_to_concurrent_award` — сценарий-смоук
+     бот-award ∥ web-set-points (итог 100/101, никогда 1).
+5. Прогон зелёный на SQLite (870 passed) и Postgres (relationship+гонки 40/40);
+   ruff/mypy чисто. `with_for_update` и `ON CONFLICT` на SQLite безопасны
+   (no-op / родная поддержка).
 
 ### Остаток (вторично, после A)
 Фоновые пути пишут профиль не через `get_or_create`, а через list-запросы:
@@ -171,12 +184,14 @@ reload сигнал).
 
 ## План работы (по фазам)
 
-- [ ] **Фаза 0 — решение.** Утвердить Вариант A для relationship (этот файл).
-- [ ] **Фаза 1 — relationship (HIGH #1).**
-  - [ ] `get_or_create` → `with_for_update`.
-  - [ ] Регресс-тесты в `test_concurrency_postgres.py` (N award = N points;
-        award ∥ set-points).
-  - [ ] Прогон SQLite + Postgres; ruff/mypy; деплой; чекпоинт.
+- [x] **Фаза 0 — решение.** Утвердить Вариант A для relationship (этот файл).
+- [x] **Фаза 1 — relationship (HIGH #1).** ✅ 2026-07-18
+  - [x] `get_or_create` → `ON CONFLICT DO NOTHING` + `with_for_update`
+        (двухшаговый: см. «План реализации A» — гонка вставки + гонка апдейта).
+  - [x] Регресс-тесты в `test_concurrency_postgres.py` (N award = N points,
+        строго падает на старом коде; award ∥ set-points — смоук).
+  - [x] Прогон SQLite (870) + Postgres (40/40); ruff/mypy чисто.
+  - [ ] Деплой (пересобрать образ) + чекпоинт — когда скажешь.
 - [ ] **Фаза 2 — остаток relationship (вторично).** Пути угасания/ДР под локом
       или атомарным UPDATE. Не блокер.
 - [ ] **Фаза 3 — кэш настроек (HIGH #2).** Решать при старте бэкенда панели

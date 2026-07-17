@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.relationship.entities import RelationshipProfile, SecretCode, SecretRoom
@@ -59,6 +61,13 @@ class SqlAlchemyDialogSummaryRepository(IDialogSummaryRepository):
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return list(reversed(rows))  # старые -> новые
+
+
+def _upsert(session: AsyncSession):
+    """Диалект-специфичный INSERT с ON CONFLICT (одинаковый интерфейс у PG и
+    SQLite 3.24+, но разный конструктор). Тот же приём, что в activity."""
+    name = session.bind.dialect.name if session.bind is not None else "sqlite"
+    return pg_insert if name == "postgresql" else sqlite_insert
 
 
 def _aware(value):
@@ -209,10 +218,37 @@ class SqlAlchemyRelationshipRepository(IRelationshipRepository):
         return profile
 
     async def get_or_create(self, user_id: int, guild_id: int) -> RelationshipProfile:
-        profile = await self.get(user_id, guild_id)
-        if profile is None:
-            profile = RelationshipProfile(user_id=user_id, guild_id=guild_id)
-            self._identity[(user_id, guild_id)] = profile
+        # get_or_create — вход всех ~13 путей записи; защищаем его от гонки двух
+        # писателей (бот ∥ веб-панель) в ДВА шага:
+        #  1) INSERT ... ON CONFLICT DO NOTHING — строка точно существует.
+        #     FOR UPDATE не блокирует НЕсуществующую строку, поэтому без этого
+        #     шага два первых писателя оба делают INSERT -> UniqueViolation;
+        #  2) SELECT ... FOR UPDATE — берём уже существующую строку под
+        #     пессимистичной блокировкой. Второй писатель ждёт коммита первого и
+        #     читает СВЕЖЕЕ значение (Postgres re-read под READ COMMITTED), иначе
+        #     read-modify-write в save() затёр бы чужой апдейт (очки/заметки/
+        #     заморозка). get() (чистое чтение) остаётся без блокировки.
+        # На SQLite обе конструкции безопасны: ON CONFLICT родной, а FOR UPDATE —
+        # no-op (записи там и так сериализованы), поэтому тесты верны на обеих БД.
+        key = (user_id, guild_id)
+        if key in self._identity:
+            return self._identity[key]
+        await self._session.execute(
+            _upsert(self._session)(RelationshipProfileModel)
+            .values(user_id=user_id, guild_id=guild_id)
+            .on_conflict_do_nothing(index_elements=["user_id", "guild_id"])
+        )
+        stmt = (
+            select(RelationshipProfileModel)
+            .where(
+                RelationshipProfileModel.user_id == user_id,
+                RelationshipProfileModel.guild_id == guild_id,
+            )
+            .with_for_update()
+        )
+        row = (await self._session.execute(stmt)).scalar_one()
+        profile = _to_domain(row)
+        self._identity[key] = profile
         return profile
 
     async def get_exclusive_holder(self, guild_id: int) -> RelationshipProfile | None:

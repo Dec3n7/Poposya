@@ -27,12 +27,20 @@ from src.application.activity.use_cases import (
     SaveVoiceProgressUseCase,
     TryMarkAlbumPostUseCase,
 )
+from src.application.relationship.use_cases import (
+    AwardPointUseCase,
+    GetRankUseCase,
+    SetPointsUseCase,
+)
 from src.application.staykick.use_cases import SchedulePendingKickUseCase
 from src.application.tempvoice.use_cases import (
     ClaimTempChannelUseCase,
     GetTempChannelUseCase,
     RegisterTempChannelUseCase,
 )
+from src.domain.relationship.policies import PointsToLevelPolicy
+
+POLICY = PointsToLevelPolicy()
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("TEST_DATABASE_URL", "").startswith("postgresql"),
@@ -142,3 +150,46 @@ async def test_voice_accrual_correct_when_serialized(uow_factory):
     await save.execute({(10, 1): 5.0}, accrued_minutes=5.0)
     async with uow_factory() as uow:
         assert await uow.voice_progress.total_minutes(10, 1) == 10.0
+
+
+# --- отношения: очки не теряются под двумя писателями (FOR UPDATE в get_or_create) ---
+
+
+async def test_award_points_no_lost_updates_under_concurrency(uow_factory):
+    """N параллельных начислений одному человеку дают ровно N очков.
+
+    Строгий ловец регрессии для главного риска перед веб-панелью: раньше
+    AwardPointUseCase делал read-modify-write (get_or_create читает снимок ->
+    +1 в памяти -> save перезаписывает всю строку), и два писателя теряли
+    инкремент. Теперь get_or_create берёт строку под SELECT ... FOR UPDATE:
+    второй писатель ждёт коммита первого и прибавляет к свежему значению.
+
+    daily_cap намеренно большой — проверяем именно потерю апдейта, а не потолок."""
+    award = AwardPointUseCase(uow_factory, POLICY, daily_cap=1000, absence_days=30)
+    await asyncio.gather(*[award.execute(1, 10, 0, NOW) for _ in range(10)])
+    rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
+    assert rank.points == 10  # все 10 начислений учтены, ни одно не затёрто
+
+
+async def test_admin_set_points_not_lost_to_concurrent_award(uow_factory):
+    """Сценарий-смоук: админ правит очки (веб-панель), пока бот начисляет за
+    сообщение. Итог должен быть валидным — 100 (award до set) или 101 (set до
+    award), но НИКОГДА 1 (затёртая правка).
+
+    Смоук, а не строгий ловец: всего две задачи, и планировщик gather часто
+    сериализует их сам, так что старый код без блокировки здесь мог бы пройти.
+    Строго потерю апдейта под нагрузкой ловит
+    test_award_points_no_lost_updates_under_concurrency (10 писателей, падает на
+    старом read-modify-write)."""
+    # профиль существует (points=0), чтобы обе транзакции стартовали от одной базы
+    await AwardPointUseCase(uow_factory, POLICY, daily_cap=1000, absence_days=30).execute(
+        1, 10, 0, NOW - timedelta(days=1)
+    )
+    await SetPointsUseCase(uow_factory, POLICY).execute(1, 10, 0)
+
+    award = AwardPointUseCase(uow_factory, POLICY, daily_cap=1000, absence_days=30)
+    setter = SetPointsUseCase(uow_factory, POLICY)
+    await asyncio.gather(award.execute(1, 10, 0, NOW), setter.execute(1, 10, 100))
+
+    rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
+    assert rank.points in (100, 101)  # админская правка пережила гонку
