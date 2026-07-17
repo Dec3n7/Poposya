@@ -48,7 +48,7 @@ class IAlbumRepository(ABC):
     """Дедупликация «Альбома Попоси»: сообщение публикуется один раз."""
 
     @abstractmethod
-    async def was_posted(self, guild_id: int, message_id: int) -> bool: ...
-
-    @abstractmethod
-    async def mark_posted(self, guild_id: int, message_id: int, at: datetime) -> None: ...
+    async def try_mark(self, guild_id: int, message_id: int, at: datetime) -> bool:
+        """Атомарно помечает сообщение опубликованным. True — впервые (публикуем);
+        False — уже было. Одна операция вместо «проверить-потом-вставить»: под
+        гонкой двух реакций разом не задваивает и не роняет исключение."""

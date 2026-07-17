@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.activity.entities import Reminder
@@ -16,6 +18,13 @@ from src.infrastructure.db.models.activity import (
     ReminderModel,
     VoiceProgressModel,
 )
+
+
+def _upsert(session: AsyncSession):
+    """Диалект-специфичный INSERT с поддержкой ON CONFLICT. Postgres и SQLite
+    (3.24+) оба умеют, но конструктор разный; интерфейс on_conflict_* общий."""
+    name = session.bind.dialect.name if session.bind is not None else "sqlite"
+    return pg_insert if name == "postgresql" else sqlite_insert
 
 
 class SqlAlchemyMemberActivityRepository(IMemberActivityRepository):
@@ -43,18 +52,17 @@ class SqlAlchemyAlbumRepository(IAlbumRepository):
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def was_posted(self, guild_id: int, message_id: int) -> bool:
-        row = await self._session.get(AlbumPostModel, (guild_id, message_id))
-        return row is not None
-
-    async def mark_posted(self, guild_id: int, message_id: int, at: datetime) -> None:
-        self._session.add(
-            AlbumPostModel(
-                guild_id=guild_id,
-                message_id=message_id,
-                posted_at=at.replace(tzinfo=None),
-            )
+    async def try_mark(self, guild_id: int, message_id: int, at: datetime) -> bool:
+        # INSERT ... ON CONFLICT DO NOTHING: если пара уже есть — БД молча
+        # пропускает, rowcount=0. Атомарно, без «проверить-потом-вставить»,
+        # поэтому гонка двух реакций не задваивает и не роняет IntegrityError.
+        stmt = (
+            _upsert(self._session)(AlbumPostModel)
+            .values(guild_id=guild_id, message_id=message_id, posted_at=at.replace(tzinfo=None))
+            .on_conflict_do_nothing(index_elements=["guild_id", "message_id"])
         )
+        result = await self._session.execute(stmt)
+        return result.rowcount == 1
 
 
 class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
@@ -69,22 +77,27 @@ class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
         self, progress: dict[tuple[int, int], float], accrued_minutes: float = 0.0
     ) -> None:
         now = datetime.now(UTC).replace(tzinfo=None)
+        insert = _upsert(self._session)
         for (guild_id, user_id), minutes in progress.items():
-            row = await self._session.get(VoiceProgressModel, (guild_id, user_id))
-            if row is None:
-                self._session.add(
-                    VoiceProgressModel(
-                        guild_id=guild_id,
-                        user_id=user_id,
-                        minutes=minutes,
-                        total_minutes=accrued_minutes,
-                        updated_at=now,
-                    )
-                )
-            else:
-                row.minutes = minutes
-                row.total_minutes += accrued_minutes
-                row.updated_at = now
+            # total_minutes += accrued считает САМА БД (table.total + accrued), а
+            # не Python после чтения — иначе два писателя теряли бы инкремент.
+            # minutes перезаписывается новым значением (это текущий остаток).
+            stmt = insert(VoiceProgressModel).values(
+                guild_id=guild_id,
+                user_id=user_id,
+                minutes=minutes,
+                total_minutes=accrued_minutes,
+                updated_at=now,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["guild_id", "user_id"],
+                set_={
+                    "minutes": stmt.excluded.minutes,
+                    "total_minutes": VoiceProgressModel.total_minutes + accrued_minutes,
+                    "updated_at": now,
+                },
+            )
+            await self._session.execute(stmt)
 
     async def total_minutes(self, guild_id: int, user_id: int) -> float:
         row = await self._session.get(VoiceProgressModel, (guild_id, user_id))

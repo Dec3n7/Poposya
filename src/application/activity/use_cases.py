@@ -109,8 +109,6 @@ class TryMarkAlbumPostUseCase:
 
     async def execute(self, guild_id: int, message_id: int, now: datetime) -> bool:
         async with self._uow_factory() as uow:
-            if await uow.album_posts.was_posted(guild_id, message_id):
-                return False
-            await uow.album_posts.mark_posted(guild_id, message_id, now)
+            marked = await uow.album_posts.try_mark(guild_id, message_id, now)
             await uow.commit()
-            return True
+            return marked
