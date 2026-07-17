@@ -33,11 +33,11 @@ def backup_status(settings: Settings) -> str | None:
     """Почему автобэкапа не будет; None — будет.
 
     Отдельная функция, потому что молчаливое отсутствие бэкапов — худший из
-    возможных сюрпризов: на Postgres SqliteBackupService просто отключается."""
-    from src.infrastructure.db.backup import sqlite_path_from_url
-
-    if sqlite_path_from_url(settings.database_url) is None:
-        return "БД не SQLite — встроенный бэкап умеет только его, нужен pg_dump снаружи"
+    возможных сюрпризов. Автобэкап есть для SQLite (online-копия) и PostgreSQL
+    (pg_dump); неизвестный тип БД или нулевые настройки его отключают."""
+    url = settings.database_url
+    if not (url.startswith("sqlite") or url.startswith("postgresql")):
+        return "неизвестный тип БД — автобэкап есть только для SQLite и PostgreSQL"
     if settings.backup_interval_hours <= 0 or settings.backup_keep <= 0:
         return "выключен настройками (BACKUP_INTERVAL_HOURS / BACKUP_KEEP = 0)"
     return None

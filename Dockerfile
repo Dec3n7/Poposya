@@ -9,9 +9,11 @@ RUN python -m venv /app/.venv \
 # Stage 2: Runtime
 FROM python:3.12-slim
 
-# ffmpeg — воспроизведение музыки; libopus0 — кодек голосового канала discord.py
+# ffmpeg — воспроизведение музыки; libopus0 — кодек голосового канала discord.py;
+# postgresql-client — pg_dump для бэкапов Postgres (на trixie это клиент 17,
+# он дампит сервер 16; при работе на SQLite просто не используется)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libopus0 \
+    && apt-get install -y --no-install-recommends ffmpeg libopus0 postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -332,10 +332,12 @@ docker compose --profile postgres up -d --build
 **Данные сами не переедут** — новая база будет пустой. Перенос содержимого
 SQLite в PostgreSQL это отдельная задача (`pgloader` или ручной дамп).
 
-**Автобэкапа на PostgreSQL нет**: встроенный `SqliteBackupService` умеет
-копировать только файл SQLite и на другой БД отключается. Бот честно скажет об
-этом в логе старта (`АВТОБЭКАПА НЕТ: … нужен pg_dump снаружи`) — но резервные
-копии придётся настроить самому, например регулярным `pg_dump`.
+**Бэкапы работают и на PostgreSQL**: при старте и раз в `BACKUP_INTERVAL_HOURS`
+(24) бот делает `pg_dump -Fc` и хранит `BACKUP_KEEP` (7) последних. Дампы лежат
+в `BACKUP_DIR` (`data/backups`, в Docker это volume `bot_data` — **отдельный от
+тома БД `pg_data`**, поэтому переживают её потерю). Восстановление:
+`pg_restore -d <база> poposya-<дата>.dump`. Отключить — `BACKUP_INTERVAL_HOURS=0`
+или `BACKUP_KEEP=0`; тогда бот предупредит об отсутствии копий в логе старта.
 
 ### Если YouTube пишет «Sign in to confirm you're not a bot»
 

@@ -28,10 +28,12 @@ class Settings(BaseSettings):
     # --- база данных ---
     database_url: str = "sqlite+aiosqlite:///./poposya.db"
     auto_migrate: bool = True  # применять миграции Alembic при старте (dev-режим)
-    # бэкап SQLite: копия в <каталог БД>/backups при старте и раз в N часов,
-    # хранится backup_keep последних (0 в любом поле = выключено)
+    # бэкап при старте и раз в N часов, хранится backup_keep последних
+    # (0 в любом поле = выключено). SQLite — online-копия рядом с БД; Postgres —
+    # pg_dump -Fc в backup_dir (в Docker это volume bot_data, отдельный от БД)
     backup_interval_hours: int = 24
     backup_keep: int = 7
+    backup_dir: str = "data/backups"  # используется для Postgres; SQLite кладёт рядом с БД
     # outbox критичных событий: как часто добивать неопубликованные, сек
     outbox_dispatch_interval: int = 60
     outbox_max_attempts: int = 10  # после стольких неудач событие оставляется в покое

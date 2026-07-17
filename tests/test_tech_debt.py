@@ -1,12 +1,20 @@
 """Техдолг: бэкап SQLite, Outbox критичных событий, персист войс-минут."""
 
+import os
+import shutil
 import sqlite3
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import select
 
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
-from src.infrastructure.db.backup import SqliteBackupService, sqlite_path_from_url
+from src.infrastructure.db.backup import (
+    PostgresBackupService,
+    SqliteBackupService,
+    postgres_params_from_url,
+    sqlite_path_from_url,
+)
 from src.infrastructure.db.models.outbox import OutboxEventModel
 from src.infrastructure.db.repositories.activity import SqlAlchemyVoiceProgressRepository
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -77,6 +85,72 @@ def test_backup_prunes_old_copies(tmp_path):
 def test_backup_disabled_for_non_sqlite():
     service = SqliteBackupService("postgresql+asyncpg://x/y", 24, 7)
     assert not service.enabled
+
+
+# --- бэкап Postgres (pg_dump) ---
+
+
+def test_postgres_params_strips_driver_and_parses():
+    p = postgres_params_from_url("postgresql+asyncpg://poposya:s3cret@db:5432/poposya")
+    assert p == {
+        "host": "db",
+        "port": "5432",
+        "user": "poposya",
+        "password": "s3cret",
+        "dbname": "poposya",
+    }
+
+
+def test_postgres_params_default_port_and_url_decoding():
+    p = postgres_params_from_url("postgresql://u%40x:p%2Fw@host/mydb")  # user u@x, pass p/w
+    assert p["port"] == "5432"  # порт не указан — дефолтный
+    assert p["user"] == "u@x" and p["password"] == "p/w"  # %-декодирование
+
+
+def test_postgres_params_none_for_non_postgres_or_incomplete():
+    assert postgres_params_from_url("sqlite+aiosqlite:///./p.db") is None
+    assert postgres_params_from_url("postgresql://host_only_no_db") is None
+
+
+def test_postgres_backup_enabled_gating():
+    ok = PostgresBackupService("postgresql+asyncpg://u:p@h/d", "data/backups", 24, 7)
+    assert ok.enabled
+    assert not PostgresBackupService("sqlite:///x.db", "data/backups", 24, 7).enabled
+    assert not PostgresBackupService("postgresql://u:p@h/d", "data/backups", 0, 7).enabled
+    assert not PostgresBackupService("postgresql://u:p@h/d", "data/backups", 24, 0).enabled
+
+
+@pytest.mark.skipif(
+    shutil.which("pg_dump") is None
+    or not os.environ.get("TEST_DATABASE_URL", "").startswith("postgresql"),
+    reason="нужен pg_dump в PATH и TEST_DATABASE_URL на Postgres",
+)
+def test_postgres_backup_once_writes_restorable_dump(tmp_path):
+    url = os.environ["TEST_DATABASE_URL"]
+    service = PostgresBackupService(url, str(tmp_path / "backups"), interval_hours=24, keep=7)
+    assert service.enabled
+    target = service.backup_once()
+    assert target is not None and target.exists() and target.stat().st_size > 0
+    # -Fc даёт custom-формат: первые байты — сигнатура "PGDMP"
+    assert target.read_bytes()[:5] == b"PGDMP"
+
+
+@pytest.mark.skipif(
+    shutil.which("pg_dump") is None
+    or not os.environ.get("TEST_DATABASE_URL", "").startswith("postgresql"),
+    reason="нужен pg_dump в PATH и TEST_DATABASE_URL на Postgres",
+)
+def test_postgres_backup_prunes_old_dumps(tmp_path):
+    url = os.environ["TEST_DATABASE_URL"]
+    service = PostgresBackupService(url, str(tmp_path / "backups"), interval_hours=24, keep=2)
+    service.backup_dir.mkdir(parents=True)
+    dbname = postgres_params_from_url(url)["dbname"]
+    for stamp in ("20260101-000000", "20260102-000000", "20260103-000000"):
+        (service.backup_dir / f"{dbname}-{stamp}.dump").write_bytes(b"old")
+    service.backup_once()  # +1 свежий, keep=2 -> остаётся 2
+    remaining = sorted(p.name for p in service.backup_dir.glob(f"{dbname}-*.dump"))
+    assert len(remaining) == 2
+    assert f"{dbname}-20260101-000000.dump" not in remaining
 
 
 # --- outbox ---

@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from src.application.di.root_container import build_root_container
 from src.config import Settings
-from src.infrastructure.db.backup import SqliteBackupService
+from src.infrastructure.db.backup import make_backup_service
 from src.infrastructure.diagnostics import log_boot_summary, probe_dependencies
 from src.infrastructure.discord.client import PoposyaBot
 from src.infrastructure.logging.json_formatter import setup_logging
@@ -66,13 +66,14 @@ async def run() -> None:
     health_runner = await start_health_server(health, settings.health_port)
 
     background: list[asyncio.Task] = []
-    backup = SqliteBackupService(
+    backup = make_backup_service(
         settings.database_url,
-        interval_hours=settings.backup_interval_hours,
-        keep=settings.backup_keep,
+        settings.backup_dir,
+        settings.backup_interval_hours,
+        settings.backup_keep,
     )
     started = []
-    if backup.enabled:
+    if backup is not None and backup.enabled:
         background.append(asyncio.create_task(backup.run_forever()))
         started.append("backup")
     background.append(asyncio.create_task(container.outbox_dispatcher.run_forever()))

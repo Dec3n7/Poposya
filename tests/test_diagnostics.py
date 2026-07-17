@@ -41,9 +41,14 @@ def test_backup_status_ok_for_sqlite():
     assert backup_status(make_settings(database_url="sqlite+aiosqlite:///./p.db")) is None
 
 
-def test_backup_status_explains_postgres():
-    reason = backup_status(make_settings(database_url="postgresql+asyncpg://u:p@h/d"))
-    assert reason is not None and "pg_dump" in reason
+def test_backup_status_ok_for_postgres():
+    # Postgres теперь бэкапится через pg_dump — не повод для предупреждения
+    assert backup_status(make_settings(database_url="postgresql+asyncpg://u:p@h/d")) is None
+
+
+def test_backup_status_explains_unknown_db():
+    reason = backup_status(make_settings(database_url="mysql://u:p@h/d"))
+    assert reason is not None and "SQLite" in reason and "PostgreSQL" in reason
 
 
 def test_backup_status_explains_zero_settings():
@@ -52,10 +57,12 @@ def test_backup_status_explains_zero_settings():
         assert reason is not None and "BACKUP_" in reason
 
 
-def test_boot_summary_warns_when_backup_impossible(caplog):
-    """На Postgres встроенный бэкап отключается сам: сводка обязана сказать
-    об этом громко, а не обещать несуществующие копии."""
-    settings = make_settings(database_url="postgresql+asyncpg://u:secret@h/d")
+def test_boot_summary_warns_when_backup_disabled(caplog):
+    """Бэкап выключен настройками: сводка обязана сказать об этом громко,
+    а не обещать несуществующие копии."""
+    settings = make_settings(
+        database_url="postgresql+asyncpg://u:secret@h/d", backup_interval_hours=0
+    )
     with caplog.at_level(logging.INFO, logger="boot"):
         log_boot_summary(settings)
     warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
@@ -64,13 +71,15 @@ def test_boot_summary_warns_when_backup_impossible(caplog):
     assert not any("secret" in r.getMessage() for r in caplog.records)  # пароль не светим
 
 
-def test_boot_summary_reports_backup_when_working(caplog):
-    settings = make_settings(database_url="sqlite+aiosqlite:///./p.db")
+def test_boot_summary_reports_backup_for_postgres(caplog):
+    # с включёнными настройками Postgres рапортует про бэкап, а не про его отсутствие
+    settings = make_settings(database_url="postgresql+asyncpg://u:secret@h/d")
     with caplog.at_level(logging.INFO, logger="boot"):
         log_boot_summary(settings)
     text = "\n".join(caplog.messages)
     assert "бэкап каждые" in text
     assert "АВТОБЭКАПА НЕТ" not in text
+    assert "secret" not in text  # пароль не светим и в норме
 
 
 # --- log_boot_summary -------------------------------------------------------

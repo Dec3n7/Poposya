@@ -66,6 +66,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      # pg_dump — чтобы интеграционные тесты бэкапа не пропускались, а работали
+      - name: Install postgresql-client (pg_dump)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Migrations apply to a clean PostgreSQL
         env:
           DISCORD_TOKEN: ci
