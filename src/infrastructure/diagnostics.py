@@ -29,6 +29,20 @@ def _yesno(flag: bool, yes: str = "ВКЛ", no: str = "ВЫКЛ") -> str:
     return yes if flag else no
 
 
+def backup_status(settings: Settings) -> str | None:
+    """Почему автобэкапа не будет; None — будет.
+
+    Отдельная функция, потому что молчаливое отсутствие бэкапов — худший из
+    возможных сюрпризов: на Postgres SqliteBackupService просто отключается."""
+    from src.infrastructure.db.backup import sqlite_path_from_url
+
+    if sqlite_path_from_url(settings.database_url) is None:
+        return "БД не SQLite — встроенный бэкап умеет только его, нужен pg_dump снаружи"
+    if settings.backup_interval_hours <= 0 or settings.backup_keep <= 0:
+        return "выключен настройками (BACKUP_INTERVAL_HOURS / BACKUP_KEEP = 0)"
+    return None
+
+
 def log_boot_summary(settings: Settings) -> None:
     """Печатает, что включилось, а что отключено и почему (пункт 1)."""
     ai_on = bool(settings.groq_api_key)
@@ -36,12 +50,21 @@ def log_boot_summary(settings: Settings) -> None:
     cookies_on = bool(settings.ytdlp_cookies_file or settings.ytdlp_cookies_from_browser)
 
     logger.info("── Конфигурация ─────────────────────────────")
-    logger.info(
-        "БД       : %s · бэкап каждые %d ч (хранить %d)",
-        _db_label(settings.database_url),
-        settings.backup_interval_hours,
-        settings.backup_keep,
-    )
+    no_backup = backup_status(settings)
+    if no_backup is None:
+        logger.info(
+            "БД       : %s · бэкап каждые %d ч (хранить %d)",
+            _db_label(settings.database_url),
+            settings.backup_interval_hours,
+            settings.backup_keep,
+        )
+    else:
+        # именно warning: обещать бэкапы, которых нет, опаснее чем не делать их
+        logger.warning(
+            "БД       : %s · АВТОБЭКАПА НЕТ: %s",
+            _db_label(settings.database_url),
+            no_backup,
+        )
     if ai_on:
         logger.info(
             "AI       : ВКЛ · %s → фолбэк %s",

@@ -7,8 +7,16 @@
 # Cookies YouTube (если нужны): положите cookies.txt рядом, раскомментируйте
 # volume ниже и укажите в .env: YTDLP_COOKIES_FILE=/app/data/cookies.txt
 #
-# Переход на PostgreSQL позже: добавить сервис db (postgres:16), asyncpg
-# в requirements.txt и сменить DATABASE_URL — код уже готов.
+# ── Переход на PostgreSQL ────────────────────────────────────────────────
+# Сервис db уже описан ниже, но спит под профилем postgres — пока он не нужен,
+# контейнер не поднимается. Чтобы переехать, в .env:
+#   BOT_DATABASE_URL=postgresql+asyncpg://poposya:ПАРОЛЬ@db:5432/poposya
+#   POSTGRES_PASSWORD=ПАРОЛЬ
+# и запускать с профилем:
+#   docker compose --profile postgres up -d --build
+# Данные из SQLite при этом НЕ переедут сами — база будет пустой.
+# ВНИМАНИЕ: встроенный автобэкап умеет только SQLite; на Postgres нужен
+# pg_dump снаружи (бот честно предупредит об этом в логе старта).
 
 services:
   bot:
@@ -17,9 +25,15 @@ services:
     env_file: .env
     environment:
       # переопределяют значения из .env только внутри контейнера:
-      # база и логи — на volume, чтобы пережить пересборку образа
-      DATABASE_URL: sqlite+aiosqlite:////app/data/poposya.db
+      # база и логи — на volume, чтобы пережить пересборку образа.
+      # BOT_DATABASE_URL (а не DATABASE_URL) — чтобы значение из .env,
+      # рассчитанное на запуск без Docker, не подменило путь на volume
+      DATABASE_URL: ${BOT_DATABASE_URL:-sqlite+aiosqlite:////app/data/poposya.db}
       LOG_FILE: /app/data/logs/bot.log
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false   # без профиля postgres сервиса db нет — и это нормально
     ports:
       - "8080:8080"   # /health и /ready (проверка в браузере: http://localhost:8080/health)
     healthcheck:
@@ -33,5 +47,28 @@ services:
       - bot_data:/app/data
       # - ./cookies.txt:/app/data/cookies.txt:ro
 
+  # Поднимается только с профилем: docker compose --profile postgres up -d
+  db:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: poposya
+      POSTGRES_USER: poposya
+      # без :? — compose подставляет переменные при РАЗБОРЕ файла, не глядя на
+      # профили, и обязательная переменная ломала бы обычный запуск на SQLite.
+      # Забыли пароль -> контейнер db честно откажется стартовать.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    healthcheck:
+      # bot ждёт этой проверки: миграции на старте не переживут недоступную БД
+      test: ["CMD-SHELL", "pg_isready -U poposya -d poposya"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
 volumes:
   bot_data:
+  pg_data:

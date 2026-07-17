@@ -8,6 +8,7 @@ import aiohttp
 from src.config import Settings
 from src.infrastructure.diagnostics import (
     _db_label,
+    backup_status,
     log_boot_summary,
     probe_dependencies,
 )
@@ -31,6 +32,45 @@ def test_db_label_hides_postgres_credentials():
     label = _db_label("postgresql+asyncpg://user:secret@host/db")
     assert "secret" not in label
     assert label.startswith("postgresql+asyncpg://")
+
+
+# --- бэкап: молчаливое отсутствие — худший сюрприз ---------------------------
+
+
+def test_backup_status_ok_for_sqlite():
+    assert backup_status(make_settings(database_url="sqlite+aiosqlite:///./p.db")) is None
+
+
+def test_backup_status_explains_postgres():
+    reason = backup_status(make_settings(database_url="postgresql+asyncpg://u:p@h/d"))
+    assert reason is not None and "pg_dump" in reason
+
+
+def test_backup_status_explains_zero_settings():
+    for over in ({"backup_interval_hours": 0}, {"backup_keep": 0}):
+        reason = backup_status(make_settings(database_url="sqlite+aiosqlite:///./p.db", **over))
+        assert reason is not None and "BACKUP_" in reason
+
+
+def test_boot_summary_warns_when_backup_impossible(caplog):
+    """На Postgres встроенный бэкап отключается сам: сводка обязана сказать
+    об этом громко, а не обещать несуществующие копии."""
+    settings = make_settings(database_url="postgresql+asyncpg://u:secret@h/d")
+    with caplog.at_level(logging.INFO, logger="boot"):
+        log_boot_summary(settings)
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("АВТОБЭКАПА НЕТ" in m for m in warnings)
+    assert not any("бэкап каждые" in r.getMessage() for r in caplog.records)  # не врём
+    assert not any("secret" in r.getMessage() for r in caplog.records)  # пароль не светим
+
+
+def test_boot_summary_reports_backup_when_working(caplog):
+    settings = make_settings(database_url="sqlite+aiosqlite:///./p.db")
+    with caplog.at_level(logging.INFO, logger="boot"):
+        log_boot_summary(settings)
+    text = "\n".join(caplog.messages)
+    assert "бэкап каждые" in text
+    assert "АВТОБЭКАПА НЕТ" not in text
 
 
 # --- log_boot_summary -------------------------------------------------------

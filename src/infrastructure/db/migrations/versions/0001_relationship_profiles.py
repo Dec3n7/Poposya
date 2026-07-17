@@ -23,8 +23,10 @@ def upgrade() -> None:
         sa.Column("points", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("points_awarded_today", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("last_award_date", sa.Date(), nullable=True),
-        sa.Column("is_exclusive", sa.Boolean(), nullable=False, server_default=sa.text("0")),
-        sa.Column("frozen_by_admin", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        # sa.false(), а не text("0"): на SQLite рендерится тем же DEFAULT 0,
+        # а Postgres требует именно boolean-литерал (DEFAULT 0 -> DatatypeMismatch)
+        sa.Column("is_exclusive", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("frozen_by_admin", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("last_dialog_at", sa.DateTime(), nullable=True),
         sa.Column("user_notes", sa.Text(), nullable=False, server_default=""),
         sa.PrimaryKeyConstraint("user_id", "guild_id"),
