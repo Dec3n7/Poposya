@@ -87,8 +87,8 @@ class GuildSettings(BaseModel):
     ai_rate_limits_by_level: dict[int, int] = Field(
         default={1: 5, 2: 10, 3: 20, 4: 40, 5: 60, 6: 120, 7: 240}
     )
-    # пассивное вклинивание в разговоры
-    ai_passive_enabled: bool = False
+    # пассивное вклинивание в разговоры (включено; консервативно по умолчанию)
+    ai_passive_enabled: bool = True
     ai_passive_only_main_channel: bool = True
     ai_passive_min_users: int = Field(2, ge=2, le=10)
     ai_passive_cooldown_minutes: int = Field(12, ge=1, le=180)

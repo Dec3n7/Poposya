@@ -44,6 +44,7 @@ def make_settings():
         music_idle_timeout=300,
         music_idle_warn_seconds=120,
         music_lyrics_offset=1.0,
+        presence_rotate_minutes=30,
     )
 
 

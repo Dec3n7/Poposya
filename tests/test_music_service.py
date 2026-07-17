@@ -273,31 +273,20 @@ async def test_cleanup_missing_session_is_noop():
 # --- rich presence ----------------------------------------------------------
 
 
-async def test_presence_set_when_playing():
+async def test_presence_reports_playing_track():
+    # refresh_presence отдаёт играющий трек владельцу presence (дедуп — там)
     svc = make_service()
-    svc.bot.change_presence = AsyncMock()
+    svc._presence = SimpleNamespace(set_now_playing=AsyncMock())
     svc.sessions[10] = GuildMusicSession(player=make_player(svc, current=make_track(title="Хит")))
     await svc.refresh_presence()
-    svc.bot.change_presence.assert_awaited_once()
-    activity = svc.bot.change_presence.await_args.kwargs["activity"]
-    assert activity.name == "Хит"
+    svc._presence.set_now_playing.assert_awaited_once_with("Хит")
 
 
-async def test_presence_cleared_when_silent():
+async def test_presence_reports_none_when_silent():
     svc = make_service()
-    svc.bot.change_presence = AsyncMock()
-    svc._presence_name = "Старый"  # будто что-то играло
-    await svc.refresh_presence()  # сессий нет -> сброс
-    assert svc.bot.change_presence.await_args.kwargs["activity"] is None
-
-
-async def test_presence_skips_redundant_update():
-    svc = make_service()
-    svc.bot.change_presence = AsyncMock()
-    svc.sessions[10] = GuildMusicSession(player=make_player(svc, current=make_track(title="Хит")))
-    await svc.refresh_presence()
-    await svc.refresh_presence()  # то же самое — второй раз не дёргаем API
-    assert svc.bot.change_presence.await_count == 1
+    svc._presence = SimpleNamespace(set_now_playing=AsyncMock())
+    await svc.refresh_presence()  # сессий нет -> None (владелец поставит «жизнь»)
+    svc._presence.set_now_playing.assert_awaited_once_with(None)
 
 
 # --- RadioService -----------------------------------------------------------

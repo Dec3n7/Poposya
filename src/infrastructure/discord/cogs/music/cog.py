@@ -30,6 +30,7 @@ from src.infrastructure.discord.cogs.music.views import (
     QueueView,
     SearchView,
 )
+from src.infrastructure.discord.presence import PresenceService
 
 
 class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь как плейлист"):
@@ -60,8 +61,11 @@ class MusicCog(commands.Cog):
         self.settings = container.settings
         self.audio = container.audio_source
         self.spotify = SpotifyLinkResolver()
-        # композиция музыкального модуля: сервисы и их взаимные связи
-        self.service = MusicPlayerService(bot, container)
+        # композиция музыкального модуля: сервисы и их взаимные связи.
+        # PresenceService — единый владелец статуса: музыка отдаёт ему играющий
+        # трек, а без музыки он крутит занятия из жизни Попоси
+        self.presence = PresenceService(bot, self.settings.presence_rotate_minutes)
+        self.service = MusicPlayerService(bot, container, self.presence)
         self.lyrics = LyricsService(
             LrclibLyricsClient(),
             self.settings,
@@ -83,8 +87,10 @@ class MusicCog(commands.Cog):
         # персистентный view: кнопки плеера работают и после рестарта бота
         # (на осиротевших сообщениях вежливо ответят «плеер не активен»)
         self.bot.add_view(self._make_player_view())
+        self.presence.start()  # «живой» статус: занятия Попоси, пока нет музыки
 
     async def cog_unload(self) -> None:
+        self.presence.stop()
         await self.service.shutdown()
 
     @commands.Cog.listener()

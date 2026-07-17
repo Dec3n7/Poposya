@@ -55,7 +55,7 @@ _FAIL_PHRASES = (
 
 
 class MusicPlayerService:
-    def __init__(self, bot: commands.Bot, container: MusicContainer):
+    def __init__(self, bot: commands.Bot, container: MusicContainer, presence=None):
         self.bot = bot
         self.settings = container.settings
         self.audio = container.audio_source
@@ -64,7 +64,8 @@ class MusicPlayerService:
         self._background: set[asyncio.Task] = set()
         self._empty_grace: dict[int, asyncio.Task] = {}  # таймеры выхода из пустого войса
         self._last_fail_notify: dict[int, float] = {}  # антиспам реплик о провале трека
-        self._presence_name: str | None = None  # что сейчас в статусе бота
+        # единый владелец Discord-статуса: музыка «слушает трек», иначе — жизнь
+        self._presence = presence
         # внедряется композицией (MusicCog) после создания:
         self.radio: RadioService | None = None
         self.prefetch_lyrics: Callable[[Track], None] | None = None
@@ -73,25 +74,17 @@ class MusicPlayerService:
     # --- инфраструктура ---
 
     async def refresh_presence(self) -> None:
-        """Статус бота «слушает <трек>» пока где-то играет музыка; сброс, когда
-        замолчало везде. Presence глобальный — показываем любой играющий трек."""
+        """Сообщить владельцу presence, что играет сейчас (или что замолчало).
+        Presence глобальный — показываем любой играющий трек; когда музыки нет,
+        PresenceService сам поставит занятие из жизни Попоси."""
+        if self._presence is None:
+            return
         playing = next(
             (s.player.current for s in self.sessions.values() if s.player.current),
             None,
         )
         desired = trim(playing.title, 120) if playing is not None else None
-        if desired == self._presence_name:
-            return  # без изменений — не дёргаем rate-limited API
-        self._presence_name = desired
-        try:
-            activity = (
-                discord.Activity(type=discord.ActivityType.listening, name=desired)
-                if desired is not None
-                else None
-            )
-            await self.bot.change_presence(activity=activity)
-        except Exception:
-            logger.debug("Не удалось обновить presence", exc_info=True)
+        await self._presence.set_now_playing(desired)
 
     def spawn(self, coro: Coroutine) -> None:
         """Фоновая задача с удержанием ссылки — иначе её может собрать GC."""

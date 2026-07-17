@@ -61,8 +61,9 @@ class Settings(BaseSettings):
     ai_event_comment_chance: float = 0.12
     ai_event_comment_cooldown: int = 900
     # пассивное вклинивание в чужие разговоры (Попося сама решает встрять):
-    # выключено по умолчанию; включается осознанно после обкатки
-    ai_passive_enabled: bool = False
+    # включено; консервативно по умолчанию (порог уверенности, кулдаун, только
+    # главный канал), отключается пер-сервер через /config при желании
+    ai_passive_enabled: bool = True
     ai_passive_only_main_channel: bool = True  # только главный канал
     ai_passive_min_users: int = 2  # минимум разных людей в окне
     ai_passive_max_messages: int = 20  # сколько сообщений брать в контекст
@@ -185,6 +186,8 @@ class Settings(BaseSettings):
     absent_days_threshold: int = 7  # дней отсутствия участника до «с возвращением»
     random_thought_min_hours: int = 3  # случайные реплики: минимальный интервал
     random_thought_max_hours: int = 6  # случайные реплики: максимальный интервал
+    # «живой» Discord-статус: как часто менять занятие Попоси, когда нет музыки
+    presence_rotate_minutes: int = 30
     # очки отношений за присутствие в голосовых каналах (0 = выключено);
     # дневной потолок общий с очками за сообщения, AFK-канал и заглушённые
     # «в наушниках» не считаются
