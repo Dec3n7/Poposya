@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "./api";
 import { GuildPicker } from "./components/GuildPicker";
-import { GuildSettings } from "./components/GuildSettings";
+import { GuildView } from "./components/GuildView";
 import { Login } from "./components/Login";
 import type { Guild, Me } from "./types";
 
@@ -81,7 +81,7 @@ export default function App() {
 
       <main className="container">
         {guild ? (
-          <GuildSettings guild={guild} />
+          <GuildView guild={guild} />
         ) : (
           <GuildPicker guilds={me?.guilds ?? []} onPick={setGuild} />
         )}

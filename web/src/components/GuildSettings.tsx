@@ -72,7 +72,6 @@ export function GuildSettings({ guild }: { guild: Guild }) {
 
   return (
     <div>
-      <h1 className="h1">{guild.name}</h1>
       <p className="sub">
         Настройки поведения Попоси на этом сервере. Меняются на лету — бот применяет сразу.
       </p>

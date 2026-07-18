@@ -9,11 +9,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import create_app
-from src.api.bot_guilds import BotGuildsCache
-from src.api.container import ApiContainer
+from src.api.container import assemble_container
 from src.api.security import SESSION_COOKIE, Session, SessionGuild, encode_session
 from src.config import Settings
-from src.infrastructure.guild_settings import GuildSettingsService
 
 GUILD = 10
 
@@ -31,17 +29,8 @@ def make_settings(**over):
 
 @pytest.fixture
 def container(session_factory):
-    settings = make_settings()
-    gs = GuildSettingsService(settings, session_factory)
-    engine = session_factory.kw["bind"]
-    c = ApiContainer(
-        settings=settings,
-        engine=engine,
-        session_factory=session_factory,
-        guild_settings=gs,
-        bot_guilds=BotGuildsCache(""),
-        settings_listener=None,
-    )
+    # тот же сборщик, что и прод, но поверх schema'нутой тестовой БД из conftest
+    c = assemble_container(make_settings(), session_factory.kw["bind"], session_factory)
     c.bot_guilds.prime({GUILD})  # бот «стоит» на сервере 10 (без похода в Discord)
     return c
 
@@ -238,3 +227,37 @@ async def test_channels_requires_session(container):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
         resp = await anon.get(f"/api/guilds/{GUILD}/channels")
     assert resp.status_code == 401
+
+
+# --- дашборд (overview) -----------------------------------------------------
+
+
+async def test_overview_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/overview")
+    assert resp.status_code == 401
+
+
+async def test_overview_leaderboard_and_counts(client, uow_factory, monkeypatch):
+    from src.api.routers import guilds as guilds_router
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"user{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(guilds_router, "fetch_users", fake_users)
+    # два профиля с очками в этой гильдии
+    async with uow_factory() as uow:
+        for uid, pts in [(1, 300), (2, 100)]:
+            p = await uow.relationships.get_or_create(uid, GUILD)
+            p.points = pts
+            await uow.relationships.save(p)
+        await uow.commit()
+
+    resp = await client.get(f"/api/guilds/{GUILD}/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+    board = data["leaderboard"]
+    assert [e["points"] for e in board] == [300, 100]  # по убыванию очков
+    assert board[0]["username"] == "user1"
+    assert data["counts"] == {"watchlist": 0, "watched": 0, "playlists": 0}

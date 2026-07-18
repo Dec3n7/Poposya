@@ -44,3 +44,17 @@ export interface Channel {
   group: string;
   position: number;
 }
+
+export interface LeaderEntry {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  points: number;
+  role: string | null;
+  is_exclusive: boolean;
+}
+
+export interface Overview {
+  leaderboard: LeaderEntry[];
+  counts: { watchlist: number; watched: number; playlists: number };
+}
