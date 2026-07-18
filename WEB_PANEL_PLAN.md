@@ -157,8 +157,12 @@ React (Vite, статик)  ──HTTP──▶  FastAPI (src/api, отдель�
       Тёмная тема/фиолет из `design-system/poposya-panel` (скилл ui-ux-pro-max).
       `/me` фильтрует по наличию бота. Сборка через Docker (нет локального Node):
       `tsc` + `vite build` зелёные. Dockerfile (nginx + прокси /api).
-- [ ] **Ф5 — деплой.** Собрать образы api+web, поднять сервисы, прод-redirect в
-      Discord Portal, проверить OAuth-флоу в браузере вживую.
+- [x] **Ф5 — деплой.** ✅ 2026-07-18 — сервисы `api` (внутренний) + `web` (nginx,
+      :8081) в compose. Один origin через nginx: фронт + прокси `/api` -> api,
+      без CORS. Подняты и здоровы; панель на http://localhost:8081 рендерит
+      логин, `/api/health` 200, `/api/auth/me` 401, «Войти» -> 307 на Discord с
+      реальным client_id. Осталось человеку: залогиниться в Discord и пройти
+      флоу до конца (креды ввожу не я).
 
 ## Definition of Done (первый срез)
 1. Захожу через Discord, вижу только свои управляемые серверы.

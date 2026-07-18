@@ -50,6 +50,7 @@ services:
   # Веб-панель (REST API) — отдельный процесс, та же Postgres и та же бизнес-логика.
   # Живёт под профилем postgres: панель без общей БД смысла не имеет (SQLite —
   # один писатель). Миграции применяет бот; api при гонке на старте перезапустится.
+  # Порт наружу НЕ публикуется: снаружи всё через nginx (web), api — внутренний.
   api:
     profiles: ["postgres"]
     build: .
@@ -59,18 +60,29 @@ services:
       # та же БД, что у бота (см. BOT_DATABASE_URL в .env)
       DATABASE_URL: ${BOT_DATABASE_URL:-sqlite+aiosqlite:////app/data/poposya.db}
       LOG_FILE: ""   # api логирует в stdout, файл не нужен
+      # фронт и api — один origin через nginx (:8081); сюда же post-login redirect
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:8081}
     command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8081"]
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8081:8081"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/api/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # Веб-панель (фронт): nginx раздаёт собранную статику и проксирует /api на api.
+  # Единственный публикуемый порт панели -> один origin, без CORS, кука работает.
+  web:
+    profiles: ["postgres"]
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8081:80"
 
   # Поднимается только с профилем: docker compose --profile postgres up -d
   db:
