@@ -5,7 +5,7 @@ import type { Guild, LeaderEntry, Overview } from "../types";
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="stat-card">
+    <div className="stat-card tilt">
       <div className="stat-value mono">{value}</div>
       <div className="stat-label">{label}</div>
     </div>

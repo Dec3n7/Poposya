@@ -61,17 +61,20 @@ export default function App() {
     );
   }
 
+  // сервер выбран — полноэкранная оболочка с сайдбаром
+  if (guild && me) {
+    return (
+      <GuildView guild={guild} me={me} onBack={() => setGuild(null)} onLogout={logout} />
+    );
+  }
+
+  // выбор сервера — простой экран с лёгкой шапкой
   return (
     <div className="app">
       <header className="topbar">
         <span className="brand">
           <span className="mark">✂️👁🖤</span> Попося · панель
         </span>
-        {guild && (
-          <button className="btn ghost small" onClick={() => setGuild(null)}>
-            ← Серверы
-          </button>
-        )}
         <span className="spacer" />
         {me && <span className="who">{me.username}</span>}
         <button className="btn ghost small" onClick={logout}>
@@ -80,11 +83,7 @@ export default function App() {
       </header>
 
       <main className="container">
-        {guild ? (
-          <GuildView guild={guild} />
-        ) : (
-          <GuildPicker guilds={me?.guilds ?? []} onPick={setGuild} />
-        )}
+        <GuildPicker guilds={me?.guilds ?? []} onPick={setGuild} />
       </main>
     </div>
   );
