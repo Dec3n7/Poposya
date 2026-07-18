@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from src.api import discord_oauth
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container
+from src.api.discord_users import avatar_url, guild_icon_url
 from src.api.schemas import GuildDTO, MeDTO
 from src.api.security import (
     OAUTH_STATE_COOKIE,
@@ -113,6 +114,9 @@ async def me(
     return MeDTO(
         user_id=str(session.user_id),
         username=session.username,
-        avatar=session.avatar,
-        guilds=[GuildDTO(id=str(g.id), name=g.name, icon=g.icon) for g in guilds],
+        avatar=avatar_url(session.user_id, session.avatar),
+        guilds=[
+            GuildDTO(id=str(g.id), name=g.name, icon=guild_icon_url(g.id, g.icon))
+            for g in guilds
+        ],
     )

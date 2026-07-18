@@ -105,8 +105,13 @@ async def test_callback_sets_session_and_me_filters_guilds(client, mock_discord)
     data = me.json()
     assert data["user_id"] == "42"
     assert data["username"] == "wild"
+    # аватар/иконки отдаются готовыми CDN-URL, а не сырыми хэшами
+    assert data["avatar"] == "https://cdn.discordapp.com/avatars/42/av1.png?size=64"
     # только управляемые серверы: manage (10) и owner (20), но не «без прав» (30)
     assert {g["id"] for g in data["guilds"]} == {"10", "20"}
+    icons = {g["id"]: g["icon"] for g in data["guilds"]}
+    assert icons["10"] == "https://cdn.discordapp.com/icons/10/i10.png?size=64"
+    assert icons["20"] is None  # у owner-сервера иконки нет
 
 
 async def test_me_hides_guilds_without_bot(mock_discord):

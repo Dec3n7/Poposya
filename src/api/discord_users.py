@@ -10,12 +10,25 @@ import aiohttp
 
 from src.api.discord_oauth import DISCORD_API
 
+CDN = "https://cdn.discordapp.com"
+
+
+def avatar_url(user_id: int | str, avatar_hash: str | None) -> str | None:
+    """CDN-URL аватара пользователя по id + хэшу (None -> фронт покажет инициалы)."""
+    if not avatar_hash:
+        return None
+    return f"{CDN}/avatars/{user_id}/{avatar_hash}.png?size=64"
+
+
+def guild_icon_url(guild_id: int | str, icon_hash: str | None) -> str | None:
+    """CDN-URL иконки сервера по id + хэшу."""
+    if not icon_hash:
+        return None
+    return f"{CDN}/icons/{guild_id}/{icon_hash}.png?size=64"
+
 
 def _avatar_url(user: dict) -> str | None:
-    avatar = user.get("avatar")
-    if not avatar:
-        return None
-    return f"https://cdn.discordapp.com/avatars/{user['id']}/{avatar}.png?size=64"
+    return avatar_url(user.get("id", ""), user.get("avatar"))
 
 
 async def fetch_users(bot_token: str, ids: list[int]) -> dict[int, dict]:
