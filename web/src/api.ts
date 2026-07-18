@@ -1,4 +1,4 @@
-import type { Me, SettingField } from "./types";
+import type { ComplexSettings, Me, SettingField } from "./types";
 
 // dev: VITE_API_URL=http://localhost:8081; прод: пусто -> тот же origin
 const BASE: string = import.meta.env.VITE_API_URL ?? "";
@@ -49,4 +49,11 @@ export const api = {
     }),
   resetSetting: (guildId: string, key: string): Promise<SettingField> =>
     req<SettingField>(`/api/guilds/${guildId}/settings/${key}`, { method: "DELETE" }),
+  complexSettings: (guildId: string): Promise<ComplexSettings> =>
+    req<ComplexSettings>(`/api/guilds/${guildId}/settings/complex`),
+  batch: (guildId: string, values: Record<string, unknown>): Promise<void> =>
+    req<void>(`/api/guilds/${guildId}/settings/batch`, {
+      method: "PUT",
+      body: JSON.stringify({ values }),
+    }),
 };

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Guild, SettingField as Field } from "../types";
+import { ComplexSettings } from "./ComplexSettings";
 import { SettingField } from "./SettingField";
 
 const SECTIONS: { title: string; match: (k: string) => boolean }[] = [
@@ -87,6 +88,8 @@ export function GuildSettings({ guild }: { guild: Guild }) {
             </div>
           </section>
         ))}
+
+      {fields && <ComplexSettings guildId={guild.id} />}
     </div>
   );
 }

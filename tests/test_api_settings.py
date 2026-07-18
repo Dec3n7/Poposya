@@ -152,3 +152,66 @@ async def test_delete_resets_to_default(client):
     body = resp.json()
     assert body["is_override"] is False
     assert body["value"] == make_settings().lonely_hours  # вернулся дефолт
+
+
+# --- списочные/словарные настройки (роли, лимиты) через complex + batch ---
+
+
+async def test_complex_settings_shape(client):
+    resp = await client.get(f"/api/guilds/{GUILD}/settings/complex")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["role_thresholds"]["value"], list)
+    assert isinstance(data["role_names"]["value"], list)
+    assert isinstance(data["rate_limits"]["value"], dict)
+    assert data["role_thresholds"]["is_override"] is False
+
+
+async def test_batch_updates_roles_together(client):
+    resp = await client.put(
+        f"/api/guilds/{GUILD}/settings/batch",
+        json={
+            "values": {
+                "relationship_role_thresholds": [50, 150],
+                "relationship_role_names": ["a", "b", "c"],  # порогов+1
+            }
+        },
+    )
+    assert resp.status_code == 204
+    data = (await client.get(f"/api/guilds/{GUILD}/settings/complex")).json()
+    assert data["role_thresholds"]["value"] == [50, 150]
+    assert data["role_names"]["value"] == ["a", "b", "c"]
+    assert data["role_thresholds"]["is_override"] is True
+
+
+async def test_batch_rejects_broken_invariant_422(client):
+    # 2 порога требуют 3 имени; даём 2 -> кросс-инвариант падает, ничего не сохранено
+    resp = await client.put(
+        f"/api/guilds/{GUILD}/settings/batch",
+        json={
+            "values": {
+                "relationship_role_thresholds": [50, 150],
+                "relationship_role_names": ["a", "b"],
+            }
+        },
+    )
+    assert resp.status_code == 422
+    data = (await client.get(f"/api/guilds/{GUILD}/settings/complex")).json()
+    assert data["role_thresholds"]["is_override"] is False  # откат
+
+
+async def test_batch_updates_rate_limits(client):
+    resp = await client.put(
+        f"/api/guilds/{GUILD}/settings/batch",
+        json={"values": {"ai_rate_limits_by_level": {"1": 3, "2": 6, "3": 9, "4": 12, "5": 15, "6": 18, "7": 21}}},
+    )
+    assert resp.status_code == 204
+    data = (await client.get(f"/api/guilds/{GUILD}/settings/complex")).json()
+    assert data["rate_limits"]["value"]["1"] == 3
+
+
+async def test_batch_rejects_unknown_key_404(client):
+    resp = await client.put(
+        f"/api/guilds/{GUILD}/settings/batch", json={"values": {"no_such_key": [1, 2]}}
+    )
+    assert resp.status_code == 404

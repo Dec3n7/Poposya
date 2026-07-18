@@ -24,3 +24,16 @@ export interface SettingField {
   value: boolean | number | string;
   is_override: boolean;
 }
+
+export interface ComplexField<T> {
+  label: string;
+  value: T;
+  default: T;
+  is_override: boolean;
+}
+
+export interface ComplexSettings {
+  role_thresholds: ComplexField<number[]>;
+  role_names: ComplexField<string[]>;
+  rate_limits: ComplexField<Record<string, number>>;
+}

@@ -414,6 +414,61 @@ a {
   margin-left: auto;
 }
 
+/* --- complex editors: roles + limits --- */
+.tiers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.tier {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.tier-th {
+  width: 84px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.tier-name {
+  flex: 1;
+  width: auto;
+}
+.tier.exclusive {
+  padding-top: var(--sp-2);
+  margin-top: var(--sp-1);
+  border-top: 1px dashed var(--border);
+}
+.tier.exclusive .tier-th {
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+.limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-3);
+}
+.limit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.limit-row .input {
+  width: 72px;
+  text-align: center;
+}
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.editor-actions .field-status {
+  margin-left: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

@@ -35,3 +35,9 @@ class SettingFieldDTO(BaseModel):
 class SettingUpdate(BaseModel):
     # значение приходит как есть (строка/число/булево); бэкенд валидирует и парсит
     value: bool | int | float | str
+
+
+class BatchUpdate(BaseModel):
+    # для списочных/словарных настроек (роли, лимиты): несколько ключей разом,
+    # чтобы связанные (пороги ↔ имена) прошли кросс-валидацию вместе (set_many)
+    values: dict[str, object]
