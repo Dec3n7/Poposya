@@ -79,3 +79,28 @@ export interface Cinema {
   watchlist: WatchlistItem[];
   watched: WatchedItem[];
 }
+
+export interface PersonListItem {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  points: number;
+  role: string | null;
+  is_exclusive: boolean;
+}
+
+export interface PersonDetail {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  points: number;
+  level: number;
+  role: string | null;
+  is_exclusive: boolean;
+  frozen: boolean;
+  next_threshold: number | null;
+  deep_dialogs: number;
+  birthday_day: number | null;
+  birthday_month: number | null;
+  last_dialog_at: string | null;
+}

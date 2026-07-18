@@ -538,6 +538,73 @@ a {
   color: var(--accent-hover);
 }
 
+/* --- people --- */
+.leader-row.as-button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s var(--ease);
+}
+.leader-row.as-button:hover {
+  background: var(--accent-soft);
+}
+.leader-row.as-button:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -2px;
+}
+.person-card {
+  position: relative;
+  margin-bottom: var(--sp-4);
+}
+.person-close {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+}
+.person-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.person-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.person-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+.person-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.person-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  margin-top: var(--sp-4);
+}
+.person-action {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.person-action .input {
+  width: 90px;
+}
+
 /* --- cinema --- */
 .cine-row {
   display: flex;

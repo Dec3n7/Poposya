@@ -14,7 +14,12 @@ from src.api.bot_guilds import BotGuildsCache
 from src.application.cinema.use_cases import ListWatchlistUseCase, TopWatchedUseCase
 from src.application.interfaces.unit_of_work import IUnitOfWork
 from src.application.music.use_cases import ListPlaylistsUseCase
-from src.application.relationship.use_cases import GetLeaderboardUseCase
+from src.application.relationship.use_cases import (
+    GetLeaderboardUseCase,
+    GetRankUseCase,
+    SetPointsUseCase,
+    ToggleFreezeUseCase,
+)
 from src.config import Settings
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.db.session import create_engine, create_session_factory
@@ -37,6 +42,10 @@ class ApiContainer:
     list_watchlist: ListWatchlistUseCase
     top_watched: TopWatchedUseCase
     list_playlists: ListPlaylistsUseCase
+    # люди/отношения: карточка человека + admin-действия
+    get_rank: GetRankUseCase
+    set_points: SetPointsUseCase
+    toggle_freeze: ToggleFreezeUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -80,5 +89,8 @@ def assemble_container(
         list_watchlist=ListWatchlistUseCase(uow_factory),
         top_watched=TopWatchedUseCase(uow_factory),
         list_playlists=ListPlaylistsUseCase(uow_factory),
+        get_rank=GetRankUseCase(uow_factory, policy, settings_provider=guild_settings),
+        set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
+        toggle_freeze=ToggleFreezeUseCase(uow_factory),
         settings_listener=settings_listener,
     )

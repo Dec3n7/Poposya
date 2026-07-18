@@ -1,4 +1,13 @@
-import type { Channel, Cinema, ComplexSettings, Me, Overview, SettingField } from "./types";
+import type {
+  Channel,
+  Cinema,
+  ComplexSettings,
+  Me,
+  Overview,
+  PersonDetail,
+  PersonListItem,
+  SettingField,
+} from "./types";
 
 // dev: VITE_API_URL=http://localhost:8081; прод: пусто -> тот же origin
 const BASE: string = import.meta.env.VITE_API_URL ?? "";
@@ -61,4 +70,15 @@ export const api = {
   overview: (guildId: string): Promise<Overview> =>
     req<Overview>(`/api/guilds/${guildId}/overview`),
   cinema: (guildId: string): Promise<Cinema> => req<Cinema>(`/api/guilds/${guildId}/cinema`),
+  people: (guildId: string): Promise<PersonListItem[]> =>
+    req<PersonListItem[]>(`/api/guilds/${guildId}/people`),
+  person: (guildId: string, userId: string): Promise<PersonDetail> =>
+    req<PersonDetail>(`/api/guilds/${guildId}/people/${userId}`),
+  setPersonPoints: (guildId: string, userId: string, value: number): Promise<PersonDetail> =>
+    req<PersonDetail>(`/api/guilds/${guildId}/people/${userId}/points`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+  toggleFreeze: (guildId: string, userId: string): Promise<{ frozen: boolean }> =>
+    req<{ frozen: boolean }>(`/api/guilds/${guildId}/people/${userId}/freeze`, { method: "POST" }),
 };

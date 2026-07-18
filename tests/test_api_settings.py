@@ -295,3 +295,45 @@ async def test_cinema_watchlist_and_watched(client, uow_factory):
     assert any(m["title"] == "Дюна" for m in data["watchlist"])
     watched = data["watched"]
     assert any(m["title"] == "Бегущий" and m["avg_score"] == 8.5 for m in watched)
+
+
+# --- люди / отношения (список, карточка, admin-действия) --------------------
+
+
+async def test_people_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/people")
+    assert resp.status_code == 401
+
+
+async def test_people_list_detail_and_admin_actions(client, uow_factory, monkeypatch):
+    from src.api.routers import people as people_router
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(people_router, "fetch_users", fake_users)
+    async with uow_factory() as uow:
+        p = await uow.relationships.get_or_create(7, GUILD)
+        p.points = 500
+        await uow.relationships.save(p)
+        await uow.commit()
+
+    # список
+    lst = (await client.get(f"/api/guilds/{GUILD}/people")).json()
+    assert any(e["user_id"] == "7" and e["points"] == 500 for e in lst)
+
+    # карточка
+    det = (await client.get(f"/api/guilds/{GUILD}/people/7")).json()
+    assert det["points"] == 500 and det["frozen"] is False and det["username"] == "u7"
+
+    # админ правит очки
+    upd = await client.put(f"/api/guilds/{GUILD}/people/7/points", json={"value": 999})
+    assert upd.status_code == 200 and upd.json()["points"] == 999
+
+    # заморозка тоглится и видна в карточке
+    fr = await client.post(f"/api/guilds/{GUILD}/people/7/freeze")
+    assert fr.status_code == 200 and fr.json()["frozen"] is True
+    det2 = (await client.get(f"/api/guilds/{GUILD}/people/7")).json()
+    assert det2["frozen"] is True and det2["points"] == 999
