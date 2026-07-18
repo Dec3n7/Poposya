@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.api.bot_guilds import BotGuildsCache
 from src.application.cinema.use_cases import ListWatchlistUseCase, TopWatchedUseCase
+from src.application.finds.use_cases import GetActiveFindUseCase, TopCollectorsUseCase
 from src.application.interfaces.unit_of_work import IUnitOfWork
 from src.application.moderation.use_cases import (
     ClearWarnsUseCase,
@@ -56,6 +57,9 @@ class ApiContainer:
     get_warns: GetWarnsUseCase
     clear_warns: ClearWarnsUseCase
     list_bans: ListTempBansUseCase
+    # находки: активная находка + топ коллекционеров сервера
+    active_find: GetActiveFindUseCase
+    top_collectors: TopCollectorsUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -106,5 +110,7 @@ def assemble_container(
         get_warns=GetWarnsUseCase(uow_factory),
         clear_warns=ClearWarnsUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),
+        active_find=GetActiveFindUseCase(uow_factory),
+        top_collectors=TopCollectorsUseCase(uow_factory),
         settings_listener=settings_listener,
     )

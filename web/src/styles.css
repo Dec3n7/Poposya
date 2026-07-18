@@ -648,6 +648,31 @@ a {
   white-space: nowrap;
 }
 
+/* --- finds --- */
+.find-active {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.find-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.find-emoji {
+  font-size: 32px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.find-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.find-flavor {
+  font-style: italic;
+  font-size: 13px;
+}
+
 /* --- music / playlists --- */
 .pl-row {
   border-bottom: 1px solid var(--border-soft);

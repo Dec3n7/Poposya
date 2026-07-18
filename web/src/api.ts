@@ -3,6 +3,7 @@ import type {
   Channel,
   Cinema,
   ComplexSettings,
+  FindsOverview,
   Me,
   Overview,
   PersonDetail,
@@ -97,4 +98,6 @@ export const api = {
     req<PlaylistItem[]>(`/api/guilds/${guildId}/music/playlists`),
   playlist: (guildId: string, name: string): Promise<PlaylistDetail> =>
     req<PlaylistDetail>(`/api/guilds/${guildId}/music/playlists/${encodeURIComponent(name)}`),
+  finds: (guildId: string): Promise<FindsOverview> =>
+    req<FindsOverview>(`/api/guilds/${guildId}/finds/overview`),
 };

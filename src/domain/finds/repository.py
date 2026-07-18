@@ -51,6 +51,11 @@ class ICollectionRepository(ABC):
     @abstractmethod
     async def mark_gifted(self, collection_item_id: int, now: datetime) -> None: ...
 
+    @abstractmethod
+    async def top_collectors(self, guild_id: int, limit: int) -> list[tuple[int, int, int]]:
+        """Топ по числу находок: (user_id, всего предметов, из них подарено).
+        По убыванию количества."""
+
 
 class IFindAttemptRepository(ABC):
     """Попытки походов и прогулок: кулдауны и история."""

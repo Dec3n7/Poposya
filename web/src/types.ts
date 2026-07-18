@@ -108,6 +108,29 @@ export interface PlaylistDetail {
   tracks: PlaylistTrack[];
 }
 
+export interface ActiveFind {
+  location: string;
+  location_flavor: string;
+  item_emoji: string;
+  item_name: string;
+  rarity: string;
+  rarity_emoji: string;
+  expires_at: string;
+}
+
+export interface Collector {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  total: number;
+  gifted: number;
+}
+
+export interface FindsOverview {
+  active: ActiveFind | null;
+  collectors: Collector[];
+}
+
 export interface Ban {
   user_id: string;
   username: string | null;

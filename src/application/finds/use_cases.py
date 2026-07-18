@@ -475,3 +475,23 @@ class ListLiveFindsUseCase:
     async def execute(self, now: datetime) -> list[NightFind]:
         async with self._uow_factory() as uow:
             return await uow.night_finds.list_unclaimed(now)
+
+
+@dataclass(frozen=True)
+class CollectorStat:
+    user_id: int
+    total: int
+    gifted: int
+
+
+class TopCollectorsUseCase:
+    """Топ коллекционеров сервера: у кого больше всего находок (и сколько
+    подарено Попосе). Для read-обзора находок в панели."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int, limit: int = 20) -> list[CollectorStat]:
+        async with self._uow_factory() as uow:
+            rows = await uow.collections.top_collectors(guild_id, limit)
+            return [CollectorStat(user_id=uid, total=tot, gifted=gif) for uid, tot, gif in rows]

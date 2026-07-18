@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.container import ApiContainer
-from src.api.routers import auth, guilds, moderation, music, people, settings
+from src.api.routers import auth, finds, guilds, moderation, music, people, settings
 
 logger = logging.getLogger(__name__)
 
@@ -57,4 +57,5 @@ def create_app(container: ApiContainer) -> FastAPI:
     app.include_router(people.router)
     app.include_router(moderation.router)
     app.include_router(music.router)
+    app.include_router(finds.router)
     return app

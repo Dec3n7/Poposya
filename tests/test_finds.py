@@ -152,6 +152,16 @@ class FakeCollections(ICollectionRepository):
                     gifted_at=now,
                 )
 
+    async def top_collectors(self, guild_id, limit):
+        counts: dict[int, tuple[int, int]] = {}
+        for i in self.items:
+            if i.guild_id != guild_id:
+                continue
+            tot, gif = counts.get(i.user_id, (0, 0))
+            counts[i.user_id] = (tot + 1, gif + (1 if i.gifted_at is not None else 0))
+        ranked = sorted(counts.items(), key=lambda kv: kv[1][0], reverse=True)
+        return [(uid, tot, gif) for uid, (tot, gif) in ranked[:limit]]
+
 
 class FakeAttempts(IFindAttemptRepository):
     def __init__(self):

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.finds.entities import CollectionItem, FindAttempt, NightFind
@@ -183,6 +183,19 @@ class SqlAlchemyCollectionRepository(ICollectionRepository):
         row = await self._session.get(CollectionItemModel, collection_item_id)
         if row is not None:
             row.gifted_at = _naive(now)
+
+    async def top_collectors(self, guild_id: int, limit: int) -> list[tuple[int, int, int]]:
+        gifted = func.count(CollectionItemModel.gifted_at)  # COUNT игнорирует NULL
+        total = func.count()
+        stmt = (
+            select(CollectionItemModel.user_id, total, gifted)
+            .where(CollectionItemModel.guild_id == guild_id)
+            .group_by(CollectionItemModel.user_id)
+            .order_by(total.desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(user_id, tot, gif) for user_id, tot, gif in rows]
 
 
 class SqlAlchemyFindAttemptRepository(IFindAttemptRepository):

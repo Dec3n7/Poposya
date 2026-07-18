@@ -458,3 +458,58 @@ async def test_music_playlists_list_and_tracks(client, uow_factory, monkeypatch)
 async def test_music_playlist_not_found_404(client):
     resp = await client.get(f"/api/guilds/{GUILD}/music/playlists/нет-такого")
     assert resp.status_code == 404
+
+
+# --- находки (server-level обзор: активная + топ коллекционеров) ------------
+
+
+async def test_finds_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/finds/overview")
+    assert resp.status_code == 401
+
+
+async def test_finds_overview_empty(client, monkeypatch):
+    from src.api.routers import finds as finds_router
+
+    async def fake_users(_token, ids):
+        return {}
+
+    monkeypatch.setattr(finds_router, "fetch_users", fake_users)
+    data = (await client.get(f"/api/guilds/{GUILD}/finds/overview")).json()
+    assert data == {"active": None, "collectors": []}
+
+
+async def test_finds_overview_collectors_ranked(client, uow_factory, monkeypatch):
+    from datetime import UTC, datetime
+
+    from src.api.routers import finds as finds_router
+    from src.domain.finds.entities import CollectionItem
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(finds_router, "fetch_users", fake_users)
+    now = datetime.now(UTC)
+    async with uow_factory() as uow:
+        # user 5: 3 находки, 1 подарена; user 6: 1 находка
+        for _ in range(3):
+            await uow.collections.add(
+                CollectionItem(guild_id=GUILD, user_id=5, item_id="letter", obtained_at=now)
+            )
+        await uow.collections.add(
+            CollectionItem(
+                guild_id=GUILD, user_id=5, item_id="letter", obtained_at=now, gifted_at=now
+            )
+        )
+        await uow.collections.add(
+            CollectionItem(guild_id=GUILD, user_id=6, item_id="letter", obtained_at=now)
+        )
+        await uow.commit()
+
+    data = (await client.get(f"/api/guilds/{GUILD}/finds/overview")).json()
+    cols = data["collectors"]
+    assert [c["user_id"] for c in cols] == ["5", "6"]  # по убыванию total
+    assert cols[0]["total"] == 4 and cols[0]["gifted"] == 1
+    assert cols[1]["total"] == 1 and cols[1]["gifted"] == 0
