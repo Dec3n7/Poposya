@@ -215,3 +215,26 @@ async def test_batch_rejects_unknown_key_404(client):
         f"/api/guilds/{GUILD}/settings/batch", json={"values": {"no_such_key": [1, 2]}}
     )
     assert resp.status_code == 404
+
+
+# --- пикер каналов ----------------------------------------------------------
+
+
+async def test_channels_returns_list(client, monkeypatch):
+    from src.api.routers import guilds as guilds_router
+
+    async def fake(_token, _gid):
+        return [{"id": "111", "name": "общий", "group": "Текстовые", "position": 0}]
+
+    monkeypatch.setattr(guilds_router, "fetch_guild_channels", fake)
+    resp = await client.get(f"/api/guilds/{GUILD}/channels")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["name"] == "общий" and body[0]["id"] == "111"
+
+
+async def test_channels_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/channels")
+    assert resp.status_code == 401

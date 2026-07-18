@@ -1,4 +1,4 @@
-import type { ComplexSettings, Me, SettingField } from "./types";
+import type { Channel, ComplexSettings, Me, SettingField } from "./types";
 
 // dev: VITE_API_URL=http://localhost:8081; прод: пусто -> тот же origin
 const BASE: string = import.meta.env.VITE_API_URL ?? "";
@@ -56,4 +56,6 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ values }),
     }),
+  channels: (guildId: string): Promise<Channel[]> =>
+    req<Channel[]>(`/api/guilds/${guildId}/channels`),
 };

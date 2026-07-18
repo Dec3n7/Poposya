@@ -37,3 +37,10 @@ export interface ComplexSettings {
   role_names: ComplexField<string[]>;
   rate_limits: ComplexField<Record<string, number>>;
 }
+
+export interface Channel {
+  id: string;
+  name: string;
+  group: string;
+  position: number;
+}

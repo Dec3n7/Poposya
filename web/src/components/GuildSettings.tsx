@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { Guild, SettingField as Field } from "../types";
+import type { Channel, Guild, SettingField as Field } from "../types";
 import { ComplexSettings } from "./ComplexSettings";
 import { SettingField } from "./SettingField";
 
@@ -42,10 +42,12 @@ function group(fields: Field[]): { title: string; items: Field[] }[] {
 
 export function GuildSettings({ guild }: { guild: Guild }) {
   const [fields, setFields] = useState<Field[] | null>(null);
+  const [channels, setChannels] = useState<Channel[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setFields(null);
+    setChannels(undefined);
     setError(null);
     api
       .settings(guild.id)
@@ -57,6 +59,11 @@ export function GuildSettings({ guild }: { guild: Guild }) {
           setError("У тебя нет прав управлять этим сервером.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить настройки");
       });
+    // каналы — для пикера; если не отдались, поля-каналы остаются с вводом ID
+    api
+      .channels(guild.id)
+      .then(setChannels)
+      .catch(() => setChannels(undefined));
   }, [guild.id]);
 
   function update(updated: Field) {
@@ -83,7 +90,13 @@ export function GuildSettings({ guild }: { guild: Guild }) {
             <h2 className="section-title">{section.title}</h2>
             <div className="card fields-card">
               {section.items.map((f) => (
-                <SettingField key={f.key} guildId={guild.id} field={f} onChange={update} />
+                <SettingField
+                  key={f.key}
+                  guildId={guild.id}
+                  field={f}
+                  onChange={update}
+                  channels={f.kind === "channel" ? channels : undefined}
+                />
               ))}
             </div>
           </section>

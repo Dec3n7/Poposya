@@ -400,6 +400,13 @@ a {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.input.select {
+  width: auto;
+  min-width: 200px;
+  max-width: 320px;
+  cursor: pointer;
+  font-family: var(--font);
+}
 .unit {
   color: var(--fg-dim);
   font-size: 13px;

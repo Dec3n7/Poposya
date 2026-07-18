@@ -1,18 +1,49 @@
 import { useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { SettingField as Field } from "../types";
+import type { Channel, SettingField as Field } from "../types";
 
 type Status = "idle" | "saving" | "saved" | "error";
+
+function ChannelSelect({
+  value,
+  channels,
+  onPick,
+}: {
+  value: string;
+  channels: Channel[];
+  onPick: (id: string) => void;
+}) {
+  const groups: Record<string, Channel[]> = {};
+  for (const c of channels) (groups[c.group] ??= []).push(c);
+  const known = value === "0" || channels.some((c) => c.id === value);
+  return (
+    <select className="input select" value={value} onChange={(e) => onPick(e.target.value)}>
+      <option value="0">— выключено —</option>
+      {!known && <option value={value}>ID {value} (не в списке)</option>}
+      {Object.entries(groups).map(([group, list]) => (
+        <optgroup label={group} key={group}>
+          {list.map((c) => (
+            <option value={c.id} key={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
 
 export function SettingField({
   guildId,
   field,
   onChange,
+  channels,
 }: {
   guildId: string;
   field: Field;
   onChange: (updated: Field) => void;
+  channels?: Channel[];
 }) {
   const [status, setStatus] = useState<Status>("idle");
   const [err, setErr] = useState("");
@@ -83,6 +114,8 @@ export function SettingField({
           >
             <span className="knob" />
           </button>
+        ) : field.kind === "channel" && channels ? (
+          <ChannelSelect value={String(field.value)} channels={channels} onPick={commit} />
         ) : (
           <div className="input-wrap">
             <input
@@ -98,15 +131,17 @@ export function SettingField({
         )}
 
         <span className="field-meta">
-          {field.kind !== "bool" && field.min != null && field.max != null && (
+          {field.kind !== "bool" && field.kind !== "channel" && field.min != null && field.max != null && (
             <span className="faint">
               {field.min}–{field.max}
             </span>
           )}
-          {field.kind === "channel" && <span className="faint">ID канала (0 — выкл)</span>}
-          <span className="faint">
-            по умолчанию: <span className="mono">{String(field.default)}</span>
-          </span>
+          {field.kind === "channel" && !channels && <span className="faint">ID канала (0 — выкл)</span>}
+          {field.kind !== "channel" && (
+            <span className="faint">
+              по умолчанию: <span className="mono">{String(field.default)}</span>
+            </span>
+          )}
         </span>
 
         {field.is_override && (
