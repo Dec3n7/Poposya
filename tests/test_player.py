@@ -180,8 +180,11 @@ async def test_seek_rejects_out_of_range(player, voice):
 
 async def test_seek_rejects_live_stream(voice):
     player = GuildPlayer(
-        guild_id=1, audio_source=FakeAudio(), voice=voice,
-        event_bus=InMemoryEventBus(), volume=0.5,
+        guild_id=1,
+        audio_source=FakeAudio(),
+        voice=voice,
+        event_bus=InMemoryEventBus(),
+        volume=0.5,
     )
     live = Track(video_id="live", title="эфир", url="u", duration=None, requested_by=1)
     await player.enqueue([live])

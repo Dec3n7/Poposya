@@ -93,9 +93,7 @@ class RadioService:
         await session.player.enqueue(batch)
         return True
 
-    async def _from_mix(
-        self, session: GuildMusicSession, history: "deque[str]"
-    ) -> list[Track]:
+    async def _from_mix(self, session: GuildMusicSession, history: "deque[str]") -> list[Track]:
         """«Похожие» из YouTube Mix (watch?v=<id>&list=RD<id>) по последнему
         игравшему треку. Пустой список — сида нет или микс не отдался."""
         hist = session.player.history
