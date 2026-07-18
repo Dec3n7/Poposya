@@ -1,4 +1,4 @@
-import type { Channel, ComplexSettings, Me, Overview, SettingField } from "./types";
+import type { Channel, Cinema, ComplexSettings, Me, Overview, SettingField } from "./types";
 
 // dev: VITE_API_URL=http://localhost:8081; прод: пусто -> тот же origin
 const BASE: string = import.meta.env.VITE_API_URL ?? "";
@@ -60,4 +60,5 @@ export const api = {
     req<Channel[]>(`/api/guilds/${guildId}/channels`),
   overview: (guildId: string): Promise<Overview> =>
     req<Overview>(`/api/guilds/${guildId}/overview`),
+  cinema: (guildId: string): Promise<Cinema> => req<Cinema>(`/api/guilds/${guildId}/cinema`),
 };

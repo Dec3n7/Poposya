@@ -58,3 +58,32 @@ async def overview(
             "playlists": len(playlists),
         },
     }
+
+
+@router.get("/cinema")
+async def cinema(
+    guild_id: int = Depends(require_guild_manager),
+    container=Depends(get_container),
+) -> dict[str, object]:
+    """Киноклуб: вотчлист (с голосами) и золотой фонд (просмотренные с оценками).
+    Те же read-use-case'ы, что и у бота."""
+    watchlist = await container.list_watchlist.execute(guild_id)  # [(entry, up, down)]
+    watched = await container.top_watched.execute(guild_id)  # [entry], по среднему баллу
+
+    return {
+        "watchlist": [
+            {"title": e.title, "year": e.year, "up": up, "down": down}
+            for e, up, down in watchlist
+        ],
+        "watched": [
+            {
+                "title": e.title,
+                "year": e.year,
+                "avg_score": e.avg_score,
+                "ratings_count": e.ratings_count,
+                "poposya_score": e.poposya_score,
+                "poposya_review": e.poposya_review,
+            }
+            for e in watched
+        ],
+    }

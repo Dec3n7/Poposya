@@ -261,3 +261,37 @@ async def test_overview_leaderboard_and_counts(client, uow_factory, monkeypatch)
     assert [e["points"] for e in board] == [300, 100]  # по убыванию очков
     assert board[0]["username"] == "user1"
     assert data["counts"] == {"watchlist": 0, "watched": 0, "playlists": 0}
+
+
+# --- киноклуб ---------------------------------------------------------------
+
+
+async def test_cinema_watchlist_and_watched(client, uow_factory):
+    from datetime import UTC, datetime
+
+    from src.domain.cinema.entities import MovieEntry
+
+    now = datetime.now(UTC)
+    async with uow_factory() as uow:
+        await uow.movies.add(
+            MovieEntry(guild_id=GUILD, title="Дюна", added_by=1, added_at=now, status="listed")
+        )
+        await uow.movies.add(
+            MovieEntry(
+                guild_id=GUILD,
+                title="Бегущий",
+                added_by=1,
+                added_at=now,
+                status="watched",
+                avg_score=8.5,
+                ratings_count=3,
+            )
+        )
+        await uow.commit()
+
+    resp = await client.get(f"/api/guilds/{GUILD}/cinema")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert any(m["title"] == "Дюна" for m in data["watchlist"])
+    watched = data["watched"]
+    assert any(m["title"] == "Бегущий" and m["avg_score"] == 8.5 for m in watched)

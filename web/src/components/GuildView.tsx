@@ -1,10 +1,17 @@
 import { useState } from "react";
 
 import type { Guild } from "../types";
+import { Cinema } from "./Cinema";
 import { Dashboard } from "./Dashboard";
 import { GuildSettings } from "./GuildSettings";
 
-type Tab = "overview" | "settings";
+type Tab = "overview" | "cinema" | "settings";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Обзор" },
+  { id: "cinema", label: "Киноклуб" },
+  { id: "settings", label: "Настройки" },
+];
 
 export function GuildView({ guild }: { guild: Guild }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -12,20 +19,19 @@ export function GuildView({ guild }: { guild: Guild }) {
     <div>
       <h1 className="h1">{guild.name}</h1>
       <div className="tabs">
-        <button
-          className={`tab${tab === "overview" ? " active" : ""}`}
-          onClick={() => setTab("overview")}
-        >
-          Обзор
-        </button>
-        <button
-          className={`tab${tab === "settings" ? " active" : ""}`}
-          onClick={() => setTab("settings")}
-        >
-          Настройки
-        </button>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`tab${tab === t.id ? " active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      {tab === "overview" ? <Dashboard guild={guild} /> : <GuildSettings guild={guild} />}
+      {tab === "overview" && <Dashboard guild={guild} />}
+      {tab === "cinema" && <Cinema guild={guild} />}
+      {tab === "settings" && <GuildSettings guild={guild} />}
     </div>
   );
 }

@@ -58,3 +58,24 @@ export interface Overview {
   leaderboard: LeaderEntry[];
   counts: { watchlist: number; watched: number; playlists: number };
 }
+
+export interface WatchlistItem {
+  title: string;
+  year: number | null;
+  up: number;
+  down: number;
+}
+
+export interface WatchedItem {
+  title: string;
+  year: number | null;
+  avg_score: number | null;
+  ratings_count: number;
+  poposya_score: number | null;
+  poposya_review: string;
+}
+
+export interface Cinema {
+  watchlist: WatchlistItem[];
+  watched: WatchedItem[];
+}
