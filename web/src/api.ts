@@ -1,4 +1,5 @@
 import type {
+  Ban,
   Channel,
   Cinema,
   ComplexSettings,
@@ -7,6 +8,7 @@ import type {
   PersonDetail,
   PersonListItem,
   SettingField,
+  Warn,
 } from "./types";
 
 // dev: VITE_API_URL=http://localhost:8081; прод: пусто -> тот же origin
@@ -81,4 +83,12 @@ export const api = {
     }),
   toggleFreeze: (guildId: string, userId: string): Promise<{ frozen: boolean }> =>
     req<{ frozen: boolean }>(`/api/guilds/${guildId}/people/${userId}/freeze`, { method: "POST" }),
+  bans: (guildId: string): Promise<Ban[]> =>
+    req<Ban[]>(`/api/guilds/${guildId}/moderation/bans`),
+  warns: (guildId: string, userId: string): Promise<Warn[]> =>
+    req<Warn[]>(`/api/guilds/${guildId}/moderation/warns/${userId}`),
+  clearWarns: (guildId: string, userId: string): Promise<{ cleared: number }> =>
+    req<{ cleared: number }>(`/api/guilds/${guildId}/moderation/warns/${userId}`, {
+      method: "DELETE",
+    }),
 };

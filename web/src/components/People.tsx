@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { Guild, PersonDetail, PersonListItem } from "../types";
+import type { Guild, PersonDetail, PersonListItem, Warn } from "../types";
 
 const MONTHS = [
   "янв",
@@ -36,12 +36,14 @@ function PersonCard({
   onChanged: () => void;
 }) {
   const [d, setD] = useState<PersonDetail | null>(null);
+  const [warns, setWarns] = useState<Warn[]>([]);
   const [pts, setPts] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     setD(null);
+    setWarns([]);
     api
       .person(guildId, userId)
       .then((x) => {
@@ -49,7 +51,26 @@ function PersonCard({
         setPts(String(x.points));
       })
       .catch((e) => setErr(e instanceof ApiError ? e.message : "Ошибка"));
+    api
+      .warns(guildId, userId)
+      .then(setWarns)
+      .catch(() => {
+        /* варны — не критично для карточки */
+      });
   }, [guildId, userId]);
+
+  async function clearWarns() {
+    setBusy(true);
+    setErr("");
+    try {
+      await api.clearWarns(guildId, userId);
+      setWarns([]);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function savePoints() {
     const n = parseInt(pts, 10);
@@ -159,6 +180,32 @@ function PersonCard({
                 <span className="knob" />
               </button>
             </label>
+          </div>
+
+          <div className="person-warns">
+            <div className="person-warns-head">
+              <span className="faint">Варны {warns.length > 0 && `(${warns.length})`}</span>
+              {warns.length > 0 && (
+                <button className="btn ghost small" onClick={clearWarns} disabled={busy}>
+                  Сбросить
+                </button>
+              )}
+            </div>
+            {warns.length === 0 ? (
+              <div className="muted small">Нет активных варнов.</div>
+            ) : (
+              <ul className="warn-list">
+                {warns.map((w) => (
+                  <li className="warn-item" key={w.id}>
+                    <span className="warn-reason">{w.reason || "без причины"}</span>
+                    <span className="faint small">
+                      {fmtDate(w.created_at)}
+                      {w.moderator_name && ` · ${w.moderator_name}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {err && <div className="error-banner" style={{ marginTop: 12 }}>{err}</div>}
         </>

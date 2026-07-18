@@ -4,14 +4,16 @@ import type { Guild } from "../types";
 import { Cinema } from "./Cinema";
 import { Dashboard } from "./Dashboard";
 import { GuildSettings } from "./GuildSettings";
+import { Moderation } from "./Moderation";
 import { People } from "./People";
 
-type Tab = "overview" | "people" | "cinema" | "settings";
+type Tab = "overview" | "people" | "cinema" | "moderation" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
   { id: "people", label: "Люди" },
   { id: "cinema", label: "Киноклуб" },
+  { id: "moderation", label: "Модерация" },
   { id: "settings", label: "Настройки" },
 ];
 
@@ -34,6 +36,7 @@ export function GuildView({ guild }: { guild: Guild }) {
       {tab === "overview" && <Dashboard guild={guild} />}
       {tab === "people" && <People guild={guild} />}
       {tab === "cinema" && <Cinema guild={guild} />}
+      {tab === "moderation" && <Moderation guild={guild} />}
       {tab === "settings" && <GuildSettings guild={guild} />}
     </div>
   );

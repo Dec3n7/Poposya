@@ -13,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from src.api.bot_guilds import BotGuildsCache
 from src.application.cinema.use_cases import ListWatchlistUseCase, TopWatchedUseCase
 from src.application.interfaces.unit_of_work import IUnitOfWork
+from src.application.moderation.use_cases import (
+    ClearWarnsUseCase,
+    GetWarnsUseCase,
+    ListTempBansUseCase,
+)
 from src.application.music.use_cases import ListPlaylistsUseCase
 from src.application.relationship.use_cases import (
     GetLeaderboardUseCase,
@@ -46,6 +51,10 @@ class ApiContainer:
     get_rank: GetRankUseCase
     set_points: SetPointsUseCase
     toggle_freeze: ToggleFreezeUseCase
+    # модерация (только чтение + безопасный сброс варнов — без Discord-побочки)
+    get_warns: GetWarnsUseCase
+    clear_warns: ClearWarnsUseCase
+    list_bans: ListTempBansUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -92,5 +101,8 @@ def assemble_container(
         get_rank=GetRankUseCase(uow_factory, policy, settings_provider=guild_settings),
         set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),
+        get_warns=GetWarnsUseCase(uow_factory),
+        clear_warns=ClearWarnsUseCase(uow_factory),
+        list_bans=ListTempBansUseCase(uow_factory),
         settings_listener=settings_listener,
     )

@@ -337,3 +337,78 @@ async def test_people_list_detail_and_admin_actions(client, uow_factory, monkeyp
     assert fr.status_code == 200 and fr.json()["frozen"] is True
     det2 = (await client.get(f"/api/guilds/{GUILD}/people/7")).json()
     assert det2["frozen"] is True and det2["points"] == 999
+
+
+# --- модерация (чтение банов/варнов + сброс варнов) -------------------------
+
+
+async def test_moderation_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/moderation/bans")
+    assert resp.status_code == 401
+
+
+async def test_moderation_bans_list(client, uow_factory, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from src.api.routers import moderation as mod_router
+    from src.domain.moderation.entities import TempBan
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(mod_router, "fetch_users", fake_users)
+    now = datetime.now(UTC)
+    async with uow_factory() as uow:
+        await uow.temp_bans.add(
+            TempBan(
+                guild_id=GUILD,
+                user_id=42,
+                moderator_id=1,
+                reason="флуд",
+                expires_at=now + timedelta(hours=2),
+            )
+        )
+        # просроченный — не должен попасть в активные
+        await uow.temp_bans.add(
+            TempBan(
+                guild_id=GUILD,
+                user_id=43,
+                moderator_id=1,
+                reason="старьё",
+                expires_at=now - timedelta(hours=1),
+            )
+        )
+        await uow.commit()
+
+    data = (await client.get(f"/api/guilds/{GUILD}/moderation/bans")).json()
+    assert [b["user_id"] for b in data] == ["42"]
+    assert data[0]["reason"] == "флуд" and data[0]["moderator_name"] == "u1"
+
+
+async def test_moderation_warns_read_and_clear(client, uow_factory, monkeypatch):
+    from datetime import UTC, datetime
+
+    from src.api.routers import moderation as mod_router
+    from src.domain.moderation.entities import Warn
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(mod_router, "fetch_users", fake_users)
+    now = datetime.now(UTC)
+    async with uow_factory() as uow:
+        for reason in ("спам", "капс"):
+            await uow.warns.add(
+                Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason=reason, created_at=now)
+            )
+        await uow.commit()
+
+    warns = (await client.get(f"/api/guilds/{GUILD}/moderation/warns/9")).json()
+    assert [w["reason"] for w in warns] == ["спам", "капс"]
+
+    cleared = await client.delete(f"/api/guilds/{GUILD}/moderation/warns/9")
+    assert cleared.status_code == 200 and cleared.json()["cleared"] == 2
+    after = (await client.get(f"/api/guilds/{GUILD}/moderation/warns/9")).json()
+    assert after == []

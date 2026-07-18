@@ -89,6 +89,24 @@ export interface PersonListItem {
   is_exclusive: boolean;
 }
 
+export interface Ban {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  moderator_id: string;
+  moderator_name: string | null;
+  reason: string;
+  expires_at: string;
+}
+
+export interface Warn {
+  id: number;
+  reason: string;
+  moderator_id: string;
+  moderator_name: string | null;
+  created_at: string;
+}
+
 export interface PersonDetail {
   user_id: string;
   username: string | null;
