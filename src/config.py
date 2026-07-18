@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     # --- health-эндпоинт (aiohttp, /health и /ready) ---
     health_port: int = 8080
 
+    # --- веб-панель (отдельный FastAPI-процесс; секреты ТОЛЬКО в .env) ---
+    # discord_client_id/secret — из Discord Developer Portal (OAuth2).
+    discord_client_id: str = ""
+    discord_client_secret: str = ""
+    web_oauth_redirect: str = "http://localhost:8081/api/auth/callback"
+    # ключ подписи JWT-сессий (сгенерировать своим secrets.token_urlsafe)
+    web_session_secret: str = ""
+    web_allowed_origin: str = "http://localhost:5173"  # адрес фронта для CORS
+    web_api_port: int = 8081
+    web_session_ttl_hours: int = 24
+
     # --- база данных ---
     database_url: str = "sqlite+aiosqlite:///./poposya.db"
     auto_migrate: bool = True  # применять миграции Alembic при старте (dev-режим)

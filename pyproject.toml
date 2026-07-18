@@ -35,6 +35,15 @@ ignore = ["E501"]
 # в тестах короткие lambda как фейки-колбэки читаются лучше, чем def
 "tests/**" = ["E731"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Depends/Security/Query в дефолтах аргументов — идиома FastAPI, не баг (B008)
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Security",
+]
+
 [tool.mypy]
 # строгая типизация только для ядра (domain + application); инфраструктуру
 # импортируем «молча», чтобы её ошибки не валили гейт ядра
