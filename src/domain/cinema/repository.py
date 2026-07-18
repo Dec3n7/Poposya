@@ -18,6 +18,12 @@ class IMovieEntryRepository(ABC):
     async def get(self, entry_id: int) -> MovieEntry | None: ...
 
     @abstractmethod
+    async def get_for_update(self, entry_id: int) -> MovieEntry | None:
+        """Как get, но блокирует строку до конца транзакции. Write-путь:
+        read-modify-write в save() иначе теряет чужой апдейт под двумя
+        писателями (карточка/оценки/финализация одного фильма)."""
+
+    @abstractmethod
     async def get_by_message(self, message_id: int) -> MovieEntry | None: ...
 
     @abstractmethod
@@ -74,6 +80,15 @@ class IMovieNightRepository(ABC):
 
     @abstractmethod
     async def get(self, night_id: int) -> MovieNight | None: ...
+
+    @abstractmethod
+    async def get_for_update(self, night_id: int) -> MovieNight | None:
+        """Как get, но с блокировкой строки. Write-путь: закрытие опроса ∥
+        отмена ночи иначе конфликтуют по статусу (last-write-wins)."""
+
+    @abstractmethod
+    async def get_active_for_update(self, guild_id: int) -> MovieNight | None:
+        """Как get_active, но с блокировкой. Write-путь отмены ночи."""
 
     @abstractmethod
     async def get_by_poll_message(self, message_id: int) -> MovieNight | None: ...

@@ -197,13 +197,21 @@ save(profile)                           # ПЕРЕЗАПИСЫВАЮТ ВСЮ С
 
 ---
 
-## MEDIUM (по желанию, не блокеры)
-- `MovieEntry.save` / `MovieNight.save` — тот же full-row RMW, что relationship,
-  но холодный. Тот же приём (Вариант A: `with_for_update` в `get`/write-путях)
-  ляжет по образцу relationship. Делать, если панель даст управление киноклубом.
-- `Playlist.save` — перезапись блоба. Если панель даёт редактор плейлистов —
-  перевести на «прочитать под локом» или версионирование. Иначе last-write-wins
-  по имени приемлемо.
+## MEDIUM (Фаза 4) — ✅ СДЕЛАНО (2026-07-18)
+- **`MovieEntry` / `MovieNight`** (full-row RMW, холодный, но с реальной гонкой
+  Cancel∥ClosePoll по статусу). Вариант A: добавлены **локирующие write-фетчи**
+  в доменные порты (`get_for_update`, у ночей ещё `get_active_for_update`) —
+  чистые `get`/`get_active` для чтения не тронуты, лок — деталь реализации (как
+  `get_or_create` у relationship). Write-use-case'ы (`RegisterMessage`,
+  `OpenRating`, `FinalizeRating`, `CloseNightPoll`, `CancelNight`) переведены на
+  них. `save()` берёт уже залоченную строку из сессии.
+  - Тесты (Postgres): `test_movie_night_register_message_and_close` — строгий
+    (close тяжёлый, перекрытие стабильно; падает на снятом локе); `test_movie_
+    finalize_and_register` — сценарный (короткие транзакции, ловит реже).
+- **`Playlist.save`** переведён на `INSERT … ON CONFLICT DO UPDATE` по
+  (guild_id, name): плейлист всегда пишется целиком (не дельта), поэтому гонка =
+  осознанный last-write-wins, а параллельная вставка нового имени больше не даёт
+  `IntegrityError`. Порчи не было и нет.
 
 ## LOW (принятый риск — НЕ чинить сейчас)
 - votes / ratings / likes — fail-loud (unique-констрейнты). Перевести на
@@ -231,8 +239,9 @@ save(profile)                           # ПЕРЕЗАПИСЫВАЮТ ВСЮ С
 - [x] **Фаза 3 — кэш настроек (HIGH #2).** ✅ 2026-07-18 — Postgres LISTEN/NOTIFY
       (`pg_notify` на запись + `SettingsChangeListener` + `reload_guild`). Панель
       теперь может писать настройки в обход бота. См. «Фикс #2» выше.
-- [ ] **Фаза 4 — MEDIUM (по мере надобности).** cinema/playlist — когда панель
-      даст эти поверхности, по образцу Фазы 1.
+- [x] **Фаза 4 — MEDIUM.** ✅ 2026-07-18 — cinema (`get_for_update` write-фетчи в
+      портах + 5 use-case) и playlist (`ON CONFLICT` upsert). См. «MEDIUM (Фаза
+      4)» выше.
 
 ### Definition of Done (для «готово к панели по части конкурентности»)
 1. ✅ `RelationshipProfile.save` не теряет апдейты под двумя писателями —
@@ -243,8 +252,8 @@ save(profile)                           # ПЕРЕЗАПИСЫВАЮТ ВСЮ С
 4. ✅ Каждый новый фикс закрыт тестом (relationship — пакетные гонки на Postgres;
    настройки — reload на SQLite + сквозной NOTIFY на Postgres).
 
-**Итог: по части конкурентности всё готово к веб-панели.** Остаётся только
-Фаза 4 (MEDIUM cinema/playlist) — по мере появления этих поверхностей в панели.
+**Итог: по части конкурентности всё готово к веб-панели.** Фазы 1–4 сделаны и
+задеплоены; остаётся только LOW (принятый риск, fail-loud) — не блокер.
 
 ---
 

@@ -19,6 +19,7 @@ TEST_DATABASE_URL не указывает на Postgres — ровно ту БД
 
 import asyncio
 import os
+import random
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -26,6 +27,11 @@ import pytest
 from src.application.activity.use_cases import (
     SaveVoiceProgressUseCase,
     TryMarkAlbumPostUseCase,
+)
+from src.application.cinema.use_cases import (
+    CloseNightPollUseCase,
+    FinalizeRatingUseCase,
+    RegisterMovieMessageUseCase,
 )
 from src.application.relationship.use_cases import (
     AwardPointUseCase,
@@ -41,6 +47,7 @@ from src.application.tempvoice.use_cases import (
     GetTempChannelUseCase,
     RegisterTempChannelUseCase,
 )
+from src.domain.cinema.entities import MovieEntry, MovieNight
 from src.domain.relationship.policies import PointsToLevelPolicy
 
 POLICY = PointsToLevelPolicy()
@@ -271,3 +278,97 @@ async def test_decay_batch_not_lost_to_concurrent_set_points(uow_factory):
     # 500 = админ после угасания (или угасание пропустило); 490 = угасание после
     # админа. Значения порчи 90 (админ затёрт) или 100 (угасание затёрто) — баг.
     assert all(p in (490, 500) for p in finals.values()), finals
+
+
+# --- киноклуб: full-row save фильма/ночи под локом (Фаза 4) ---
+
+
+async def _seed_rating_movies(uow_factory, n: int) -> list[int]:
+    ids: list[int] = []
+    async with uow_factory() as uow:
+        for i in range(n):
+            entry = await uow.movies.add(
+                MovieEntry(
+                    guild_id=10,
+                    title=f"m{i}",
+                    added_by=1,
+                    added_at=NOW,
+                    status="rating",
+                    rating_ends_at=NOW + timedelta(hours=1),
+                )
+            )
+            ids.append(entry.id)
+        await uow.commit()
+    return ids
+
+
+async def test_movie_finalize_and_register_message_both_survive(uow_factory):
+    """Финализация оценок (status->watched) ∥ привязка сообщения оценок
+    (rating_message_id) на том же фильме. Разные поля, но обе пишут строку
+    целиком; FOR UPDATE в get_for_update не даёт последнему save затереть чужое.
+
+    Обе транзакции короткие, поэтому под gather часто сериализуются — на снятом
+    локе тест ловит потерю апдейта не на каждом прогоне (в отличие от строгого
+    night-теста ниже, где close тяжелее и перекрытие стабильно). На фиксе всегда
+    зелёный; механизм get_for_update для MovieEntry тот же, что доказан строго
+    для MovieNight."""
+    n = 12
+    ids = await _seed_rating_movies(uow_factory, n)
+    finalize = FinalizeRatingUseCase(uow_factory)
+    register = RegisterMovieMessageUseCase(uow_factory)
+    tasks = []
+    for i, eid in enumerate(ids):
+        tasks.append(finalize.execute(eid, NOW))  # status -> watched
+        tasks.append(register.execute("rating", eid, 100 + i, 1000 + i))  # rating_message_id
+    await asyncio.gather(*tasks)
+
+    async with uow_factory() as uow:
+        entries = {eid: await uow.movies.get(eid) for eid in ids}
+    for eid, entry in entries.items():
+        assert entry.status == "watched", f"фильм {eid}: финализация затёрта привязкой"
+        assert entry.rating_message_id != 0, f"фильм {eid}: rating_message_id затёрт финализацией"
+
+
+async def _seed_poll_night(uow_factory, guild_id: int) -> int:
+    async with uow_factory() as uow:
+        entry = await uow.movies.add(
+            MovieEntry(guild_id=guild_id, title="m", added_by=1, added_at=NOW)
+        )
+        night = await uow.movie_nights.add(
+            MovieNight(
+                guild_id=guild_id,
+                created_by=1,
+                scheduled_at=NOW + timedelta(hours=2),
+                poll_ends_at=NOW + timedelta(hours=1),
+                candidate_ids=[entry.id],
+                status="poll",
+            )
+        )
+        await uow.movie_nights.set_night_vote(night.id, 1, entry.id)  # чтобы был победитель
+        await uow.commit()
+    return night.id
+
+
+async def test_movie_night_register_message_and_close_both_survive(uow_factory):
+    """Привязка сообщения опроса (poll_message_id) ∥ закрытие опроса
+    (status+winner) на той же ночи. Разные поля, но обе транзакции пишут строку
+    целиком. Без FOR UPDATE последний save затирал чужое: терялся либо
+    poll_message_id, либо переход в scheduled с победителем. Все ночи в одной
+    гильдии (оба пути ищут по id, не по get_active), пакетно 2N задач.
+    Падает на снятом локе."""
+    n = 10
+    ids = [await _seed_poll_night(uow_factory, 10) for _ in range(n)]
+    register = RegisterMovieMessageUseCase(uow_factory)
+    close = CloseNightPollUseCase(uow_factory, rng=random.Random(0))
+    tasks = []
+    for i, nid in enumerate(ids):
+        tasks.append(register.execute("poll", nid, 100 + i, 2000 + i))  # poll_message_id
+        tasks.append(close.execute(nid))  # status -> scheduled + winner
+    await asyncio.gather(*tasks)
+
+    async with uow_factory() as uow:
+        nights = {nid: await uow.movie_nights.get(nid) for nid in ids}
+    for nid, night in nights.items():
+        assert night.poll_message_id != 0, f"ночь {nid}: poll_message_id затёрт закрытием"
+        assert night.status == "scheduled", f"ночь {nid}: закрытие затёрто привязкой (status={night.status})"
+        assert night.winner_entry_id is not None, f"ночь {nid}: победитель затёрт привязкой"

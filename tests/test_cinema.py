@@ -52,6 +52,9 @@ class FakeMovies(IMovieEntryRepository):
     async def get(self, entry_id):
         return self.rows.get(entry_id)
 
+    async def get_for_update(self, entry_id):  # в фейке лока нет — просто get
+        return self.rows.get(entry_id)
+
     async def get_by_message(self, message_id):
         return next((e for e in self.rows.values() if e.message_id == message_id), None)
 
@@ -128,6 +131,12 @@ class FakeNights(IMovieNightRepository):
 
     async def get(self, night_id):
         return self.rows.get(night_id)
+
+    async def get_for_update(self, night_id):  # в фейке лока нет
+        return self.rows.get(night_id)
+
+    async def get_active_for_update(self, guild_id):  # в фейке лока нет
+        return await self.get_active(guild_id)
 
     async def get_by_poll_message(self, message_id):
         return next((n for n in self.rows.values() if n.poll_message_id == message_id), None)

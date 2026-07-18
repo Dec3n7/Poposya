@@ -50,7 +50,7 @@ class RegisterMovieMessageUseCase:
     async def execute(self, kind: str, target_id: int, channel_id: int, message_id: int) -> None:
         async with self._uow_factory() as uow:
             if kind in ("card", "rating"):
-                entry = await uow.movies.get(target_id)
+                entry = await uow.movies.get_for_update(target_id)
                 if entry is None:
                     return
                 entry.channel_id = channel_id
@@ -60,7 +60,7 @@ class RegisterMovieMessageUseCase:
                     entry.rating_message_id = message_id
                 await uow.movies.save(entry)
             else:  # poll | winner
-                night = await uow.movie_nights.get(target_id)
+                night = await uow.movie_nights.get_for_update(target_id)
                 if night is None:
                     return
                 night.channel_id = channel_id
@@ -227,7 +227,7 @@ class CloseNightPollUseCase:
 
     async def execute(self, night_id: int) -> ClosePollResult:
         async with self._uow_factory() as uow:
-            night = await uow.movie_nights.get(night_id)
+            night = await uow.movie_nights.get_for_update(night_id)
             if night is None or night.status != "poll":
                 return ClosePollResult(status="gone")
             votes = await uow.movie_nights.tally(night_id)
@@ -266,7 +266,7 @@ class CancelNightUseCase:
     ) -> tuple[str, MovieNight | None]:
         """ok | none | forbidden."""
         async with self._uow_factory() as uow:
-            night = await uow.movie_nights.get_active(guild_id)
+            night = await uow.movie_nights.get_active_for_update(guild_id)
             if night is None:
                 return "none", None
             if night.created_by != user_id and not is_admin:
@@ -306,7 +306,7 @@ class OpenRatingUseCase:
 
     async def execute(self, entry_id: int, now: datetime) -> MovieEntry | None:
         async with self._uow_factory() as uow:
-            entry = await uow.movies.get(entry_id)
+            entry = await uow.movies.get_for_update(entry_id)
             if entry is None or entry.status != "listed":
                 return None
             entry.status = "rating"
@@ -423,7 +423,7 @@ class FinalizeRatingUseCase:
         poposya_review: str = "",
     ) -> FinalizeResult | None:
         async with self._uow_factory() as uow:
-            entry = await uow.movies.get(entry_id)
+            entry = await uow.movies.get_for_update(entry_id)
             if entry is None or entry.status != "rating":
                 return None
             avg, count = await uow.movie_ratings.stats(entry_id)

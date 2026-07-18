@@ -98,6 +98,15 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         row = await self._session.get(MovieEntryModel, entry_id)
         return _entry_to_domain(row) if row else None
 
+    async def get_for_update(self, entry_id: int) -> MovieEntry | None:
+        # SELECT ... FOR UPDATE: конкурентный write-путь на тот же фильм ждёт
+        # коммита и пишет поверх свежего (иначе full-row save затирает чужие
+        # поля). SQLite — no-op. save() ниже возьмёт уже залоченную строку из
+        # сессии (session.get по тому же id).
+        stmt = select(MovieEntryModel).where(MovieEntryModel.id == entry_id).with_for_update()
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _entry_to_domain(row) if row else None
+
     async def _one_where(self, *conditions) -> MovieEntry | None:
         stmt = select(MovieEntryModel).where(*conditions).limit(1)
         row = (await self._session.execute(stmt)).scalar_one_or_none()
@@ -271,6 +280,24 @@ class SqlAlchemyMovieNightRepository(IMovieNightRepository):
 
     async def get(self, night_id: int) -> MovieNight | None:
         row = await self._session.get(MovieNightModel, night_id)
+        return _night_to_domain(row) if row else None
+
+    async def get_for_update(self, night_id: int) -> MovieNight | None:
+        stmt = select(MovieNightModel).where(MovieNightModel.id == night_id).with_for_update()
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _night_to_domain(row) if row else None
+
+    async def get_active_for_update(self, guild_id: int) -> MovieNight | None:
+        stmt = (
+            select(MovieNightModel)
+            .where(
+                MovieNightModel.guild_id == guild_id,
+                MovieNightModel.status.in_(("poll", "scheduled")),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _night_to_domain(row) if row else None
 
     async def _one_where(self, *conditions) -> MovieNight | None:

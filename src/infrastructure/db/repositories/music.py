@@ -2,11 +2,20 @@ import json
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.music.entities import LikedTrack, Playlist, Track
 from src.domain.music.repository import ILikedTrackRepository, IPlaylistRepository
 from src.infrastructure.db.models.music import GuildPlaylistModel, LikedTrackModel
+
+
+def _upsert(session: AsyncSession):
+    """Диалект-специфичный INSERT с ON CONFLICT (PG и SQLite 3.24+). Тот же
+    приём, что в activity/relationship."""
+    name = session.bind.dialect.name if session.bind is not None else "sqlite"
+    return pg_insert if name == "postgresql" else sqlite_insert
 
 
 def _tracks_to_json(tracks: list[Track]) -> str:
@@ -84,16 +93,25 @@ class SqlAlchemyPlaylistRepository(IPlaylistRepository):
         return (await self._session.execute(stmt)).scalar_one()
 
     async def save(self, playlist: Playlist) -> None:
-        row = await self._get_row(playlist.guild_id, playlist.name)
-        if row is None:
-            row = GuildPlaylistModel(
-                guild_id=playlist.guild_id,
-                name=playlist.name,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-            self._session.add(row)
-        row.created_by = playlist.created_by
-        row.tracks_json = _tracks_to_json(playlist.tracks)
+        # INSERT ... ON CONFLICT DO UPDATE по (guild_id, name): плейлист всегда
+        # пишется целиком (SavePlaylistUseCase не дельта, а полный список), так
+        # что при гонке двух сохранений это осознанный last-write-wins, а не
+        # порча. Без ON CONFLICT две параллельные вставки НОВОГО плейлиста одним
+        # именем упирались бы в uq_playlist_guild_name с IntegrityError у одного.
+        now = datetime.now(UTC).replace(tzinfo=None)
+        tracks_json = _tracks_to_json(playlist.tracks)
+        stmt = _upsert(self._session)(GuildPlaylistModel).values(
+            guild_id=playlist.guild_id,
+            name=playlist.name,
+            created_by=playlist.created_by,
+            tracks_json=tracks_json,
+            created_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["guild_id", "name"],
+            set_={"created_by": playlist.created_by, "tracks_json": tracks_json},
+        )
+        await self._session.execute(stmt)
 
     async def delete(self, guild_id: int, name: str) -> bool:
         result = await self._session.execute(
