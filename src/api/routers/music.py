@@ -5,13 +5,22 @@
 нужен командный мост панель↔бот (отдельная фаза).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Literal
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+
+from src.api.command_client import run_command
 from src.api.container import ApiContainer
-from src.api.dependencies import get_container, require_guild_manager
+from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.discord_users import fetch_users
+from src.api.security import Session
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/music", tags=["music"])
+
+
+class ControlBody(BaseModel):
+    action: Literal["pause", "resume", "skip", "stop"]
 
 
 @router.get("/playlists")
@@ -55,3 +64,17 @@ async def playlist_tracks(
             for t in tracks
         ],
     }
+
+
+@router.post("/control")
+async def control(
+    body: ControlBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Управление живой сессией плеера через командный мост: pause/resume/
+    skip/stop. Запуск нового трека невозможен — для него нужен участник в войсе."""
+    return await run_command(
+        container, guild_id, f"music.{body.action}", {}, session.user_id
+    )

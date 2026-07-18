@@ -162,6 +162,14 @@ a {
   cursor: default;
   transform: none;
 }
+.btn.danger {
+  color: #ff6b81;
+  border-color: rgba(255, 107, 129, 0.35);
+}
+.btn.danger:hover {
+  border-color: #ff6b81;
+  background: rgba(255, 107, 129, 0.1);
+}
 
 /* --- misc --- */
 .muted {
@@ -776,6 +784,44 @@ a {
   color: var(--fg-dim);
   flex-shrink: 0;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* --- командный мост: контролы плеера и модерации --- */
+.player-controls {
+  margin-bottom: var(--sp-4);
+}
+.control-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.control-msg {
+  margin-top: var(--sp-2);
+}
+.mod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+.mod-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mod-field .input {
+  width: 80px;
+}
+.mod-reason {
+  flex: 1;
+  min-width: 140px;
+}
+.mod-buttons {
+  display: flex;
+  gap: var(--sp-2);
 }
 
 /* --- complex editors: roles + limits --- */

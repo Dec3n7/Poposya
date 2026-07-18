@@ -65,6 +65,51 @@ function PlaylistRow({ guildId, pl }: { guildId: string; pl: PlaylistItem }) {
   );
 }
 
+const CONTROLS: { action: "pause" | "resume" | "skip" | "stop"; label: string }[] = [
+  { action: "pause", label: "⏸️ Пауза" },
+  { action: "resume", label: "▶️ Играть" },
+  { action: "skip", label: "⏭️ Пропустить" },
+  { action: "stop", label: "⏹️ Стоп" },
+];
+
+function PlayerControls({ guildId }: { guildId: string }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function send(action: "pause" | "resume" | "skip" | "stop") {
+    setBusy(action);
+    setMsg(null);
+    try {
+      const r = await api.musicControl(guildId, action);
+      if (r.status === "done") setMsg(r.result ?? "Готово");
+      else if (r.status === "failed") setMsg(r.result ?? "Не вышло");
+      else setMsg("Отправлено — применяется…");
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="card pad player-controls">
+      <div className="control-buttons">
+        {CONTROLS.map((c) => (
+          <button
+            key={c.action}
+            className="btn"
+            onClick={() => send(c.action)}
+            disabled={busy !== null}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      {msg && <div className="control-msg faint small">{msg}</div>}
+    </div>
+  );
+}
+
 export function Music({ guild }: { guild: Guild }) {
   const [list, setList] = useState<PlaylistItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +136,9 @@ export function Music({ guild }: { guild: Guild }) {
 
   return (
     <div>
+      <h2 className="section-title">Управление плеером</h2>
+      <PlayerControls guildId={guild.id} />
+
       <h2 className="section-title">Плейлисты</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
         Создаются и играют в Discord. «Сейчас играет» и очередь появятся позже — для них нужен

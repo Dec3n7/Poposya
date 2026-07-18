@@ -2,6 +2,7 @@ import type {
   Ban,
   Channel,
   Cinema,
+  CommandResult,
   ComplexSettings,
   FindsOverview,
   Me,
@@ -100,4 +101,29 @@ export const api = {
     req<PlaylistDetail>(`/api/guilds/${guildId}/music/playlists/${encodeURIComponent(name)}`),
   finds: (guildId: string): Promise<FindsOverview> =>
     req<FindsOverview>(`/api/guilds/${guildId}/finds/overview`),
+  ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/ban`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, minutes, reason }),
+    }),
+  unban: (guildId: string, userId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/unban`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  mute: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/mute`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, minutes, reason }),
+    }),
+  unmute: (guildId: string, userId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/unmute`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  musicControl: (guildId: string, action: "pause" | "resume" | "skip" | "stop"): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/music/control`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
 };

@@ -22,6 +22,7 @@ def make_settings(**over):
         "discord_client_id": "cid",
         "discord_client_secret": "csec",
         "web_session_secret": "test-session-secret-at-least-32-bytes!!",
+        "web_command_wait_seconds": 2.0,  # мост: не ждать по 5 с в тестах
     }
     base.update(over)
     return Settings(_env_file=None, **base)
@@ -513,3 +514,105 @@ async def test_finds_overview_collectors_ranked(client, uow_factory, monkeypatch
     assert [c["user_id"] for c in cols] == ["5", "6"]  # по убыванию total
     assert cols[0]["total"] == 4 and cols[0]["gifted"] == 1
     assert cols[1]["total"] == 1 and cols[1]["gifted"] == 0
+
+
+# --- командный мост панель→бот (модерация + музыка write) -------------------
+
+
+async def _fake_bot(container, execute):
+    """Фоновый «бот»: крутит process_pending с подставным Discord-исполнителем.
+    Возвращает (task, stop, seen)."""
+    import asyncio
+
+    from src.infrastructure.commands.bridge import CommandProcessor
+
+    seen = []
+
+    async def executor(cmd):
+        seen.append(cmd)
+        return await execute(cmd)
+
+    proc = CommandProcessor(container.session_factory, executor)
+    stop = asyncio.Event()
+
+    async def pump():
+        while not stop.is_set():
+            await proc.process_pending()
+            await asyncio.sleep(0.01)
+
+    return asyncio.create_task(pump()), stop, seen
+
+
+async def test_moderation_ban_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.post(f"/api/guilds/{GUILD}/moderation/ban", json={"user_id": "1", "minutes": 5})
+    assert resp.status_code == 401
+
+
+async def test_moderation_ban_command_roundtrip(client, container):
+    async def execute(_cmd):
+        return "Забанен до 2026 г."
+
+    task, stop, seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.post(
+            f"/api/guilds/{GUILD}/moderation/ban",
+            json={"user_id": "42", "minutes": 60, "reason": "спам"},
+        )
+    finally:
+        stop.set()
+        await task
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "done" and "Забанен" in data["result"]
+    assert seen[0].command_type == "mod.tempban"
+    assert seen[0].payload == {"user_id": "42", "minutes": 60, "reason": "спам"}
+
+
+async def test_moderation_command_failure_surfaces(client, container):
+    from src.infrastructure.commands.bridge import CommandError
+
+    async def execute(_cmd):
+        raise CommandError("Нет права Ban Members.")
+
+    task, stop, _seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.post(
+            f"/api/guilds/{GUILD}/moderation/unban", json={"user_id": "42"}
+        )
+    finally:
+        stop.set()
+        await task
+    data = resp.json()
+    assert resp.status_code == 200  # ожидаемый провал — не HTTP-ошибка
+    assert data["status"] == "failed" and data["result"] == "Нет права Ban Members."
+
+
+async def test_moderation_ban_validation_422(client):
+    resp = await client.post(
+        f"/api/guilds/{GUILD}/moderation/ban", json={"user_id": "42", "minutes": 0}
+    )
+    assert resp.status_code == 422  # minutes >= 1
+
+
+async def test_music_control_command(client, container):
+    async def execute(_cmd):
+        return "Пауза."
+
+    task, stop, seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.post(
+            f"/api/guilds/{GUILD}/music/control", json={"action": "pause"}
+        )
+    finally:
+        stop.set()
+        await task
+    data = resp.json()
+    assert resp.status_code == 200 and data["status"] == "done"
+    assert seen[0].command_type == "music.pause"
+
+
+async def test_music_control_bad_action_422(client):
+    resp = await client.post(f"/api/guilds/{GUILD}/music/control", json={"action": "boom"})
+    assert resp.status_code == 422

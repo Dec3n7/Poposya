@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     web_allowed_origin: str = "http://localhost:5173"  # адрес фронта для CORS
     web_api_port: int = 8081
     web_session_ttl_hours: int = 24
+    # сколько ждать результат команды моста (бан/мут/музыка) перед ответом
+    # «отправлено, применяется»; бот обычно исполняет за доли секунды
+    web_command_wait_seconds: float = 5.0
 
     # --- база данных ---
     database_url: str = "sqlite+aiosqlite:///./poposya.db"

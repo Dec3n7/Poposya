@@ -60,6 +60,16 @@ async def run() -> None:
     await container.guild_settings.load_all()
     bot = PoposyaBot(container)
 
+    # командный мост панель→бот: панель кладёт команду в bot_commands + NOTIFY,
+    # бот исполняет реальное Discord-действие (бан/мут/музыка). Только Postgres.
+    from src.infrastructure.commands.listener import make_command_listener
+    from src.infrastructure.discord.command_executor import DiscordCommandExecutor
+
+    command_executor = DiscordCommandExecutor(bot, container.moderation)
+    command_listener = make_command_listener(
+        settings.database_url, container.session_factory, command_executor.execute
+    )
+
     health = HealthChecker()
     health.register("database", _database_check(container.engine))
     health.register("discord", _discord_check(bot))
@@ -83,6 +93,10 @@ async def run() -> None:
     if container.settings_listener is not None:
         background.append(asyncio.create_task(container.settings_listener.run_forever()))
         started.append("settings-listener")
+    # командный мост (Postgres): исполняет команды панели в Discord
+    if command_listener is not None:
+        background.append(asyncio.create_task(command_listener.run_forever()))
+        started.append("command-listener")
     boot.info("Фоновые задачи запущены: %s", ", ".join(started))
 
     try:

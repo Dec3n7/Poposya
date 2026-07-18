@@ -31,6 +31,7 @@ class RootContainer:
     tempvoice: TempVoiceContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
+    session_factory: object  # async_sessionmaker; командному мосту в main
     ai_provider: object | None  # IAIProvider; закрывается в main
     chime_provider: object | None  # IAIProvider решения (дешёвая модель); закрывается в main
     outbox_dispatcher: object  # OutboxDispatcher; цикл запускает main
@@ -456,6 +457,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         tempvoice=tempvoice,
         guild_settings=guild_settings,
         engine=engine,
+        session_factory=session_factory,
         ai_provider=ai_provider,
         chime_provider=chime_provider,
         outbox_dispatcher=outbox_dispatcher,

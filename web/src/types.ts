@@ -131,6 +131,12 @@ export interface FindsOverview {
   collectors: Collector[];
 }
 
+export interface CommandResult {
+  id: number;
+  status: "pending" | "running" | "done" | "failed";
+  result: string | null;
+}
+
 export interface Ban {
   user_id: string;
   username: string | null;

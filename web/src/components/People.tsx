@@ -24,6 +24,82 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function ModActions({ guildId, userId }: { guildId: string; userId: string }) {
+  const [minutes, setMinutes] = useState("60");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function show(r: { status: string; result: string | null }) {
+    if (r.status === "done") setMsg(r.result ?? "Готово");
+    else if (r.status === "failed") setMsg(r.result ?? "Не вышло");
+    else setMsg("Отправлено — применяется…");
+  }
+
+  async function act(kind: "mute" | "unmute" | "ban", fn: () => Promise<{ status: string; result: string | null }>) {
+    setBusy(kind);
+    setMsg(null);
+    try {
+      show(await fn());
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const mins = () => Math.max(1, parseInt(minutes, 10) || 0);
+
+  return (
+    <div className="person-warns">
+      <div className="person-warns-head">
+        <span className="faint">Модерация</span>
+        {msg && <span className="faint small">{msg}</span>}
+      </div>
+      <div className="mod-actions">
+        <label className="mod-field">
+          <span className="faint small">Минуты</span>
+          <input
+            className="input mono"
+            inputMode="numeric"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+          />
+        </label>
+        <input
+          className="input mod-reason"
+          placeholder="причина (для бана)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="mod-buttons">
+          <button
+            className="btn small"
+            disabled={busy !== null}
+            onClick={() => act("mute", () => api.mute(guildId, userId, mins(), reason))}
+          >
+            🔇 Мут
+          </button>
+          <button
+            className="btn ghost small"
+            disabled={busy !== null}
+            onClick={() => act("unmute", () => api.unmute(guildId, userId))}
+          >
+            Снять мут
+          </button>
+          <button
+            className="btn danger small"
+            disabled={busy !== null}
+            onClick={() => act("ban", () => api.ban(guildId, userId, mins(), reason))}
+          >
+            🔨 Бан
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PersonCard({
   guildId,
   userId,
@@ -207,6 +283,7 @@ function PersonCard({
               </ul>
             )}
           </div>
+          <ModActions guildId={guildId} userId={userId} />
           {err && <div className="error-banner" style={{ marginTop: 12 }}>{err}</div>}
         </>
       )}

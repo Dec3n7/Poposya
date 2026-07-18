@@ -13,13 +13,56 @@ function fmtExpires(iso: string): string {
   });
 }
 
+function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const name = ban.username ?? `ID ${ban.user_id}`;
+
+  async function unban() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.unban(guildId, ban.user_id);
+      if (r.status === "done") {
+        onDone();
+        return;
+      }
+      setMsg(r.status === "failed" ? (r.result ?? "Не вышло") : "Отправлено — применяется…");
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="cine-row">
+      <span className="cine-title">
+        {ban.avatar ? (
+          <img className="leader-avatar sm" src={ban.avatar} alt="" />
+        ) : (
+          <span className="leader-avatar sm fallback">{name.slice(0, 1).toUpperCase()}</span>
+        )}
+        {name}
+        {ban.reason && <span className="cine-review">«{ban.reason}»</span>}
+        {ban.moderator_name && <span className="faint"> · выдал {ban.moderator_name}</span>}
+        {msg && <span className="faint small"> · {msg}</span>}
+      </span>
+      <span className="cine-side">
+        <span className="mono faint">до {fmtExpires(ban.expires_at)}</span>
+        <button className="btn ghost small" onClick={unban} disabled={busy}>
+          Разбанить
+        </button>
+      </span>
+    </div>
+  );
+}
+
 export function Moderation({ guild }: { guild: Guild }) {
   const [bans, setBans] = useState<Ban[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setBans(null);
-    setError(null);
+  function load() {
     api
       .bans(guild.id)
       .then(setBans)
@@ -27,6 +70,12 @@ export function Moderation({ guild }: { guild: Guild }) {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить баны");
       });
+  }
+
+  useEffect(() => {
+    setBans(null);
+    setError(null);
+    load();
   }, [guild.id]);
 
   if (error) return <div className="error-banner">{error}</div>;
@@ -41,35 +90,14 @@ export function Moderation({ guild }: { guild: Guild }) {
     <div>
       <h2 className="section-title">Активные временные баны</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
-        Разбан произойдёт автоматически по истечении срока. Досрочный бан/разбан — командами бота в
-        Discord.
+        Бан/мут выдаются из карточки человека (вкладка «Люди»). Здесь — разбан. Автоматический
+        разбан по истечении срока ведёт бот.
       </p>
       <div className="card leader-card">
         {bans.length === 0 ? (
           <div className="pad muted">Активных временных банов нет.</div>
         ) : (
-          bans.map((b) => {
-            const name = b.username ?? `ID ${b.user_id}`;
-            return (
-              <div className="cine-row" key={b.user_id}>
-                <span className="cine-title">
-                  {b.avatar ? (
-                    <img className="leader-avatar sm" src={b.avatar} alt="" />
-                  ) : (
-                    <span className="leader-avatar sm fallback">
-                      {name.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                  {name}
-                  {b.reason && <span className="cine-review">«{b.reason}»</span>}
-                  {b.moderator_name && (
-                    <span className="faint"> · выдал {b.moderator_name}</span>
-                  )}
-                </span>
-                <span className="cine-side mono">до {fmtExpires(b.expires_at)}</span>
-              </div>
-            );
-          })
+          bans.map((b) => <BanRow key={b.user_id} guildId={guild.id} ban={b} onDone={load} />)
         )}
       </div>
     </div>

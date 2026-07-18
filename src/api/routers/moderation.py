@@ -12,16 +12,35 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 
+from src.api.command_client import run_command
 from src.api.container import ApiContainer
-from src.api.dependencies import get_container, require_guild_manager
+from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.discord_users import fetch_users
+from src.api.security import Session
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/moderation", tags=["moderation"])
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+class BanBody(BaseModel):
+    user_id: str
+    minutes: int = Field(ge=1, le=525600)  # до года
+    reason: str = ""
+
+
+class MuteBody(BaseModel):
+    user_id: str
+    minutes: int = Field(ge=1, le=40320)  # до 28 суток (лимит Discord timeout)
+    reason: str = ""
+
+
+class UserBody(BaseModel):
+    user_id: str
 
 
 @router.get("/bans")
@@ -78,3 +97,62 @@ async def clear_warns(
     """Сброс всех варнов участника. Чистая БД — в Discord ничего не меняется."""
     cleared = await container.clear_warns.execute(user_id, guild_id)
     return {"cleared": cleared}
+
+
+# --- write-действия через командный мост (реальный Discord делает бот) -------
+
+
+@router.post("/ban")
+async def ban(
+    body: BanBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    return await run_command(
+        container,
+        guild_id,
+        "mod.tempban",
+        {"user_id": body.user_id, "minutes": body.minutes, "reason": body.reason},
+        session.user_id,
+    )
+
+
+@router.post("/unban")
+async def unban(
+    body: UserBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    return await run_command(
+        container, guild_id, "mod.unban", {"user_id": body.user_id}, session.user_id
+    )
+
+
+@router.post("/mute")
+async def mute(
+    body: MuteBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    return await run_command(
+        container,
+        guild_id,
+        "mod.mute",
+        {"user_id": body.user_id, "minutes": body.minutes, "reason": body.reason},
+        session.user_id,
+    )
+
+
+@router.post("/unmute")
+async def unmute(
+    body: UserBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    return await run_command(
+        container, guild_id, "mod.unmute", {"user_id": body.user_id}, session.user_id
+    )
