@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from src.api.container import ApiContainer
 from src.api.dependencies import get_container, require_guild_manager
+from src.api.discord_members import fetch_guild_members
 from src.api.discord_users import fetch_users
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/people", tags=["people"])
@@ -48,20 +49,31 @@ async def people(
     guild_id: int = Depends(require_guild_manager),
     container: ApiContainer = Depends(get_container),
 ) -> list[dict]:
-    """Все, у кого есть очки (по убыванию), с именами/аватарами."""
-    board = await container.leaderboard.execute(guild_id, limit=100)
-    users = await fetch_users(container.settings.discord_token, [e.user_id for e in board])
-    return [
+    """Все участники сервера (через бот-токен), смерженные с профилями Попоси.
+    У кого есть профиль — с очками/ролью/заморозкой; остальные — «чистые».
+    Фильтры/сортировку делает фронт по этому полному списку."""
+    members = await fetch_guild_members(container.settings.discord_token, guild_id)
+    profiles = await container.list_profiles.execute(guild_id)
+    by_id = {p.user_id: p for p in profiles}
+    result = [
         {
-            "user_id": str(e.user_id),
-            "username": users.get(e.user_id, {}).get("username"),
-            "avatar": users.get(e.user_id, {}).get("avatar"),
-            "points": e.points,
-            "role": _role_name(container, guild_id, e.role_index),
-            "is_exclusive": e.is_exclusive,
+            "user_id": str(m["user_id"]),
+            "username": m["name"],
+            "avatar": m["avatar"],
+            "points": p.points if p else 0,
+            "role": _role_name(container, guild_id, p.role_index) if p else None,
+            "is_exclusive": p.is_exclusive if p else False,
+            "frozen": p.frozen if p else False,
+            "has_profile": p is not None,
+            "last_dialog_at": (
+                p.last_dialog_at.isoformat() if p and p.last_dialog_at else None
+            ),
         }
-        for e in board
+        for m in members
+        for p in [by_id.get(m["user_id"])]
     ]
+    result.sort(key=lambda x: (-x["points"], (x["username"] or "").lower()))
+    return result
 
 
 @router.get("/{user_id}")

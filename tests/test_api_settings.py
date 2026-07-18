@@ -314,16 +314,27 @@ async def test_people_list_detail_and_admin_actions(client, uow_factory, monkeyp
     async def fake_users(_token, ids):
         return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
 
+    async def fake_members(_token, _gid, cap=2000):
+        # участник 7 — с профилем; участник 8 — «зашёл, но с ботом не говорил»
+        return [
+            {"user_id": 7, "name": "u7", "avatar": None},
+            {"user_id": 8, "name": "lurker", "avatar": None},
+        ]
+
     monkeypatch.setattr(people_router, "fetch_users", fake_users)
+    monkeypatch.setattr(people_router, "fetch_guild_members", fake_members)
     async with uow_factory() as uow:
         p = await uow.relationships.get_or_create(7, GUILD)
         p.points = 500
         await uow.relationships.save(p)
         await uow.commit()
 
-    # список
-    lst = (await client.get(f"/api/guilds/{GUILD}/people")).json()
-    assert any(e["user_id"] == "7" and e["points"] == 500 for e in lst)
+    # список: все участники сервера, смерженные с профилями
+    lst = {e["user_id"]: e for e in (await client.get(f"/api/guilds/{GUILD}/people")).json()}
+    assert lst["7"]["points"] == 500 and lst["7"]["has_profile"] is True
+    # участник без профиля — в списке, но пустой
+    assert lst["8"]["points"] == 0 and lst["8"]["has_profile"] is False
+    assert lst["8"]["role"] is None and lst["8"]["frozen"] is False
 
     # карточка
     det = (await client.get(f"/api/guilds/{GUILD}/people/7")).json()

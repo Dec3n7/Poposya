@@ -41,6 +41,11 @@ class IRelationshipRepository(ABC):
     async def top_by_points(self, guild_id: int, limit: int) -> list[RelationshipProfile]: ...
 
     @abstractmethod
+    async def all_for_guild(self, guild_id: int) -> list[RelationshipProfile]:
+        """Все профили сервера (включая 0 очков и замороженных) — для списка
+        участников в панели. Без фильтра points>0 и без лимита."""
+
+    @abstractmethod
     async def list_decayable(
         self, inactive_before: datetime, decayed_before: datetime
     ) -> list[RelationshipProfile]:

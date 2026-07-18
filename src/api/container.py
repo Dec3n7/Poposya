@@ -23,6 +23,7 @@ from src.application.music.use_cases import ListPlaylistsUseCase, LoadPlaylistUs
 from src.application.relationship.use_cases import (
     GetLeaderboardUseCase,
     GetRankUseCase,
+    ListProfilesUseCase,
     SetPointsUseCase,
     ToggleFreezeUseCase,
 )
@@ -53,6 +54,7 @@ class ApiContainer:
     get_rank: GetRankUseCase
     set_points: SetPointsUseCase
     toggle_freeze: ToggleFreezeUseCase
+    list_profiles: ListProfilesUseCase
     # модерация (только чтение + безопасный сброс варнов — без Discord-побочки)
     get_warns: GetWarnsUseCase
     clear_warns: ClearWarnsUseCase
@@ -107,6 +109,7 @@ def assemble_container(
         get_rank=GetRankUseCase(uow_factory, policy, settings_provider=guild_settings),
         set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),
+        list_profiles=ListProfilesUseCase(uow_factory, policy, settings_provider=guild_settings),
         get_warns=GetWarnsUseCase(uow_factory),
         clear_warns=ClearWarnsUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),

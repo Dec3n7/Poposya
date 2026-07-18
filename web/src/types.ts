@@ -87,6 +87,9 @@ export interface PersonListItem {
   points: number;
   role: string | null;
   is_exclusive: boolean;
+  frozen: boolean;
+  has_profile: boolean;
+  last_dialog_at: string | null;
 }
 
 export interface PlaylistItem {

@@ -314,6 +314,15 @@ class SqlAlchemyRelationshipRepository(IRelationshipRepository):
         rows = (await self._session.execute(stmt)).scalars().all()
         return self._cached(rows)
 
+    async def all_for_guild(self, guild_id: int) -> list[RelationshipProfile]:
+        stmt = (
+            select(RelationshipProfileModel)
+            .where(RelationshipProfileModel.guild_id == guild_id)
+            .order_by(RelationshipProfileModel.points.desc())
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return self._cached(rows)
+
     async def list_decayable(
         self, inactive_before: datetime, decayed_before: datetime
     ) -> list[RelationshipProfile]:

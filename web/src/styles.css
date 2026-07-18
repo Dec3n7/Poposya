@@ -1199,3 +1199,22 @@ a {
     margin-top: 0;
   }
 }
+
+/* --- фильтры во вкладке «Люди» --- */
+.people-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.people-filters .input {
+  width: auto;
+  min-width: 120px;
+}
+.people-search {
+  flex: 1;
+  min-width: 200px;
+}
+.people-count {
+  margin-bottom: var(--sp-3);
+}

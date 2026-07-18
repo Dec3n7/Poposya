@@ -61,6 +61,9 @@ class FakeRelationships(IRelationshipRepository):
     async def top_by_points(self, guild_id, limit):
         return []
 
+    async def all_for_guild(self, guild_id):
+        return [p for p in self.profiles.values() if p.guild_id == guild_id]
+
     async def list_decayable(self, inactive_before, decayed_before):
         return []
 

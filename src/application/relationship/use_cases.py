@@ -403,6 +403,43 @@ class GetLeaderboardUseCase:
 
 
 @dataclass(frozen=True)
+class ProfileSummary:
+    user_id: int
+    points: int
+    role_index: int | None
+    is_exclusive: bool
+    frozen: bool
+    last_dialog_at: datetime | None
+
+
+class ListProfilesUseCase:
+    """Все профили сервера (для списка участников в панели): очки, роль,
+    заморозка, последний диалог. Без фильтра по очкам — 0-очковые и
+    замороженные тоже нужны."""
+
+    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None):
+        self._uow_factory = uow_factory
+        self._policy = policy
+        self._settings = settings_provider
+
+    async def execute(self, guild_id: int) -> list[ProfileSummary]:
+        policy = _policy_of(self._settings, guild_id, self._policy)
+        async with self._uow_factory() as uow:
+            profiles = await uow.relationships.all_for_guild(guild_id)
+            return [
+                ProfileSummary(
+                    user_id=p.user_id,
+                    points=p.points,
+                    role_index=policy.role_index(p.points, p.is_exclusive),
+                    is_exclusive=p.is_exclusive,
+                    frozen=p.frozen_by_admin,
+                    last_dialog_at=p.last_dialog_at,
+                )
+                for p in profiles
+            ]
+
+
+@dataclass(frozen=True)
 class DecayResult:
     decayed: int
     transfers: list[tuple[int, int, int]]  # (guild_id, new_holder, old_holder)
