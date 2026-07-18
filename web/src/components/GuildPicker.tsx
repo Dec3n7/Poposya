@@ -1,9 +1,5 @@
 import type { Guild } from "../types";
 
-function iconUrl(g: Guild): string | null {
-  return g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64` : null;
-}
-
 export function GuildPicker({
   guilds,
   onPick,
@@ -23,11 +19,10 @@ export function GuildPicker({
       ) : (
         <div className="guild-grid">
           {guilds.map((g) => {
-            const url = iconUrl(g);
             return (
               <button key={g.id} className="guild-card" onClick={() => onPick(g)}>
-                {url ? (
-                  <img src={url} alt="" className="guild-icon" />
+                {g.icon ? (
+                  <img src={g.icon} alt="" className="guild-icon" />
                 ) : (
                   <span className="guild-icon fallback">{g.name.slice(0, 1).toUpperCase()}</span>
                 )}
