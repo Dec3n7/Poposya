@@ -205,3 +205,67 @@ async def test_set_many_atomic_reject_on_invariant(service):
         )
     assert service.is_override(10, "relationship_role_thresholds") is False
     assert service.is_override(10, "relationship_role_names") is False
+
+
+# --- reload_guild: межпроцессная инвалидация кэша (что дёргает NOTIFY-листенер) ---
+
+
+async def test_reload_guild_picks_up_foreign_write(session_factory):
+    """Два процесса на одной БД: «панель» (writer) пишет настройку, «бот»
+    (reader) держит устаревший кэш, пока не перечитает гильдию. Ровно это делает
+    SettingsChangeListener, получив NOTIFY."""
+    bot = GuildSettingsService(make_settings(), session_factory)
+    panel = GuildSettingsService(make_settings(), session_factory)
+    await bot.load_all()
+    await panel.load_all()
+
+    await panel.set(10, "warn_threshold", "9")
+    assert bot.current(10, "warn_threshold") == make_settings().warn_threshold  # ещё старое
+
+    await bot.reload_guild(10)
+    assert bot.current(10, "warn_threshold") == 9  # увидел чужую запись
+    assert bot.resolved(10).warn_threshold == 9  # мемоизация тоже сброшена
+
+
+async def test_reload_guild_picks_up_foreign_reset(session_factory):
+    """reset в другом процессе тоже виден после reload: переопределение снимается,
+    возвращается дефолт."""
+    bot = GuildSettingsService(make_settings(), session_factory)
+    panel = GuildSettingsService(make_settings(), session_factory)
+    await panel.set(10, "lonely_hours", "6")
+    await bot.reload_guild(10)
+    assert bot.current(10, "lonely_hours") == 6
+
+    await panel.reset(10, "lonely_hours")
+    assert bot.current(10, "lonely_hours") == 6  # кэш ещё держит старое
+    await bot.reload_guild(10)
+    assert bot.is_override(10, "lonely_hours") is False  # снято
+    assert bot.current(10, "lonely_hours") == make_settings().lonely_hours
+
+
+async def test_reload_guild_isolated_per_guild(session_factory):
+    """reload одной гильдии не трогает кэш другой."""
+    bot = GuildSettingsService(make_settings(), session_factory)
+    panel = GuildSettingsService(make_settings(), session_factory)
+    await panel.set(10, "spam_limit", "7")
+    await panel.set(20, "spam_limit", "8")
+    await bot.reload_guild(10)
+    assert bot.current(10, "spam_limit") == 7
+    assert bot.is_override(20, "spam_limit") is False  # гильдию 20 не перечитывали
+
+
+# --- фабрика листенера: только Postgres, разбор DSN ------------------------
+
+
+def test_settings_listener_none_on_sqlite():
+    from src.infrastructure.settings_listener import make_settings_listener
+
+    # SQLite — один писатель, межпроцессная инвалидация не нужна -> листенера нет
+    assert make_settings_listener("sqlite+aiosqlite:///x.db", object()) is None
+
+
+def test_asyncpg_dsn_strips_sqlalchemy_driver():
+    from src.infrastructure.settings_listener import _asyncpg_dsn
+
+    # asyncpg.connect не понимает суффикс +asyncpg
+    assert _asyncpg_dsn("postgresql+asyncpg://u:p@h:5432/db") == "postgresql://u:p@h:5432/db"

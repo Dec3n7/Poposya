@@ -34,6 +34,7 @@ class RootContainer:
     ai_provider: object | None  # IAIProvider; закрывается в main
     chime_provider: object | None  # IAIProvider решения (дешёвая модель); закрывается в main
     outbox_dispatcher: object  # OutboxDispatcher; цикл запускает main
+    settings_listener: object | None  # SettingsChangeListener (Postgres); цикл запускает main
 
 
 def build_root_container(settings: Settings) -> RootContainer:
@@ -106,8 +107,12 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     # пер-гильдийные настройки (/config): переопределяют дефолты из .env
     from src.infrastructure.guild_settings import GuildSettingsService
+    from src.infrastructure.settings_listener import make_settings_listener
 
     guild_settings = GuildSettingsService(settings, session_factory)
+    # межпроцессная инвалидация кэша (веб-панель ∥ бот): Postgres LISTEN/NOTIFY.
+    # На SQLite вернёт None — там второго писателя нет.
+    settings_listener = make_settings_listener(settings.database_url, guild_settings)
 
     # --- relationship ---
     from src.domain.shared.holidays import HolidayCalendar
@@ -454,4 +459,5 @@ def build_root_container(settings: Settings) -> RootContainer:
         ai_provider=ai_provider,
         chime_provider=chime_provider,
         outbox_dispatcher=outbox_dispatcher,
+        settings_listener=settings_listener,
     )

@@ -78,6 +78,11 @@ async def run() -> None:
         started.append("backup")
     background.append(asyncio.create_task(container.outbox_dispatcher.run_forever()))
     started.append("outbox-dispatcher")
+    # межпроцессная инвалидация кэша настроек (Postgres LISTEN/NOTIFY); на SQLite
+    # листенера нет (None), там бот — единственный писатель
+    if container.settings_listener is not None:
+        background.append(asyncio.create_task(container.settings_listener.run_forever()))
+        started.append("settings-listener")
     boot.info("Фоновые задачи запущены: %s", ", ".join(started))
 
     try:

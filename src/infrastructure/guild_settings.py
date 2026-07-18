@@ -19,7 +19,7 @@ import logging
 from dataclasses import dataclass
 
 from pydantic import ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.guild_config.schema import (
@@ -36,6 +36,11 @@ logger = logging.getLogger(__name__)
 # скаляры хранятся как str(value); списки/словари — как JSON
 _SCALAR_KINDS = frozenset({"int", "float", "bool", "channel"})
 _COMPLEX_KINDS = frozenset({"list", "dict"})
+
+# Канал Postgres LISTEN/NOTIFY: любой процесс (веб-панель), записав настройку,
+# шлёт сюда guild_id, а бот перечитывает кэш этой гильдии (SettingsChangeListener).
+# Только Postgres; на SQLite панель как второй писатель невозможна.
+SETTINGS_NOTIFY_CHANNEL = "poposya_settings"
 
 # человекочитаемые подписи и единицы для /config; ключей без записи здесь нет,
 # но на всякий случай fallback — сам ключ
@@ -184,27 +189,55 @@ class GuildSettingsService(ISettingsProvider):
         self._resolved: dict[int, GuildSettings] = {}
 
     async def load_all(self) -> None:
-        """Поднять все переопределения в память (вызывается при старте)."""
+        """Поднять все переопределения в память (старт + ресинк листенера)."""
         self._cache = {}
         self._resolved = {}
         loaded = 0
         async with self._session_factory() as session:
             rows = (await session.execute(select(GuildSettingModel))).scalars().all()
         for row in rows:
-            kind = KEY_KINDS.get(row.key)
-            if kind is None:
-                continue  # ключ убрали из реестра — игнор
-            try:
-                if kind in _COMPLEX_KINDS:
-                    value = json.loads(row.value)  # списки/словари — JSON
-                else:
-                    value = SETTING_SPECS[row.key].parse(row.value)
-            except (ValueError, json.JSONDecodeError):
-                logger.warning("Некорректное значение настройки в БД", extra={"key": row.key})
+            parsed = self._parse_row(row.key, row.value)
+            if parsed is None:
                 continue
-            self._cache.setdefault(row.guild_id, {})[row.key] = value
+            self._cache.setdefault(row.guild_id, {})[row.key] = parsed
             loaded += 1
         logger.info("Настройки серверов загружены: %d переопределений", loaded)
+
+    async def reload_guild(self, guild_id: int) -> None:
+        """Перечитать переопределения ОДНОЙ гильдии из БД. Реакция на NOTIFY от
+        другого процесса (веб-панель записала настройку) — иначе in-memory кэш
+        бота остаётся устаревшим до рестарта. Сбрасывает мемоизацию resolved."""
+        async with self._session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(GuildSettingModel).where(GuildSettingModel.guild_id == guild_id)
+                )
+            ).scalars().all()
+        parsed = {
+            row.key: value
+            for row in rows
+            if (value := self._parse_row(row.key, row.value)) is not None
+        }
+        if parsed:
+            self._cache[guild_id] = parsed
+        else:
+            self._cache.pop(guild_id, None)  # все переопределения сняты
+        self._resolved.pop(guild_id, None)
+
+    @staticmethod
+    def _parse_row(key: str, raw: str):
+        """Строка из БД -> типизированное значение (или None, если ключ вне
+        реестра / значение битое). Общая логика load_all и reload_guild."""
+        kind = KEY_KINDS.get(key)
+        if kind is None:
+            return None  # ключ убрали из реестра — игнор
+        try:
+            if kind in _COMPLEX_KINDS:
+                return json.loads(raw)  # списки/словари — JSON
+            return SETTING_SPECS[key].parse(raw)
+        except (ValueError, json.JSONDecodeError):
+            logger.warning("Некорректное значение настройки в БД", extra={"key": key})
+            return None
 
     # --- чтение (синхронно, из кэша) ---
 
@@ -255,6 +288,7 @@ class GuildSettingsService(ISettingsProvider):
                 session.add(GuildSettingModel(guild_id=guild_id, key=key, value=str(value)))
             else:
                 existing.value = str(value)
+            await self._notify_change(session, guild_id)
             await session.commit()
         self._cache.setdefault(guild_id, {})[key] = value
         self._resolved.pop(guild_id, None)
@@ -283,6 +317,7 @@ class GuildSettingsService(ISettingsProvider):
                     session.add(GuildSettingModel(guild_id=guild_id, key=key, value=raw))
                 else:
                     existing.value = raw
+            await self._notify_change(session, guild_id)
             await session.commit()
         self._cache.setdefault(guild_id, {}).update(values)
         self._resolved.pop(guild_id, None)
@@ -296,12 +331,28 @@ class GuildSettingsService(ISettingsProvider):
                     GuildSettingModel.key == key,
                 )
             )
+            if result.rowcount > 0:
+                await self._notify_change(session, guild_id)
             await session.commit()
         self._cache.get(guild_id, {}).pop(key, None)
         self._resolved.pop(guild_id, None)
         return result.rowcount > 0
 
     # --- внутреннее ---
+
+    @staticmethod
+    async def _notify_change(session: AsyncSession, guild_id: int) -> None:
+        """Транзакционный pg_notify: другой процесс (веб-панель, шард) перечитает
+        кэш этой гильдии. Внутри транзакции -> доставится на COMMIT, отменится
+        на rollback. Только Postgres; на SQLite молча пропускаем (один писатель).
+        pg_notify(func) вместо `NOTIFY` — payload как bind-параметр, без инъекций."""
+        bind = session.bind
+        if bind is None or bind.dialect.name != "postgresql":
+            return
+        await session.execute(
+            text("SELECT pg_notify(:channel, :payload)"),
+            {"channel": SETTINGS_NOTIFY_CHANNEL, "payload": str(guild_id)},
+        )
 
     def _build(self, overrides: dict[str, object]) -> GuildSettings:
         """Собрать GuildSettings: база из глобального Settings, поверх — overrides.
