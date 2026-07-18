@@ -7,6 +7,8 @@ import type {
   Overview,
   PersonDetail,
   PersonListItem,
+  PlaylistDetail,
+  PlaylistItem,
   SettingField,
   Warn,
 } from "./types";
@@ -91,4 +93,8 @@ export const api = {
     req<{ cleared: number }>(`/api/guilds/${guildId}/moderation/warns/${userId}`, {
       method: "DELETE",
     }),
+  playlists: (guildId: string): Promise<PlaylistItem[]> =>
+    req<PlaylistItem[]>(`/api/guilds/${guildId}/music/playlists`),
+  playlist: (guildId: string, name: string): Promise<PlaylistDetail> =>
+    req<PlaylistDetail>(`/api/guilds/${guildId}/music/playlists/${encodeURIComponent(name)}`),
 };

@@ -412,3 +412,49 @@ async def test_moderation_warns_read_and_clear(client, uow_factory, monkeypatch)
     assert cleared.status_code == 200 and cleared.json()["cleared"] == 2
     after = (await client.get(f"/api/guilds/{GUILD}/moderation/warns/9")).json()
     assert after == []
+
+
+# --- музыка (read-модуль плейлистов) ---------------------------------------
+
+
+async def test_music_requires_session(container):
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
+        resp = await anon.get(f"/api/guilds/{GUILD}/music/playlists")
+    assert resp.status_code == 401
+
+
+async def test_music_playlists_list_and_tracks(client, uow_factory, monkeypatch):
+    from src.api.routers import music as music_router
+    from src.domain.music.entities import Playlist, Track
+
+    async def fake_users(_token, ids):
+        return {uid: {"username": f"u{uid}", "avatar": None} for uid in ids}
+
+    monkeypatch.setattr(music_router, "fetch_users", fake_users)
+    async with uow_factory() as uow:
+        await uow.playlists.save(
+            Playlist(
+                guild_id=GUILD,
+                name="Ночь",
+                created_by=3,
+                tracks=[
+                    Track(video_id="a", title="Трек A", url="u", duration=90, requested_by=3),
+                    Track(video_id="b", title="Трек B", url="u", duration=None, requested_by=3),
+                ],
+            )
+        )
+        await uow.commit()
+
+    lst = (await client.get(f"/api/guilds/{GUILD}/music/playlists")).json()
+    assert lst == [{"name": "Ночь", "track_count": 2, "author_id": "3", "author_name": "u3"}]
+
+    det = (await client.get(f"/api/guilds/{GUILD}/music/playlists/Ночь")).json()
+    assert det["name"] == "Ночь"
+    assert [t["title"] for t in det["tracks"]] == ["Трек A", "Трек B"]
+    assert det["tracks"][0]["duration"] == 90 and det["tracks"][1]["duration"] is None
+
+
+async def test_music_playlist_not_found_404(client):
+    resp = await client.get(f"/api/guilds/{GUILD}/music/playlists/нет-такого")
+    assert resp.status_code == 404

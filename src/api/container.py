@@ -18,7 +18,7 @@ from src.application.moderation.use_cases import (
     GetWarnsUseCase,
     ListTempBansUseCase,
 )
-from src.application.music.use_cases import ListPlaylistsUseCase
+from src.application.music.use_cases import ListPlaylistsUseCase, LoadPlaylistUseCase
 from src.application.relationship.use_cases import (
     GetLeaderboardUseCase,
     GetRankUseCase,
@@ -47,6 +47,7 @@ class ApiContainer:
     list_watchlist: ListWatchlistUseCase
     top_watched: TopWatchedUseCase
     list_playlists: ListPlaylistsUseCase
+    load_playlist: LoadPlaylistUseCase
     # люди/отношения: карточка человека + admin-действия
     get_rank: GetRankUseCase
     set_points: SetPointsUseCase
@@ -98,6 +99,7 @@ def assemble_container(
         list_watchlist=ListWatchlistUseCase(uow_factory),
         top_watched=TopWatchedUseCase(uow_factory),
         list_playlists=ListPlaylistsUseCase(uow_factory),
+        load_playlist=LoadPlaylistUseCase(uow_factory),
         get_rank=GetRankUseCase(uow_factory, policy, settings_provider=guild_settings),
         set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),

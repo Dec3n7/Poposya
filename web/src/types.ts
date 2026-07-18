@@ -89,6 +89,25 @@ export interface PersonListItem {
   is_exclusive: boolean;
 }
 
+export interface PlaylistItem {
+  name: string;
+  track_count: number;
+  author_id: string;
+  author_name: string | null;
+}
+
+export interface PlaylistTrack {
+  title: string;
+  uploader: string | null;
+  duration: number | null;
+  thumbnail: string | null;
+}
+
+export interface PlaylistDetail {
+  name: string;
+  tracks: PlaylistTrack[];
+}
+
 export interface Ban {
   user_id: string;
   username: string | null;
