@@ -29,8 +29,15 @@ def make_settings(**over):
 
 
 @pytest.fixture
-def app():
-    return create_app(build_api_container(make_settings()))
+def container():
+    c = build_api_container(make_settings())
+    c.bot_guilds.prime({10, 20})  # бот на серверах 10 и 20 (без похода в Discord)
+    return c
+
+
+@pytest.fixture
+def app(container):
+    return create_app(container)
 
 
 @pytest.fixture
@@ -100,6 +107,19 @@ async def test_callback_sets_session_and_me_filters_guilds(client, mock_discord)
     assert data["username"] == "wild"
     # только управляемые серверы: manage (10) и owner (20), но не «без прав» (30)
     assert {g["id"] for g in data["guilds"]} == {"10", "20"}
+
+
+async def test_me_hides_guilds_without_bot(mock_discord):
+    # бот только на сервере 10 -> сервер 20 (owner) в /me не попадёт
+    container = build_api_container(make_settings())
+    container.bot_guilds.prime({10})
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.get("/api/auth/login", follow_redirects=False)
+        state = client.cookies["poposya_oauth_state"]
+        await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+        me = await client.get("/api/auth/me")
+    assert {g["id"] for g in me.json()["guilds"]} == {"10"}
 
 
 async def test_callback_rejects_bad_state(client, mock_discord):

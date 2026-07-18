@@ -99,10 +99,20 @@ async def logout(container: ApiContainer = Depends(get_container)) -> Response:
 
 
 @router.get("/me", response_model=MeDTO)
-async def me(session: Session = Depends(current_session)) -> MeDTO:
+async def me(
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> MeDTO:
+    # показываем только серверы, где реально есть бот (иначе настраивать нечего).
+    # Если Discord недоступен — не блокируем вход, отдаём все управляемые.
+    try:
+        bot_ids: set[int] | None = await container.bot_guilds.get()
+    except discord_oauth.OAuthError:
+        bot_ids = None
+    guilds = [g for g in session.guilds if bot_ids is None or g.id in bot_ids]
     return MeDTO(
         user_id=str(session.user_id),
         username=session.username,
         avatar=session.avatar,
-        guilds=[GuildDTO(id=str(g.id), name=g.name, icon=g.icon) for g in session.guilds],
+        guilds=[GuildDTO(id=str(g.id), name=g.name, icon=g.icon) for g in guilds],
     )

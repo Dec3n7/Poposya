@@ -1,0 +1,422 @@
+/* Токены дизайна панели — из design-system/poposya-panel/MASTER.md
+   (Modern Dark, dense). Акцент — фиолет под тёмную 🖤 эстетику Поповы.
+   RN-эффекты (haptic/Reanimated) переведены в вебовые: backdrop-filter, transitions. */
+:root {
+  --bg: #020617;
+  --panel: #0b1120;
+  --panel-2: #0f172a;
+  --elevated: #131c31;
+  --border: #24314d;
+  --border-soft: #1a2338;
+  --fg: #f8fafc;
+  --fg-dim: #94a3b8;
+  --fg-faint: #64748b;
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --accent-soft: rgba(124, 58, 237, 0.14);
+  --accent-ring: rgba(124, 58, 237, 0.45);
+  --success: #22c55e;
+  --danger: #ef4444;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --font: "Fira Sans", system-ui, -apple-system, sans-serif;
+  --mono: "Fira Code", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--fg);
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(124, 58, 237, 0.12), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, rgba(34, 197, 94, 0.05), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent-hover);
+}
+
+/* --- layout --- */
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.container {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-4);
+}
+.center {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+}
+
+/* --- topbar --- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(11, 17, 32, 0.72);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.topbar .brand {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.topbar .brand .mark {
+  color: var(--accent-hover);
+}
+.topbar .spacer {
+  flex: 1;
+}
+.topbar .who {
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+/* --- card --- */
+.card {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(2, 6, 23, 0.55);
+}
+.card.pad {
+  padding: var(--sp-5);
+}
+
+/* --- buttons --- */
+.btn {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  transition:
+    transform 0.12s var(--ease),
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+.btn:hover {
+  border-color: var(--accent);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+}
+.btn.primary:hover {
+  background: var(--accent-hover);
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn.small {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+/* --- misc --- */
+.muted {
+  color: var(--fg-dim);
+}
+.faint {
+  color: var(--fg-faint);
+}
+.mono {
+  font-family: var(--mono);
+}
+.h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 var(--sp-2);
+}
+.sub {
+  color: var(--fg-dim);
+  margin: 0 0 var(--sp-5);
+}
+.section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--fg-faint);
+  margin: var(--sp-5) 0 var(--sp-2);
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent-hover);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fecaca;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm);
+}
+
+/* --- login --- */
+.login-card {
+  max-width: 420px;
+  text-align: center;
+}
+.login-mark {
+  font-size: 34px;
+  filter: drop-shadow(0 0 18px var(--accent-ring));
+}
+.login-btn {
+  display: inline-block;
+  margin-top: var(--sp-2);
+}
+
+/* --- guild picker --- */
+.guild-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.guild-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  transition:
+    transform 0.14s var(--ease),
+    border-color 0.18s var(--ease);
+}
+.guild-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.guild-card:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+.guild-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+}
+.guild-icon.fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+.guild-name {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guild-go {
+  color: var(--fg-faint);
+}
+
+/* --- settings fields --- */
+.fields-card {
+  padding: var(--sp-2) var(--sp-4);
+}
+.field {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.field:last-child {
+  border-bottom: none;
+}
+.field.overridden {
+  border-left: 2px solid var(--accent);
+  margin-left: -16px;
+  padding-left: 14px;
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.field-label {
+  font-weight: 500;
+}
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.field-status {
+  margin-left: auto;
+  font-size: 12px;
+}
+.field-status .ok {
+  color: var(--success);
+}
+.field-status .bad {
+  color: var(--danger);
+}
+.dot.saving {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-hover);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.field-control {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+/* toggle */
+.toggle {
+  --w: 44px;
+  --h: 26px;
+  width: var(--w);
+  height: var(--h);
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: background 0.2s var(--ease);
+}
+.toggle .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--fg-dim);
+  transition:
+    transform 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+.toggle.on {
+  background: var(--accent);
+  border-color: transparent;
+}
+.toggle.on .knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+/* number/channel input */
+.input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.input {
+  width: 110px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+  transition: border-color 0.15s var(--ease);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.unit {
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+.field-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: 12px;
+}
+.reset-btn {
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
