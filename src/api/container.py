@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from src.api.bot_guilds import BotGuildsCache
 from src.config import Settings
 from src.infrastructure.db.session import create_engine, create_session_factory
 from src.infrastructure.guild_settings import GuildSettingsService
@@ -24,6 +25,8 @@ class ApiContainer:
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     guild_settings: GuildSettingsService
+    # серверы, где есть бот (проверка «есть что настраивать») — кэш поверх Discord
+    bot_guilds: BotGuildsCache
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -40,5 +43,6 @@ def build_api_container(settings: Settings) -> ApiContainer:
         engine=engine,
         session_factory=session_factory,
         guild_settings=guild_settings,
+        bot_guilds=BotGuildsCache(settings.discord_token),
         settings_listener=settings_listener,
     )

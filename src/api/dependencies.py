@@ -3,9 +3,10 @@
 Проверки прав — только тут (бэкенд). Фронт никогда не решает, кто владелец.
 """
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from src.api.container import ApiContainer
+from src.api.discord_oauth import OAuthError
 from src.api.security import SESSION_COOKIE, Session, decode_session
 
 
@@ -23,3 +24,26 @@ def current_session(request: Request) -> Session:
     if session is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия недействительна")
     return session
+
+
+async def require_guild_manager(
+    guild_id: int,
+    request: Request,
+    session: Session = Depends(current_session),
+) -> int:
+    """Доступ к настройкам сервера. Оба условия проверяет ТОЛЬКО бэкенд:
+    1) у пользователя есть право управлять этим сервером (из его OAuth-серверов);
+    2) на сервере реально есть бот (иначе настраивать нечего).
+    guild_id берётся из пути `/api/guilds/{guild_id}/...`."""
+    if not session.can_manage(guild_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "нет прав управлять этим сервером")
+    container = get_container(request)
+    try:
+        bot_guild_ids = await container.bot_guilds.get()
+    except OAuthError:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "не удалось проверить серверы бота"
+        ) from None
+    if guild_id not in bot_guild_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "бота нет на этом сервере")
+    return guild_id
