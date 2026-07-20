@@ -174,6 +174,8 @@ class BotProfileBody(BaseModel):
     banner_url: str = ""
     # загруженный+обрезанный аватар как data-URL (base64); приоритетнее avatar_url
     avatar_data: str = ""
+    # загруженный+обрезанный баннер как data-URL (base64); приоритетнее banner_url
+    banner_data: str = ""
 
 
 @router.get("/bot-profile")
@@ -189,6 +191,7 @@ async def bot_profile(
         "avatar_url": p.avatar_url,
         "banner_url": p.banner_url,
         "avatar_data": p.avatar_data,
+        "banner_data": p.banner_data,
     }
 
 
@@ -202,7 +205,12 @@ async def set_bot_profile(
     """Сохранить профиль (загруженный аватар = кэш в БД) и сразу применить к боту
     через мост (guild.me.edit). Пустое значение = сброс к глобальному."""
     await container.set_bot_profile.execute(
-        guild_id, body.nick, body.avatar_url, body.banner_url, body.avatar_data
+        guild_id,
+        body.nick,
+        body.avatar_url,
+        body.banner_url,
+        body.avatar_data,
+        body.banner_data,
     )
     cmd = await run_command(
         container,
@@ -213,6 +221,7 @@ async def set_bot_profile(
             "avatar_url": body.avatar_url,
             "banner_url": body.banner_url,
             "avatar_data": body.avatar_data,
+            "banner_data": body.banner_data,
         },
         session.user_id,
     )

@@ -43,6 +43,7 @@ export interface BotProfile {
   avatar_url: string;
   banner_url: string;
   avatar_data: string; // загруженный+обрезанный аватар (data-URL); приоритетнее avatar_url
+  banner_data: string; // загруженный+обрезанный баннер (data-URL); приоритетнее banner_url
 }
 
 export interface ModuleFlag {

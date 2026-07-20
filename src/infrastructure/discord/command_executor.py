@@ -185,7 +185,11 @@ class DiscordCommandExecutor:
         elif "avatar_url" in p:
             url = str(p["avatar_url"]).strip()
             kwargs["avatar"] = await _download_image(url) if url else None
-        if "banner_url" in p:
+        # загруженный баннер (base64) приоритетнее URL
+        banner_data = str(p.get("banner_data") or "").strip()
+        if banner_data:
+            kwargs["banner"] = _decode_data_url(banner_data)
+        elif "banner_url" in p:
             url = str(p["banner_url"]).strip()
             kwargs["banner"] = await _download_image(url) if url else None
         if not kwargs:

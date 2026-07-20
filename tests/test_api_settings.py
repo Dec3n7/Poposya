@@ -1011,7 +1011,13 @@ async def test_settings_list_excludes_module_flags(client):
 
 async def test_bot_profile_get_default(client):
     p = (await client.get(f"/api/guilds/{GUILD}/bot-profile")).json()
-    assert p == {"nick": "", "avatar_url": "", "banner_url": "", "avatar_data": ""}
+    assert p == {
+        "nick": "",
+        "avatar_url": "",
+        "banner_url": "",
+        "avatar_data": "",
+        "banner_data": "",
+    }
 
 
 async def test_bot_profile_upload_avatar(client, container):
@@ -1035,6 +1041,29 @@ async def test_bot_profile_upload_avatar(client, container):
     # загруженный аватар ушёл в мост и сохранён (кэш) — GET отдаёт целиком
     assert seen[0].payload["avatar_data"] == data_url
     assert (await client.get(f"/api/guilds/{GUILD}/bot-profile")).json()["avatar_data"] == data_url
+
+
+async def test_bot_profile_upload_banner(client, container):
+    import base64
+
+    data_url = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0bannerbytes").decode()
+
+    async def execute(_cmd):
+        return "Профиль обновлён: banner."
+
+    task, stop, seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.put(
+            f"/api/guilds/{GUILD}/bot-profile",
+            json={"nick": "", "avatar_url": "", "banner_url": "", "banner_data": data_url},
+        )
+    finally:
+        stop.set()
+        await task
+    assert resp.status_code == 200 and resp.json()["command"]["status"] == "done"
+    # загруженный баннер ушёл в мост и сохранён (кэш) — GET отдаёт целиком
+    assert seen[0].payload["banner_data"] == data_url
+    assert (await client.get(f"/api/guilds/{GUILD}/bot-profile")).json()["banner_data"] == data_url
 
 
 async def test_bot_profile_save_and_apply(client, container):

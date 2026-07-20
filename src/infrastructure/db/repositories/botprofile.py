@@ -28,6 +28,7 @@ class SqlAlchemyBotProfileRepository(IBotProfileRepository):
             avatar_url=row.avatar_url,
             banner_url=row.banner_url,
             avatar_data=row.avatar_data,
+            banner_data=row.banner_data,
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
 
@@ -39,6 +40,7 @@ class SqlAlchemyBotProfileRepository(IBotProfileRepository):
             "avatar_url": profile.avatar_url,
             "banner_url": profile.banner_url,
             "avatar_data": profile.avatar_data,
+            "banner_data": profile.banner_data,
             "updated_at": profile.updated_at.replace(tzinfo=None),
         }
         stmt = _upsert(self._session)(BotProfileModel).values(**values)

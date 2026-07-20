@@ -31,6 +31,7 @@ class SetBotProfileUseCase:
         avatar_url: str,
         banner_url: str,
         avatar_data: str = "",
+        banner_data: str = "",
     ) -> None:
         async with self._uow_factory() as uow:
             await uow.bot_profile.save(
@@ -40,6 +41,7 @@ class SetBotProfileUseCase:
                     avatar_url=avatar_url.strip(),
                     banner_url=banner_url.strip(),
                     avatar_data=avatar_data.strip(),
+                    banner_data=banner_data.strip(),
                     updated_at=datetime.now(UTC),
                 )
             )

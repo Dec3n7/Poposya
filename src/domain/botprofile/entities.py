@@ -14,4 +14,6 @@ class BotProfile:
     banner_url: str = ""
     # загруженный+обрезанный аватар (base64 data-URL); приоритетнее avatar_url
     avatar_data: str = ""
+    # загруженный+обрезанный баннер (base64 data-URL); приоритетнее banner_url
+    banner_data: str = ""
     updated_at: datetime | None = None

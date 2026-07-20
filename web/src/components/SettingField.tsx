@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Channel, SettingField as Field } from "../types";
+import { Dropdown, type Option } from "./Dropdown";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -14,23 +15,21 @@ function ChannelSelect({
   channels: Channel[];
   onPick: (id: string) => void;
 }) {
-  const groups: Record<string, Channel[]> = {};
-  for (const c of channels) (groups[c.group] ??= []).push(c);
   const known = value === "0" || channels.some((c) => c.id === value);
+  // спец-пункты без группы идут первыми, затем каналы по группам
+  const options: Option[] = [
+    { value: "0", label: "— выключено —" },
+    ...(known ? [] : [{ value, label: `ID ${value} (не в списке)` }]),
+    ...channels.map((c) => ({ value: c.id, label: c.name, group: c.group })),
+  ];
   return (
-    <select className="input select" value={value} onChange={(e) => onPick(e.target.value)}>
-      <option value="0">— выключено —</option>
-      {!known && <option value={value}>ID {value} (не в списке)</option>}
-      {Object.entries(groups).map(([group, list]) => (
-        <optgroup label={group} key={group}>
-          {list.map((c) => (
-            <option value={c.id} key={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+    <Dropdown
+      value={value}
+      options={options}
+      onChange={onPick}
+      ariaLabel="Канал"
+      className="dd-channel"
+    />
   );
 }
 

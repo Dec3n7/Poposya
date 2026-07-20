@@ -17,4 +17,6 @@ class BotProfileModel(Base):
     banner_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # загруженный+обрезанный аватар (base64 data-URL) — приоритетнее avatar_url
     avatar_data: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # загруженный+обрезанный баннер (base64 data-URL) — приоритетнее banner_url
+    banner_data: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
