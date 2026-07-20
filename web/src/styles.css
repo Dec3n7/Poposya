@@ -1596,11 +1596,10 @@ a {
   transform: rotate(180deg);
 }
 .dd-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 6px);
-  left: 0;
+  /* рендерится в портал на body: position/top/left задаёт JS (fixed-координаты) */
+  z-index: 1000;
   min-width: 100%;
+  max-width: min(360px, calc(100vw - 24px));
   max-height: 320px;
   overflow-y: auto;
   list-style: none;
@@ -1609,12 +1608,17 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(16, 18, 28, 0.9);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
-  backdrop-filter: blur(30px) saturate(160%);
+  /* СПЛОШНОЙ непрозрачный фон: меню в портале висит над фото-фоном и чужими
+     карточками — полупрозрачность + backdrop-filter давали просвет и смазывание */
+  background: #12141d;
   border: 1px solid var(--glass-rim);
   border-radius: var(--radius-sm);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55), inset 0 1px 0 var(--glass-hi);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.7), inset 0 1px 0 var(--glass-hi);
+  /* прячем полосу скролла, прокрутку колесом/перетаскиванием оставляем */
+  scrollbar-width: none;
+}
+.dd-menu::-webkit-scrollbar {
+  display: none;
 }
 /* заголовок группы (как <optgroup>) */
 .dd-group {
@@ -1631,7 +1635,9 @@ a {
   border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
-  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
   font-size: 14px;
   transition: background 0.12s var(--ease), color 0.12s var(--ease);
 }
