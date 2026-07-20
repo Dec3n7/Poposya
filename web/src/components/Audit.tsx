@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { AuditEntry, Guild } from "../types";
+import { Dropdown } from "./Dropdown";
 
 // человекочитаемые названия действий
 const ACTION_LABELS: Record<string, string> = {
@@ -21,11 +22,40 @@ const ACTION_LABELS: Record<string, string> = {
   "music.resume": "Плей",
   "music.skip": "Пропуск",
   "music.stop": "Стоп",
+  "profile.apply": "Профиль бота",
+  "role.assign": "Выдана роль",
+  "role.unassign": "Снята роль",
+  "role.create": "Создана роль",
+  "role.edit": "Изменена роль",
+  "role.delete": "Удалена роль",
+  "role.reorder": "Порядок ролей",
+  "role.permissions": "Права роли",
 };
+
+// группа действия для фильтра (по префиксу)
+function group(action: string): "roles" | "moderation" | "settings" | "music" | "other" {
+  if (action.startsWith("role.")) return "roles";
+  if (action.startsWith("mod.") || action === "warns.clear") return "moderation";
+  if (action.startsWith("settings.")) return "settings";
+  if (action.startsWith("music.")) return "music";
+  return "other";
+}
 
 function label(action: string): string {
   return ACTION_LABELS[action] ?? action;
 }
+
+// подписи ключей в деталях
+const DETAIL_KEYS: Record<string, string> = {
+  name: "имя",
+  hoist: "выделить",
+  mentionable: "упоминаемая",
+  count: "ролей",
+  minutes: "мин",
+  reason: "причина",
+  value: "значение",
+  role_id: "роль",
+};
 
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU", {
@@ -36,15 +66,31 @@ function fmtTime(iso: string): string {
   });
 }
 
-// компактно показать JSON-детали: {value: 5} -> "value: 5"
+// компактно показать JSON-детали. Особые случаи: битовое поле прав не
+// вываливаем числом, цвет показываем как #hex.
 function fmtDetails(raw: string | null): string {
   if (!raw) return "";
   try {
-    const obj = JSON.parse(raw);
-    return Object.entries(obj)
-      .filter(([, v]) => v !== "" && v !== null)
-      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
-      .join(" · ");
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === "" || v === null) continue;
+      if (k === "permissions") {
+        parts.push("права обновлены");
+        continue;
+      }
+      if (k === "color") {
+        parts.push(
+          typeof v === "number"
+            ? `цвет ${v ? `#${v.toString(16).padStart(6, "0")}` : "нет"}`
+            : `цвет: ${String(v)}`,
+        );
+        continue;
+      }
+      const key = DETAIL_KEYS[k] ?? k;
+      parts.push(`${key}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+    }
+    return parts.join(" · ");
   } catch {
     return raw;
   }
@@ -66,7 +112,7 @@ function AuditRow({ e }: { e: AuditEntry }) {
         <span className="badge">{label(e.action)}</span>
         {target && <span className="audit-target">→ {target}</span>}
         {details && <span className="faint small">· {details}</span>}
-        {e.result && e.result !== "ok" && (
+        {e.result && e.result !== "ok" && e.result !== "done" && (
           <span className="cine-review">«{e.result}»</span>
         )}
       </span>
@@ -75,21 +121,37 @@ function AuditRow({ e }: { e: AuditEntry }) {
   );
 }
 
+const GROUP_OPTIONS = [
+  { value: "", label: "Все действия" },
+  { value: "roles", label: "Роли" },
+  { value: "moderation", label: "Модерация" },
+  { value: "settings", label: "Настройки" },
+  { value: "music", label: "Музыка" },
+  { value: "other", label: "Прочее" },
+];
+
 export function Audit({ guild }: { guild: Guild }) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState(""); // "" = все; иначе группа
+  const [limit, setLimit] = useState(100);
 
   useEffect(() => {
     setEntries(null);
     setError(null);
     api
-      .audit(guild.id)
+      .audit(guild.id, limit)
       .then(setEntries)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить журнал");
       });
-  }, [guild.id]);
+  }, [guild.id, limit]);
+
+  const shown = useMemo(() => {
+    if (!entries) return [];
+    return filter ? entries.filter((e) => group(e.action) === filter) : entries;
+  }, [entries, filter]);
 
   if (error) return <div className="error-banner">{error}</div>;
   if (!entries)
@@ -103,14 +165,37 @@ export function Audit({ guild }: { guild: Guild }) {
     <div>
       <h2 className="section-title">Действия через панель</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
-        Кто и что делал из панели: модерация, очки, настройки, удаления. Действия командами бота в
-        Discord сюда не попадают.
+        Кто и что делал из панели: роли, модерация, очки, настройки, удаления. Действия командами
+        бота прямо в Discord сюда не попадают.
       </p>
+
+      <div className="people-filters" style={{ marginBottom: 12 }}>
+        <Dropdown ariaLabel="Тип действия" value={filter} onChange={setFilter} options={GROUP_OPTIONS} />
+        <Dropdown
+          ariaLabel="Сколько записей"
+          value={String(limit)}
+          onChange={(v) => setLimit(Number(v))}
+          options={[
+            { value: "100", label: "Последние 100" },
+            { value: "300", label: "Последние 300" },
+            { value: "1000", label: "Последние 1000" },
+          ]}
+        />
+        <span className="people-count faint small">
+          {shown.length}
+          {filter && entries.length !== shown.length ? ` из ${entries.length}` : ""}
+        </span>
+      </div>
+
       <div className="card leader-card">
-        {entries.length === 0 ? (
-          <div className="pad muted">Пока пусто — действий через панель не было.</div>
+        {shown.length === 0 ? (
+          <div className="pad muted">
+            {entries.length === 0
+              ? "Пока пусто — действий через панель не было."
+              : "Под фильтр ничего не попало."}
+          </div>
         ) : (
-          entries.map((e) => <AuditRow key={e.id} e={e} />)
+          shown.map((e) => <AuditRow key={e.id} e={e} />)
         )}
       </div>
     </div>
