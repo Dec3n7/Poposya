@@ -172,6 +172,10 @@ a {
   cursor: default;
   transform: none;
 }
+/* иконка-контрол внутри кнопки: без baseline-зазора строчного svg */
+.btn svg {
+  display: block;
+}
 .btn.danger {
   color: #ff6b81;
   border-color: rgba(255, 107, 129, 0.35);
@@ -1639,6 +1643,24 @@ a {
 }
 .dd-menu::-webkit-scrollbar {
   display: none;
+}
+/* фейд «ниже есть ещё»: sticky-градиент у нижнего края, гаснет в конце
+   списка (класс more ставит/снимает Dropdown при скролле) */
+.dd-menu::after {
+  content: "";
+  position: sticky;
+  bottom: -6px;
+  display: block;
+  flex: none;
+  height: 28px;
+  margin-top: -28px;
+  background: linear-gradient(transparent, #12141d 82%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+.dd-menu.more::after {
+  opacity: 1;
 }
 /* заголовок группы (как <optgroup>) */
 .dd-group {

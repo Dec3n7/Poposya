@@ -52,6 +52,15 @@ export function Dropdown({
     };
   }, [open]);
 
+  // фейд у нижнего края меню: скроллбар скрыт, поэтому подсказываем
+  // «ниже есть ещё» градиентом; у конца списка он гаснет (класс more)
+  const updateFade = () => {
+    const m = menuRef.current;
+    if (!m) return;
+    m.classList.toggle("more", m.scrollHeight - m.scrollTop - m.clientHeight > 4);
+  };
+  useLayoutEffect(updateFade, [open, pos, options]);
+
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
@@ -78,6 +87,7 @@ export function Dropdown({
             className="dd-menu"
             role="listbox"
             style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width }}
+            onScroll={updateFade}
           >
             {options.map((o, i) => {
               const header = o.group && o.group !== options[i - 1]?.group ? o.group : null;

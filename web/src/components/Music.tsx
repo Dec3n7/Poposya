@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { IconTrash } from "../icons";
 import type { Guild, PlaylistDetail, PlaylistItem } from "../types";
 import { NowPlaying } from "./NowPlaying";
 
@@ -64,7 +65,7 @@ function PlaylistRow({
           disabled={busy}
           title="Удалить плейлист"
         >
-          🗑
+          <IconTrash />
         </button>
       </div>
       {open && (

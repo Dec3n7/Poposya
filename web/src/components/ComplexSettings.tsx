@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { IconX } from "../icons";
 import type { ComplexSettings as CS } from "../types";
 
 type Status = "idle" | "saving" | "saved" | "error";
@@ -98,7 +99,7 @@ function RolesEditor({ guildId, data }: { guildId: string; data: CS }) {
                 onChange={(e) => setTier(i, { name: e.target.value })}
               />
               <button className="btn ghost small" onClick={() => removeTier(i)} aria-label="убрать">
-                ✕
+                <IconX />
               </button>
             </div>
           ))}

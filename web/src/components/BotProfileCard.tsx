@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { IconX } from "../icons";
 import type { BotProfile } from "../types";
 import { ImageCropper } from "./ImageCropper";
 
@@ -103,7 +104,7 @@ export function BotProfileCard({ guildId }: { guildId: string }) {
               title="Убрать загруженное фото"
               onClick={() => setForm((f) => (f ? { ...f, avatar_data: "" } : f))}
             >
-              ✕
+              <IconX />
             </button>
           )}
         </div>
@@ -129,7 +130,7 @@ export function BotProfileCard({ guildId }: { guildId: string }) {
               title="Убрать загруженный баннер"
               onClick={() => setForm((f) => (f ? { ...f, banner_data: "" } : f))}
             >
-              ✕
+              <IconX />
             </button>
           )}
         </div>

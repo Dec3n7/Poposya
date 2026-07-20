@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { IconX } from "../icons";
 import type { Cinema as CinemaData, Guild, MovieRating, WatchedItem, WatchlistItem } from "../types";
 
 function Rater({ r }: { r: MovieRating }) {
@@ -102,7 +103,7 @@ function WatchlistRow({
           👍 {m.up} · 👎 {m.down}
         </span>
         <button className="btn ghost small" onClick={remove} disabled={busy} title="Убрать из вотчлиста">
-          ✕
+          <IconX />
         </button>
       </span>
     </div>

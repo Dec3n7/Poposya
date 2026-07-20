@@ -7,205 +7,94 @@
 ---
 
 **Project:** Poposya Panel
-**Generated:** 2026-07-18 06:33:59
-**Category:** RPA / Automation Dashboard
-**Design Dials:** Variance 4/10 (Balanced / Modern) | Density 8/10 (Dense / Dashboard)
+**Updated:** 2026-07-20 (актуализация: реальная тема Liquid Glass вместо стартовой генерации)
+**Источник правды по значениям:** `web/src/styles.css` (токены в `:root`) — этот файл описывает систему, но при расхождении верить CSS.
 
 ---
 
-## Global Rules
+## Концепция
 
-### Color Palette
+**Liquid Glass поверх ночной сцены.** Фон — фото ночного Токио (`web/public/webpoposya.png`)
+под ровным затемнением 40%. Весь интерфейс — лёгкое, почти прозрачное стекло в духе iOS:
+тонировка ~15%, blur 6px, saturate 195% + brightness 1.08 (стекло *усиливает* цвета за собой),
+косой блик как на выпуклой линзе и объёмная фаска по периметру (ярче сверху, тоньше по бокам).
+Значения выбраны пользователем в интерактивной примерке 2026-07-20. Рефракция (SVG displacement)
+осознанно НЕ используется: Chromium-only и не видна на выбранной силе.
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#0F172A` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#1E293B` | `--color-secondary` |
-| Accent/CTA | `#22C55E` | `--color-accent` |
-| Background | `#020617` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Muted | `#1A1E2F` | `--color-muted` |
-| Border | `#334155` | `--color-border` |
-| Destructive | `#EF4444` | `--color-destructive` |
-| Ring | `#0F172A` | `--color-ring` |
+Тема — только тёмная (dark-only, осознанно: ночная сцена и есть мир панели).
+Акцент — фиолет `#8b5cf6` под 🖤-эстетику Попоси, поддержан магентой `#e879f9`.
 
-**Color Notes:** Dark bg + green positive indicators
+## Токены (из `web/src/styles.css`)
 
-### Typography
+### Цвета
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+| Роль | Значение | CSS-переменная |
+|------|----------|----------------|
+| Фон-подложка | `#06070d` | `--bg` |
+| Панель | `#0b1120` / `#0f172a` | `--panel` / `--panel-2` |
+| Приподнятое | `#131c31` | `--elevated` |
+| Текст | `#f2f1f8` | `--fg` |
+| Текст приглушённый | `#b9b9cc` | `--fg-dim` |
+| Текст бледный | `#8585a0` | `--fg-faint` (контраст ~5:1 — не использовать мельче 11px) |
+| Акцент | `#8b5cf6` / hover `#a78bfa` | `--accent` / `--accent-hover` |
+| Магента | `#e879f9` | `--magenta` |
+| Успех / Опасность | `#46e0a0` / `#ff7a91` | `--success` / `--danger` |
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-```
+### Стекло
 
-### Spacing Variables
+| Роль | Значение | CSS-переменная |
+|------|----------|----------------|
+| Материал | `rgba(30, 32, 46, 0.15)` | `--glass` |
+| Верхняя грань фаски | `rgba(255, 255, 255, 0.32)` | `--glass-hi` |
+| Кант | `rgba(255, 255, 255, 0.14)` | `--glass-rim` |
+| Фильтр | `blur(6px) saturate(195%) brightness(1.08)` | `--blur` |
 
-*Density: 8/10 — Dense / Dashboard*
+Стеклянный примитив (`.card`, `.stat-card`, `.rail`, `.guild-chip`): материал + фильтр +
+косой блик `linear-gradient(118deg, …)` в background + фаска пятью inset-тенями +
+реагирующий кант (радиальный градиент к курсору через `--mx`/`--my`, см. `web/src/glass.ts`)
++ наклон 0.5° на стат-карточках (класс `tilt`).
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
-| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
-| `--space-md` | `8px` / `0.5rem` | Standard padding |
-| `--space-lg` | `12px` / `0.75rem` | Section padding |
-| `--space-xl` | `16px` / `1rem` | Large gaps |
-| `--space-2xl` | `24px` / `1.5rem` | Section margins |
-| `--space-3xl` | `32px` / `2rem` | Hero padding |
+### Геометрия и движение
 
-### Shadow Depths
+- Радиусы: `--radius-sm: 12px` (контролы) · `--radius: 18px` (карточки-элементы) · `--radius-lg: 26px` (карточки-контейнеры, рельс).
+- Отступы: `--sp-1..6` = 4/8/12/16/24/32px (dense-дашборд).
+- Ease: `cubic-bezier(0.16, 1, 0.3, 1)` (`--ease`), переходы 120–300ms.
+- `prefers-reduced-motion` глушит всё глобально.
 
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+### Типографика
 
----
+- **Текст:** Fira Sans (Google Fonts, подключён в `web/index.html`), базовый 15px/1.5.
+- **Моно:** Fira Code — числа, бейджи-счётчики (`--mono`).
+- Заголовок сцены 30px/700, `.h1` 22px, ярлыки-«надбровья» 11px uppercase c letter-spacing.
+- Минимальный размер текста: 11px (не опускаться до 10px).
 
-## Component Specs
+## Ключевые компоненты
 
-### Buttons
+- **Оболочка:** левый стеклянный сайдбар-рельс (264px, sticky) с SVG-иконками + сцена. Бренд в рельсе — кнопка «на Обзор». На ≤860px рельс складывается в горизонтальную обёртку.
+- **Кнопки:** `.btn` (elevated, кант при hover, scale 0.97 при нажатии), `.primary` (заливка акцентом), `.ghost`, `.small`, `.danger`.
+- **Дропдаун `Dropdown.tsx`:** стеклянный триггер; меню — портал на body, `position: fixed`, СПЛОШНОЙ фон `#12141d` (полупрозрачность запрещена — просвечивает контент), скрытый скроллбар + фейд-градиент «ниже есть ещё» у нижнего края, группы как optgroup.
+- **Тумблер:** `role="switch"` + `aria-checked`, 44×26.
+- **Сегмент-контрол `.seg`:** стеклянная пилюля, активный сегмент — заливка акцентом.
+- **Графика без библиотек:** Sparkline/MiniBars/RoleDonut/Heatmap — свои SVG/grid, интенсивность через `color-mix` с CSS-переменными.
+- **Роли:** палитра тиров в `web/src/roles.ts` (слейт→золото по индексу), цвет через CSS-var `--role` + `color-mix` (плитки `.role-chip`, пончик, прогресс до роли).
 
-```css
-/* Primary Button */
-.btn-primary {
-  background: #22C55E;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+## Анти-паттерны (выучено на практике)
 
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
+- ❌ **Полупрозрачное + blur у плавающих слоёв** (меню, поповеры) — просвет контента и «смазывание»; плавающим слоям только сплошной фон.
+- ❌ **Флекс-скролл без `flex: none` у детей** — `overflow: hidden` на пункте обнуляет его min-height, и длинный список сплющивается в кашу вместо скролла.
+- ❌ **Эмодзи как контролы** — иконки действий только SVG из `web/src/icons.tsx` (стиль рельса: stroke 2, viewBox 24). Эмодзи как *контент* (🖤 бренда, находки, ❄️-статус) — можно, это идентичность.
+- ❌ **Дропдаун-меню внутри карточки** — backdrop-filter создаёт контекст наложения, соседняя карточка перекроет меню; только портал на body.
+- ❌ Текст мельче 11px; `--fg-faint` на мелком кегле.
+- ❌ Невидимый фокус (у всех интерактивов `:focus-visible` с `--accent-ring`).
+- ❌ Светлая тема (dark-only — осознанное решение).
 
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #0F172A;
-  border: 2px solid #0F172A;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
+## Чек-лист перед сдачей UI
 
-### Cards
-
-```css
-.card {
-  background: #020617;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #0F172A;
-  outline: none;
-  box-shadow: 0 0 0 3px #0F172A20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Modern Dark (Cinema Mobile)
-
-**Keywords:** dark mode, cinematic, ambient light, glassmorphism, deep black, indigo, glow, blur, atmospheric, reanimated, haptic, premium, layered, frosted glass, linear gradient
-
-**Best For:** Developer tools, pro productivity apps, fintech/trading dashboards, media/streaming platforms, AI tool interfaces, high-end gaming companion apps
-
-**Key Effects:** Expo.out Bezier(0.16,1,0.3,1) easing; spring modals (damping:20 stiffness:90); haptic-linked press (Impact Light/Medium); animated ambient light blobs (Reanimated translateX/Y slow oscillation); BlurView glassmorphism headers/nav (intensity 20); scale press 0.97 → 1.0; avoid pure #000000 (OLED smear)
-
-### Page Pattern
-
-**Pattern Name:** Community/Forum Landing
-
-- **Conversion Strategy:** Show active community (member count, posts today). Highlight benefits. Preview content. Easy onboarding.
-- **CTA Placement:** Join button prominent + After member showcase
-- **Section Order:** 1. Hero (community value prop), 2. Popular topics/categories, 3. Active members showcase, 4. Join CTA
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Light mode default
-- ❌ Slow rendering
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- [ ] Иконки — SVG в стиле набора (никаких эмодзи-контролов)
+- [ ] `cursor: pointer` и `:focus-visible` на всех кликабельных
+- [ ] Переходы 120–300ms с `--ease`, `prefers-reduced-motion` уважается
+- [ ] Плавающие слои — сплошной фон, портал, `flex: none` у пунктов
+- [ ] Длинные строки — `ellipsis` + `min-width: 0` у флекс-детей
+- [ ] Текст ≥11px; бледный `--fg-faint` только для ярлыков
+- [ ] Проверить читаемость поверх ярких участков фото (стекло прозрачное!)
+- [ ] Сборка: `docker build --target build -t poposya-web-build web/` (ловит tsc)
