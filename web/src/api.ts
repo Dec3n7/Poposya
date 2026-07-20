@@ -186,6 +186,15 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ permissions }),
     }),
+  bulkRole: (
+    guildId: string,
+    roleId: string,
+    op: "assign" | "unassign",
+  ): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/${roleId}/bulk`, {
+      method: "POST",
+      body: JSON.stringify({ op }),
+    }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>

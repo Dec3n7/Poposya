@@ -30,6 +30,7 @@ const ACTION_LABELS: Record<string, string> = {
   "role.delete": "Удалена роль",
   "role.reorder": "Порядок ролей",
   "role.permissions": "Права роли",
+  "role.bulk": "Массово по роли",
 };
 
 // группа действия для фильтра (по префиксу)
@@ -85,6 +86,10 @@ function fmtDetails(raw: string | null): string {
             ? `цвет ${v ? `#${v.toString(16).padStart(6, "0")}` : "нет"}`
             : `цвет: ${String(v)}`,
         );
+        continue;
+      }
+      if (k === "op") {
+        parts.push(v === "assign" ? "выдача всем" : v === "unassign" ? "снятие у всех" : String(v));
         continue;
       }
       const key = DETAIL_KEYS[k] ?? k;

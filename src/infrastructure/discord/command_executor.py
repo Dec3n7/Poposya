@@ -8,6 +8,7 @@
 CommandError — панель покажет их админу.
 """
 
+import asyncio
 import base64
 import binascii
 import logging
@@ -367,6 +368,49 @@ class DiscordCommandExecutor:
             raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
         return f"Обновил права роли «{role.name}»."
 
+    # массовая выдача/снятие: серверы маленькие, поэтому синхронно одной командой
+    # с лёгкой паузой (discord.py и сам ждёт на 429; пауза — доп. вежливость).
+    # Кап — предохранитель: панель отдельный процесс, доверять размеру нельзя.
+    _BULK_CAP = 200
+
+    async def _role_bulk(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        op = str(p.get("op"))
+        if op not in ("assign", "unassign"):
+            raise CommandError("Неизвестная операция.")
+        if op == "assign":
+            # ботам роль пачкой не раздаём — только живым участникам без неё
+            targets = [m for m in guild.members if not m.bot and role not in m.roles]
+            reason = "Панель: массовая выдача роли"
+        else:
+            targets = [m for m in guild.members if role in m.roles]
+            reason = "Панель: массовое снятие роли"
+        if not targets:
+            return "Некого менять — список пуст."
+        if len(targets) > self._BULK_CAP:
+            raise CommandError(
+                f"Слишком много участников ({len(targets)} > {self._BULK_CAP}) — предел безопасности."
+            )
+        done = 0
+        failed = 0
+        for member in targets:
+            try:
+                if op == "assign":
+                    await member.add_roles(role, reason=reason)
+                else:
+                    await member.remove_roles(role, reason=reason)
+                done += 1
+            except discord.Forbidden as exc:
+                # прав нет вовсе — дальше смысла нет
+                raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+            except discord.HTTPException:
+                failed += 1
+            await asyncio.sleep(0.2)
+        verb = "Выдал" if op == "assign" else "Снял"
+        msg = f"{verb} роль «{role.name}»: {done} чел."
+        return msg + (f", ошибок {failed}." if failed else ".")
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -385,4 +429,5 @@ _HANDLERS = {
     "role.delete": DiscordCommandExecutor._role_delete,
     "role.reorder": DiscordCommandExecutor._role_reorder,
     "role.permissions": DiscordCommandExecutor._role_permissions,
+    "role.bulk": DiscordCommandExecutor._role_bulk,
 }

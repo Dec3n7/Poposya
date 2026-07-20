@@ -48,6 +48,10 @@ class PermissionsBody(BaseModel):
     permissions: str  # итоговое битовое поле строкой (не влезает в JS-number)
 
 
+class BulkBody(BaseModel):
+    op: str  # "assign" | "unassign"
+
+
 def _editable(role: GuildRole, guild_id: int, bot_top: int | None) -> bool:
     if bot_top is None or role.managed or role.role_id == guild_id:
         return False
@@ -205,6 +209,27 @@ async def set_permissions(
     await record_audit(
         container, guild_id, session.user_id, "role.permissions",
         target=role_id, details={"permissions": body.permissions}, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.post("/{role_id}/bulk")
+async def bulk_role(
+    role_id: int,
+    body: BulkBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Массовая выдача (всем без роли) / снятие (у всех носителей). Бот делает
+    синхронно одной командой; на большом сервере панель отдаст «применяется»,
+    но бот докрутит. Кому именно — решает бот (панели список не доверяем)."""
+    cmd = await run_command(
+        container, guild_id, "role.bulk", {"role_id": str(role_id), "op": body.op}, session.user_id
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "role.bulk",
+        target=role_id, details={"op": body.op}, result=cmd.get("status"),
     )
     return cmd
 

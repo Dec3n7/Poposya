@@ -2330,6 +2330,14 @@ a {
 .role-editor-hint {
   margin-left: auto;
 }
+.role-bulk {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-soft);
+}
 
 /* редактор прав роли */
 .perms-editor {

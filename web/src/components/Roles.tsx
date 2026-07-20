@@ -98,6 +98,8 @@ function RoleEditor({
   onSubmit,
   onCancel,
   onDelete,
+  onBulk,
+  holders,
 }: {
   initial: RoleInput;
   submitLabel: string;
@@ -105,6 +107,8 @@ function RoleEditor({
   onSubmit: (v: RoleInput) => void;
   onCancel: () => void;
   onDelete?: () => void;
+  onBulk?: (op: "assign" | "unassign") => void;
+  holders?: number | null;
 }) {
   const [name, setName] = useState(initial.name);
   const [colorOn, setColorOn] = useState(initial.color != null && initial.color !== 0);
@@ -112,6 +116,7 @@ function RoleEditor({
   const [hoist, setHoist] = useState(initial.hoist);
   const [mentionable, setMentionable] = useState(initial.mentionable);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<"assign" | "unassign" | null>(null);
 
   const trimmed = name.trim();
 
@@ -220,6 +225,55 @@ function RoleEditor({
           ))}
         <span className="role-editor-hint faint small">Права роли — по кнопке щита 🛡.</span>
       </div>
+
+      {onBulk && (
+        <div className="role-bulk">
+          <span className="faint small">
+            Массово{typeof holders === "number" ? ` · носителей: ${holders}` : ""}:
+          </span>
+          {bulkConfirm ? (
+            <span className="role-del-confirm">
+              <span className="faint small">
+                {bulkConfirm === "assign" ? "Выдать всем, у кого её нет?" : "Снять у всех носителей?"}
+              </span>
+              <button
+                className="btn primary small"
+                onClick={() => {
+                  onBulk(bulkConfirm);
+                  setBulkConfirm(null);
+                }}
+                disabled={busy}
+              >
+                Да
+              </button>
+              <button
+                className="btn ghost small"
+                onClick={() => setBulkConfirm(null)}
+                disabled={busy}
+              >
+                Нет
+              </button>
+            </span>
+          ) : (
+            <>
+              <button
+                className="btn ghost small"
+                onClick={() => setBulkConfirm("assign")}
+                disabled={busy}
+              >
+                Выдать всем
+              </button>
+              <button
+                className="btn ghost small"
+                onClick={() => setBulkConfirm("unassign")}
+                disabled={busy}
+              >
+                Снять у всех
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -380,6 +434,19 @@ export function Roles({ guild }: { guild: Guild }) {
     }
   }
 
+  async function doBulk(role: GuildRole, op: "assign" | "unassign") {
+    setBusy(true);
+    setMsg(null);
+    try {
+      report(await api.bulkRole(guild.id, role.id, op));
+      window.setTimeout(refresh, 900); // носители изменились — подтянуть счётчики
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function doDelete(role: GuildRole) {
     setBusy(true);
     setMsg(null);
@@ -491,6 +558,8 @@ export function Roles({ guild }: { guild: Guild }) {
                     onSubmit={(v) => doEdit(r, v)}
                     onCancel={() => setEditingId(null)}
                     onDelete={() => doDelete(r)}
+                    onBulk={(op) => doBulk(r, op)}
+                    holders={r.holders}
                   />
                 </div>
               );
