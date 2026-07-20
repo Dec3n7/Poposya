@@ -330,3 +330,12 @@ export interface MemberRoles {
   held: GuildRole[];
   assignable: GuildRole[];
 }
+
+// поля для создания/правки роли. color: int 0..0xFFFFFF или null (без цвета).
+// Права роли (permissions) намеренно отсутствуют — редактирование на этапе 2.
+export interface RoleInput {
+  name: string;
+  color: number | null;
+  hoist: boolean;
+  mentionable: boolean;
+}

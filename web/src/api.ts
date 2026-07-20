@@ -20,6 +20,7 @@ import type {
   PersonListItem,
   PlaylistDetail,
   PlaylistItem,
+  RoleInput,
   RolesView,
   SettingField,
   Trends,
@@ -155,6 +156,23 @@ export const api = {
   unassignRole: (guildId: string, userId: string, roleId: string): Promise<CommandResult> =>
     req<CommandResult>(`/api/guilds/${guildId}/roles/members/${userId}/${roleId}`, {
       method: "DELETE",
+    }),
+  createRole: (guildId: string, body: RoleInput): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  editRole: (guildId: string, roleId: string, body: Partial<RoleInput>): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/${roleId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteRole: (guildId: string, roleId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/${roleId}`, { method: "DELETE" }),
+  reorderRoles: (guildId: string, order: string[]): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/order`, {
+      method: "PUT",
+      body: JSON.stringify({ order }),
     }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),

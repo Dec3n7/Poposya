@@ -245,6 +245,102 @@ class DiscordCommandExecutor:
             raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
         return f"Снял роль «{role.name}»."
 
+    # --- роли: CRUD и порядок ---
+
+    @staticmethod
+    def _role_name(raw: object) -> str:
+        name = str(raw or "").strip()
+        if not name:
+            raise CommandError("Имя роли не может быть пустым.")
+        if len(name) > 100:
+            raise CommandError("Имя роли длиннее 100 символов.")
+        return name
+
+    @staticmethod
+    def _role_colour(raw: object) -> discord.Colour:
+        # пусто/None/0 -> «без цвета» (default). Иначе int 0..0xFFFFFF.
+        if raw is None or raw == "":
+            return discord.Colour.default()
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise CommandError("Цвет должен быть числом.") from exc
+        if not 0 <= value <= 0xFFFFFF:
+            raise CommandError("Цвет вне диапазона.")
+        return discord.Colour(value)
+
+    async def _role_create(self, guild: discord.Guild, command: Command) -> str:
+        # права роли НЕ трогаем (этап 2) — новая роль родится без прав, у самого
+        # низа иерархии (position 1), значит заведомо ниже бота и редактируема.
+        p = command.payload
+        try:
+            role = await guild.create_role(
+                name=self._role_name(p.get("name")),
+                colour=self._role_colour(p.get("color")),
+                hoist=bool(p.get("hoist")),
+                mentionable=bool(p.get("mentionable")),
+                reason="Панель: создание роли",
+            )
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles.") from exc
+        return f"Создал роль «{role.name}»."
+
+    async def _role_edit(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        # только присланные поля; permissions намеренно недоступны (этап 2)
+        kwargs: dict = {}
+        if "name" in p:
+            kwargs["name"] = self._role_name(p["name"])
+        if "color" in p:
+            kwargs["colour"] = self._role_colour(p["color"])
+        if "hoist" in p:
+            kwargs["hoist"] = bool(p["hoist"])
+        if "mentionable" in p:
+            kwargs["mentionable"] = bool(p["mentionable"])
+        if not kwargs:
+            return "Нечего менять."
+        try:
+            await role.edit(reason="Панель: изменение роли", **kwargs)
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+        return f"Обновил роль «{role.name}»."
+
+    async def _role_delete(self, guild: discord.Guild, command: Command) -> str:
+        role = self._manageable_role(guild, int(command.payload["role_id"]))
+        name = role.name
+        try:
+            await role.delete(reason="Панель: удаление роли")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+        return f"Удалил роль «{name}»."
+
+    async def _role_reorder(self, guild: discord.Guild, command: Command) -> str:
+        """Переставить редактируемые роли. order — id сверху вниз (первая выше
+        всех). Двигаем только роли ниже бота, перераспределяя между ними их же
+        позиции — заблокированных зон (@everyone, managed, выше бота) не касаемся."""
+        order = command.payload.get("order") or []
+        roles = [self._manageable_role(guild, int(rid)) for rid in order]
+        editable_now = {
+            r
+            for r in guild.roles
+            if not r.is_default() and not r.managed and r < guild.me.top_role
+        }
+        # список должен совпасть с текущим набором редактируемых ролей один-в-один,
+        # иначе панель устарела и перестановка сломала бы иерархию
+        if set(roles) != editable_now:
+            raise CommandError("Список ролей устарел — обнови страницу.")
+        if len(roles) < 2:
+            return "Нечего переставлять."
+        slots = sorted(r.position for r in roles)  # позиции, что эти роли и занимают
+        # верх списка (roles[0]) — самый высокий слот; идём с конца к началу
+        positions = dict(zip(reversed(roles), slots, strict=True))
+        try:
+            await guild.edit_role_positions(positions=positions, reason="Панель: порядок ролей")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles.") from exc
+        return "Порядок ролей обновлён."
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -258,4 +354,8 @@ _HANDLERS = {
     "profile.apply": DiscordCommandExecutor._profile_apply,
     "role.assign": DiscordCommandExecutor._role_assign,
     "role.unassign": DiscordCommandExecutor._role_unassign,
+    "role.create": DiscordCommandExecutor._role_create,
+    "role.edit": DiscordCommandExecutor._role_edit,
+    "role.delete": DiscordCommandExecutor._role_delete,
+    "role.reorder": DiscordCommandExecutor._role_reorder,
 }

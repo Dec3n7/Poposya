@@ -24,6 +24,25 @@ class AssignBody(BaseModel):
     role_id: str
 
 
+class CreateRoleBody(BaseModel):
+    name: str
+    color: int | None = None  # None/0 = без цвета
+    hoist: bool = False
+    mentionable: bool = False
+
+
+class EditRoleBody(BaseModel):
+    # только присланные поля уедут в команду (exclude_unset). Права — этап 2.
+    name: str | None = None
+    color: int | None = None
+    hoist: bool | None = None
+    mentionable: bool | None = None
+
+
+class ReorderBody(BaseModel):
+    order: list[str]  # id ролей сверху вниз (первая — выше всех)
+
+
 def _editable(role: GuildRole, guild_id: int, bot_top: int | None) -> bool:
     if bot_top is None or role.managed or role.role_id == guild_id:
         return False
@@ -60,6 +79,79 @@ async def list_roles(
         "synced_at": meta.synced_at.isoformat() if meta is not None else None,
         "roles": [_role_json(r, guild_id, bot_top, counts.get(r.role_id, 0)) for r in ordered],
     }
+
+
+@router.post("")
+async def create_role(
+    body: CreateRoleBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    payload = {
+        "name": body.name,
+        "color": body.color,
+        "hoist": body.hoist,
+        "mentionable": body.mentionable,
+    }
+    cmd = await run_command(container, guild_id, "role.create", payload, session.user_id)
+    await record_audit(
+        container, guild_id, session.user_id, "role.create",
+        details={"name": body.name}, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.put("/order")
+async def reorder_roles(
+    body: ReorderBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    cmd = await run_command(
+        container, guild_id, "role.reorder", {"order": body.order}, session.user_id
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "role.reorder",
+        details={"count": len(body.order)}, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.patch("/{role_id}")
+async def edit_role(
+    role_id: int,
+    body: EditRoleBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    payload: dict = {"role_id": str(role_id)}
+    payload.update(body.model_dump(exclude_unset=True))  # только реально присланные поля
+    cmd = await run_command(container, guild_id, "role.edit", payload, session.user_id)
+    await record_audit(
+        container, guild_id, session.user_id, "role.edit",
+        target=role_id, details=body.model_dump(exclude_unset=True), result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.delete("/{role_id}")
+async def delete_role(
+    role_id: int,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    cmd = await run_command(
+        container, guild_id, "role.delete", {"role_id": str(role_id)}, session.user_id
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "role.delete",
+        target=role_id, result=cmd.get("status"),
+    )
+    return cmd
 
 
 @router.get("/members/{user_id}")
