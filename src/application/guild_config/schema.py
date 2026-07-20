@@ -146,6 +146,19 @@ class GuildSettings(BaseModel):
     cinema_enabled: bool = True
     finds_enabled: bool = True
 
+    # --- тумблеры модуля «Модерация» (мастер гасит все админ-команды;
+    # авторазбан работает всегда, чтобы tempban'ы снимались) ---
+    moderation_enabled: bool = True
+    moderation_antispam: bool = True
+    # --- тумблеры модуля «AI-чат» (ai_passive_enabled выше — подфлаг «пассив») ---
+    ai_chat_enabled: bool = True
+    ai_reactive: bool = True
+    ai_event_comments: bool = True
+    # --- тумблеры модуля «Отношения и роли» (очки копятся в activity/ai; здесь —
+    # команды и физическая выдача Discord-ролей) ---
+    relationship_enabled: bool = True
+    relationship_role_sync: bool = True
+
     # --- музыка ---
     music_karaoke_ansi: bool = False
 

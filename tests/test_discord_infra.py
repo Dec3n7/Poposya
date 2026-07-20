@@ -200,6 +200,39 @@ async def test_sync_member_gives_up_if_fetch_fails():
     await svc.sync_member(guild, 1, role_index=0)  # не должно пробросить
 
 
+def _role_flags_provider(*, enabled=True, role_sync=True, names=("A", "B")):
+    """Заглушка провайдера настроек: resolved(guild_id) с флагами отношений."""
+    return SimpleNamespace(
+        resolved=lambda gid: SimpleNamespace(
+            relationship_role_names=list(names),
+            relationship_enabled=enabled,
+            relationship_role_sync=role_sync,
+        )
+    )
+
+
+async def test_sync_member_skipped_when_role_sync_off():
+    """Подфлаг «Выдача ролей» выключен — роли не трогаем (очки всё равно копятся)."""
+    member = MagicMock()
+    member.roles = []
+    member.add_roles = AsyncMock()
+    member.remove_roles = AsyncMock()
+    guild = make_guild(members={1: member})
+    guild.roles = []
+    svc = RoleSyncService(MagicMock(), ["A", "B"], _role_flags_provider(role_sync=False))
+    await svc.sync_member(guild, 1, role_index=0)
+    member.add_roles.assert_not_awaited()
+    member.remove_roles.assert_not_awaited()
+
+
+async def test_ensure_roles_skipped_when_module_off():
+    """Мастер «Отношения» выключен — роли-статусы не создаём."""
+    guild = make_guild(role_names=[])
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(enabled=False))
+    await svc.ensure_roles(guild)
+    guild.create_role.assert_not_awaited()
+
+
 # --- Health web handler -----------------------------------------------------
 
 

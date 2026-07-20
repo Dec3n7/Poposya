@@ -5,8 +5,10 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.application.relationship.di import RelationshipContainer
+from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
+from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
 
 logger = logging.getLogger(__name__)
@@ -21,14 +23,24 @@ class RelationshipCog(commands.Cog):
         container: RelationshipContainer,
         role_sync: RoleSyncService,
         event_bus: IEventBus,
+        settings: Settings | None = None,
         guild_settings=None,
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
+        self.settings = settings
         self.gs = guild_settings
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
         event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Команды /rank, /leaderboard и админ-группа /relationship гаснут разом,
+        если модуль выключен на сервере. Выдача Discord-ролей гейтится отдельным
+        подфлагом relationship_role_sync внутри RoleSyncService."""
+        return await block_if_module_off(
+            interaction, self.settings, self.gs, "relationship_enabled"
+        )
 
     def _names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""

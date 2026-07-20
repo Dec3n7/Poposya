@@ -13,6 +13,7 @@ from src.config import Settings
 from src.domain.ai_chat.exceptions import AIProviderError
 from src.domain.events.bus import IEventBus
 from src.domain.music.events import TrackStarted
+from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.discord.scheduler import DeferredScheduler
 
@@ -56,6 +57,13 @@ class AIChatCog(commands.Cog):
         """Пер-серверное значение AI-настройки (override /config или глобальный дефолт)."""
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _feature(self, guild_id: int, sub: str | None = None) -> bool:
+        """Модуль «AI-чат» (мастер) и подфункция (вкладка «Модули»). Флаг,
+        отсутствующий в настройках (тест-заглушки), считаем включённым."""
+        if not flag_on(self.settings, self.gs, guild_id, "ai_chat_enabled"):
+            return False
+        return flag_on(self.settings, self.gs, guild_id, sub) if sub is not None else True
 
     def cog_unload(self) -> None:
         if self._sweep_task is not None:
@@ -103,10 +111,15 @@ class AIChatCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
             return
+        if not self._feature(message.guild.id):
+            return  # модуль AI-чата выключен на сервере — молчим совсем
         if not self._is_addressed_to_bot(message):
             # не к боту — возможно, повод пассивно вклиниться в разговор
+            # (пассив дополнительно гейтится подфлагом ai_passive_enabled внутри)
             self._consider_passive(message)
             return
+        if not self._feature(message.guild.id, "ai_reactive"):
+            return  # ответы на обращения выключены (пассив может работать отдельно)
 
         # оскорбление в адрес бота бьёт по настроению
         lowered = message.content.lower()
@@ -267,6 +280,8 @@ class AIChatCog(commands.Cog):
     async def _on_track_started(self, event: TrackStarted) -> None:
         if event.channel_id == 0:
             return
+        if not self._feature(event.guild_id, "ai_event_comments"):
+            return  # комментарии к трекам выключены на сервере
         # анкета: «не беспокоить» — молчим, «хочу внимания» — шанс удвоен
         rank = await self.service.get_rank(event.requested_by, event.guild_id)
         if rank.survey.contact == "quiet":

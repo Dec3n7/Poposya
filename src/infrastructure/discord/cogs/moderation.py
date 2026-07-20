@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from src.application.moderation.di import ModerationContainer
 from src.config import Settings
+from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +36,28 @@ class ModerationCog(commands.Cog):
         self.container = container
         self.settings = settings
         self.gs = guild_settings
-
-    def _cfg(self, guild_id: int, key: str):
-        """Значение настройки сервера или глобальный дефолт из .env."""
-        default = getattr(self.settings, key)
-        return self.gs.get(guild_id, key, default) if self.gs is not None else default
         # (guild_id, user_id) -> отметки времени последних сообщений
         self._spam_tracker: dict[tuple[int, int], deque[float]] = defaultdict(deque)
         # (guild_id, user_id) -> monotonic-время первого предупреждения за спам
         self._spam_warned: dict[tuple[int, int], float] = {}
         self._unban_task: asyncio.Task | None = None
+
+    def _cfg(self, guild_id: int, key: str):
+        """Значение настройки сервера или глобальный дефолт из .env."""
+        default = getattr(self.settings, key)
+        return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _feature(self, guild_id: int, sub: str | None = None) -> bool:
+        """Модуль «Модерация» (мастер) и подфункция (вкладка «Модули»). Флаг,
+        отсутствующий в настройках (тест-заглушки), считаем включённым."""
+        if not flag_on(self.settings, self.gs, guild_id, "moderation_enabled"):
+            return False
+        return flag_on(self.settings, self.gs, guild_id, sub) if sub is not None else True
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Все админ-команды кога гаснут разом, если модуль выключен на сервере.
+        Авторазбан (цикл) при этом продолжает работать — см. _unban_loop."""
+        return await block_if_module_off(interaction, self.settings, self.gs, "moderation_enabled")
 
     async def cog_load(self) -> None:
         # восстановление наказаний: цикл авторазбана читает сроки из БД,
@@ -124,6 +137,8 @@ class ModerationCog(commands.Cog):
             return
 
         gid = message.guild.id
+        if not self._feature(gid, "moderation_antispam"):
+            return
         spam_window = self._cfg(gid, "spam_window")
         spam_limit = self._cfg(gid, "spam_limit")
         spam_mute = self._cfg(gid, "spam_mute_minutes")

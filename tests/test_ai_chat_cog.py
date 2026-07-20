@@ -197,6 +197,22 @@ async def test_on_message_provider_error_sends_fallback():
     msg.reply.assert_awaited_once()  # отправлен один из _ERROR_REPLIES
 
 
+async def test_on_message_silent_when_module_off():
+    """Мастер модуля выключен — на обращение к боту не отвечаем вовсе."""
+    cog = make_cog(settings=make_settings(ai_chat_enabled=False))
+    msg = make_message()
+    await cog.on_message(msg)
+    cog.service.respond.assert_not_awaited()
+
+
+async def test_on_message_silent_when_reactive_off():
+    """Подфлаг «ответы на обращения» выключен — молчим на упоминание."""
+    cog = make_cog(settings=make_settings(ai_reactive=False))
+    msg = make_message()
+    await cog.on_message(msg)
+    cog.service.respond.assert_not_awaited()
+
+
 # --- _on_track_started ------------------------------------------------------
 
 
@@ -225,6 +241,16 @@ async def test_track_comment_zero_channel_skipped():
     cog = make_cog()
     event = TrackStarted(
         aggregate_id="10", guild_id=10, channel_id=0, title="Song", url="u", requested_by=1
+    )
+    await cog._on_track_started(event)
+    cog.service.comment_on_event.assert_not_awaited()
+
+
+async def test_track_comment_skipped_when_disabled():
+    """Подфлаг «комментарии к трекам» выключен — реплику не генерируем."""
+    cog = make_cog(settings=make_settings(ai_event_comments=False))
+    event = TrackStarted(
+        aggregate_id="10", guild_id=10, channel_id=100, title="Song", url="u", requested_by=1
     )
     await cog._on_track_started(event)
     cog.service.comment_on_event.assert_not_awaited()

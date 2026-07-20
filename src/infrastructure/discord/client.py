@@ -78,7 +78,12 @@ class PoposyaBot(commands.Bot):
         )
         await self.add_cog(
             RelationshipCog(
-                self, self.container.relationship, role_sync, self.container.event_bus, gs
+                self,
+                self.container.relationship,
+                role_sync,
+                self.container.event_bus,
+                self.container.settings,
+                gs,
             )
         )
         await self.add_cog(FindsCog(self, self.container.finds, self.container.settings, mood, gs))

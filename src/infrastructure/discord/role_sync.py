@@ -20,7 +20,22 @@ class RoleSyncService:
             return self._settings.resolved(guild_id).relationship_role_names
         return self._role_names
 
+    def _sync_enabled(self, guild_id: int) -> bool:
+        """Физическая выдача Discord-ролей включена на сервере: модуль «Отношения»
+        (мастер) И подфлаг «Выдача ролей». Гейт здесь — единая точка для всех, кто
+        дёргает роли (relationship, ai_chat, activity). Без провайдера настроек
+        (тест-заглушки) — считаем включённым."""
+        if self._settings is None:
+            return True
+        resolved = self._settings.resolved(guild_id)
+        return bool(
+            getattr(resolved, "relationship_enabled", True)
+            and getattr(resolved, "relationship_role_sync", True)
+        )
+
     async def ensure_roles(self, guild: discord.Guild) -> None:
+        if not self._sync_enabled(guild.id):
+            return
         existing = {role.name for role in guild.roles}
         for name in self._names_for(guild.id):
             if name in existing:
@@ -40,6 +55,8 @@ class RoleSyncService:
     async def sync_member(self, guild: discord.Guild, user_id: int, role_index: int | None) -> None:
         """Приводит роли-статусы участника к вычисленному состоянию:
         ровно одна нужная роль, остальные из набора снимаются."""
+        if not self._sync_enabled(guild.id):
+            return
         member = guild.get_member(user_id)
         if member is None:
             try:

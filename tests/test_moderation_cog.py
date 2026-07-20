@@ -366,3 +366,57 @@ async def test_timeout_returns_false_on_forbidden():
     member = make_member()
     member.timeout = AsyncMock(side_effect=forbidden())
     assert await cog._timeout(member, 10, "reason") is False
+
+
+# --- антиспам (on_message) --------------------------------------------------
+
+
+def make_spam_message(channel, uid=7, guild_id=10):
+    """Сообщение от обычного участника (не админ, не бот) в общем канале."""
+    msg = MagicMock()
+    author = MagicMock()
+    author.bot = False
+    author.id = uid
+    author.mention = f"<@{uid}>"
+    author.guild_permissions.administrator = False
+    author.guild_permissions.manage_messages = False
+    msg.author = author
+    msg.guild = MagicMock()
+    msg.guild.id = guild_id
+    msg.channel = channel
+    return msg
+
+
+async def test_antispam_warns_on_flood():
+    """Первый флуд сверх лимита — предупреждение в канал (регресс: раньше падало
+    AttributeError, т.к. _spam_tracker не инициализировался в __init__)."""
+    cog = make_cog(settings=make_settings(spam_limit=3, spam_window=100))
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    for _ in range(3):
+        await cog.on_message(make_spam_message(channel))
+    channel.send.assert_awaited_once()  # «это предупреждение»
+
+
+async def test_antispam_disabled_by_flag():
+    """Подфлаг moderation_antispam выключен — на флуд не реагируем."""
+    cog = make_cog(
+        settings=make_settings(spam_limit=3, spam_window=100, moderation_antispam=False)
+    )
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    for _ in range(5):
+        await cog.on_message(make_spam_message(channel))
+    channel.send.assert_not_awaited()
+
+
+async def test_antispam_ignores_admins():
+    """Админ/модератор под антиспам не попадает."""
+    cog = make_cog(settings=make_settings(spam_limit=2, spam_window=100))
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    for _ in range(4):
+        msg = make_spam_message(channel)
+        msg.author.guild_permissions.administrator = True
+        await cog.on_message(msg)
+    channel.send.assert_not_awaited()
