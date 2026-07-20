@@ -130,13 +130,13 @@ export function GuildView({
   return (
     <div className="shell">
       <aside className="rail">
-        <div className="rail-brand">
+        <button className="rail-brand" onClick={() => setTab("overview")} title="На обзор">
           <span className="rail-mark">🖤</span>
           <div>
             <div className="rail-name">Попося</div>
             <div className="rail-sub">панель сервера</div>
           </div>
-        </div>
+        </button>
 
         <div className="rail-label">Меню</div>
         <nav className="rail-nav">
