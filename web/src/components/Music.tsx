@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Guild, PlaylistDetail, PlaylistItem } from "../types";
+import { NowPlaying } from "./NowPlaying";
 
 function fmtDuration(sec: number | null): string {
   if (sec == null) return "—";
@@ -10,10 +11,19 @@ function fmtDuration(sec: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function PlaylistRow({ guildId, pl }: { guildId: string; pl: PlaylistItem }) {
+function PlaylistRow({
+  guildId,
+  pl,
+  onDeleted,
+}: {
+  guildId: string;
+  pl: PlaylistItem;
+  onDeleted: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<PlaylistDetail | null>(null);
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
   function toggle() {
     const next = !open;
@@ -26,16 +36,37 @@ function PlaylistRow({ guildId, pl }: { guildId: string; pl: PlaylistItem }) {
     }
   }
 
+  async function del() {
+    if (!window.confirm(`Удалить плейлист «${pl.name}»? Это необратимо.`)) return;
+    setBusy(true);
+    try {
+      await api.deletePlaylist(guildId, pl.name);
+      onDeleted();
+    } catch {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="pl-row">
-      <button className="pl-head" onClick={toggle} aria-expanded={open}>
-        <span className={`pl-caret${open ? " open" : ""}`}>▸</span>
-        <span className="pl-name">{pl.name}</span>
-        <span className="pl-meta faint">
-          {pl.track_count} трек(ов)
-          {pl.author_name && ` · ${pl.author_name}`}
-        </span>
-      </button>
+      <div className="pl-row-head">
+        <button className="pl-head" onClick={toggle} aria-expanded={open}>
+          <span className={`pl-caret${open ? " open" : ""}`}>▸</span>
+          <span className="pl-name">{pl.name}</span>
+          <span className="pl-meta faint">
+            {pl.track_count} трек(ов)
+            {pl.author_name && ` · ${pl.author_name}`}
+          </span>
+        </button>
+        <button
+          className="btn ghost small pl-del"
+          onClick={del}
+          disabled={busy}
+          title="Удалить плейлист"
+        >
+          🗑
+        </button>
+      </div>
       {open && (
         <div className="pl-tracks">
           {err ? (
@@ -114,9 +145,7 @@ export function Music({ guild }: { guild: Guild }) {
   const [list, setList] = useState<PlaylistItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setList(null);
-    setError(null);
+  function load() {
     api
       .playlists(guild.id)
       .then(setList)
@@ -124,6 +153,13 @@ export function Music({ guild }: { guild: Guild }) {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить плейлисты");
       });
+  }
+
+  useEffect(() => {
+    setList(null);
+    setError(null);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
 
   if (error) return <div className="error-banner">{error}</div>;
@@ -136,6 +172,9 @@ export function Music({ guild }: { guild: Guild }) {
 
   return (
     <div>
+      <h2 className="section-title">Сейчас играет</h2>
+      <NowPlaying guild={guild} />
+
       <h2 className="section-title">Управление плеером</h2>
       <PlayerControls guildId={guild.id} />
 
@@ -148,7 +187,9 @@ export function Music({ guild }: { guild: Guild }) {
         {list.length === 0 ? (
           <div className="pad muted">На сервере пока нет плейлистов.</div>
         ) : (
-          list.map((pl) => <PlaylistRow key={pl.name} guildId={guild.id} pl={pl} />)
+          list.map((pl) => (
+            <PlaylistRow key={pl.name} guildId={guild.id} pl={pl} onDeleted={load} />
+          ))
         )}
       </div>
     </div>

@@ -43,6 +43,15 @@ class IVoiceProgressRepository(ABC):
     async def total_minutes(self, guild_id: int, user_id: int) -> float:
         """Суммарное время в войсе за всю историю."""
 
+    @abstractmethod
+    async def guild_total_minutes(self, guild_id: int) -> float:
+        """Суммарные войс-минуты по всем участникам сервера — для снапшота."""
+
+    @abstractmethod
+    async def top_by_minutes(self, guild_id: int, limit: int) -> list[tuple[int, float]]:
+        """Топ по времени в войсе: (user_id, всего минут), убывание. Нулевые
+        не включаются — для лидерборда активности на панели."""
+
 
 class IAlbumRepository(ABC):
     """Дедупликация «Альбома Попоси»: сообщение публикуется один раз."""

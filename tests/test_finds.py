@@ -61,6 +61,10 @@ class FakeRelationships(IRelationshipRepository):
     async def top_by_points(self, guild_id, limit):
         return []
 
+    async def points_summary(self, guild_id):
+        pts = [p.points for p in self.profiles.values() if p.guild_id == guild_id]
+        return sum(pts), sum(1 for v in pts if v > 0)
+
     async def all_for_guild(self, guild_id):
         return [p for p in self.profiles.values() if p.guild_id == guild_id]
 
@@ -164,6 +168,9 @@ class FakeCollections(ICollectionRepository):
             counts[i.user_id] = (tot + 1, gif + (1 if i.gifted_at is not None else 0))
         ranked = sorted(counts.items(), key=lambda kv: kv[1][0], reverse=True)
         return [(uid, tot, gif) for uid, (tot, gif) in ranked[:limit]]
+
+    async def count_for_guild(self, guild_id):
+        return sum(1 for i in self.items if i.guild_id == guild_id)
 
 
 class FakeAttempts(IFindAttemptRepository):

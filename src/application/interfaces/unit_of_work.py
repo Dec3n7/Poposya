@@ -6,6 +6,8 @@ from src.domain.activity.repository import (
     IReminderRepository,
     IVoiceProgressRepository,
 )
+from src.domain.audit.repository import IAuditRepository
+from src.domain.botprofile.repository import IBotProfileRepository
 from src.domain.cinema.repository import (
     IMovieEntryRepository,
     IMovieNightRepository,
@@ -17,8 +19,11 @@ from src.domain.finds.repository import (
     IFindAttemptRepository,
     INightFindRepository,
 )
+from src.domain.message_activity.repository import IMessageActivityRepository
+from src.domain.metrics.repository import IMetricsRepository
 from src.domain.moderation.repository import ITempBanRepository, IWarnRepository
 from src.domain.music.repository import ILikedTrackRepository, IPlaylistRepository
+from src.domain.player.repository import IPlayerStateRepository
 from src.domain.relationship.repository import (
     IDialogSummaryRepository,
     IRelationshipRepository,
@@ -53,6 +58,11 @@ class IUnitOfWork(ABC):
     movie_ratings: IMovieRatingRepository
     pending_kicks: IPendingKickRepository
     temp_voice: ITempVoiceRepository
+    metrics: IMetricsRepository
+    message_activity: IMessageActivityRepository
+    audit: IAuditRepository
+    player_state: IPlayerStateRepository
+    bot_profile: IBotProfileRepository
 
     @abstractmethod
     async def __aenter__(self) -> "IUnitOfWork": ...

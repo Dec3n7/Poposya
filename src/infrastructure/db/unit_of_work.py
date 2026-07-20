@@ -12,6 +12,8 @@ from src.infrastructure.db.repositories.activity import (
     SqlAlchemyReminderRepository,
     SqlAlchemyVoiceProgressRepository,
 )
+from src.infrastructure.db.repositories.audit import SqlAlchemyAuditRepository
+from src.infrastructure.db.repositories.botprofile import SqlAlchemyBotProfileRepository
 from src.infrastructure.db.repositories.cinema import (
     SqlAlchemyMovieEntryRepository,
     SqlAlchemyMovieNightRepository,
@@ -22,6 +24,10 @@ from src.infrastructure.db.repositories.finds import (
     SqlAlchemyFindAttemptRepository,
     SqlAlchemyNightFindRepository,
 )
+from src.infrastructure.db.repositories.message_activity import (
+    SqlAlchemyMessageActivityRepository,
+)
+from src.infrastructure.db.repositories.metrics import SqlAlchemyMetricsRepository
 from src.infrastructure.db.repositories.moderation import (
     SqlAlchemyTempBanRepository,
     SqlAlchemyWarnRepository,
@@ -30,6 +36,7 @@ from src.infrastructure.db.repositories.music import (
     SqlAlchemyLikedTrackRepository,
     SqlAlchemyPlaylistRepository,
 )
+from src.infrastructure.db.repositories.player import SqlAlchemyPlayerStateRepository
 from src.infrastructure.db.repositories.relationship import (
     SqlAlchemyDialogSummaryRepository,
     SqlAlchemyRelationshipRepository,
@@ -78,6 +85,11 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.movie_ratings = SqlAlchemyMovieRatingRepository(self._session)
         self.pending_kicks = SqlAlchemyPendingKickRepository(self._session)
         self.temp_voice = SqlAlchemyTempVoiceRepository(self._session)
+        self.metrics = SqlAlchemyMetricsRepository(self._session)
+        self.message_activity = SqlAlchemyMessageActivityRepository(self._session)
+        self.audit = SqlAlchemyAuditRepository(self._session)
+        self.player_state = SqlAlchemyPlayerStateRepository(self._session)
+        self.bot_profile = SqlAlchemyBotProfileRepository(self._session)
         self._events = []
         self._committed = False
         return self

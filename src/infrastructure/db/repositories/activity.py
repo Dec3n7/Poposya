@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,6 +102,25 @@ class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):
     async def total_minutes(self, guild_id: int, user_id: int) -> float:
         row = await self._session.get(VoiceProgressModel, (guild_id, user_id))
         return row.total_minutes if row is not None else 0.0
+
+    async def guild_total_minutes(self, guild_id: int) -> float:
+        stmt = select(func.coalesce(func.sum(VoiceProgressModel.total_minutes), 0.0)).where(
+            VoiceProgressModel.guild_id == guild_id
+        )
+        return float((await self._session.execute(stmt)).scalar_one())
+
+    async def top_by_minutes(self, guild_id: int, limit: int) -> list[tuple[int, float]]:
+        stmt = (
+            select(VoiceProgressModel.user_id, VoiceProgressModel.total_minutes)
+            .where(
+                VoiceProgressModel.guild_id == guild_id,
+                VoiceProgressModel.total_minutes > 0,
+            )
+            .order_by(VoiceProgressModel.total_minutes.desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(uid, float(minutes)) for uid, minutes in rows]
 
 
 class SqlAlchemyReminderRepository(IReminderRepository):

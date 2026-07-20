@@ -12,6 +12,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
+from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.scheduler import DeferredScheduler
 
 from .formatting import (
@@ -76,6 +77,9 @@ class CinemaCog(commands.Cog):
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await block_if_module_off(interaction, self.settings, self.gs, "cinema_enabled")
 
     async def cog_load(self) -> None:
         self.bot.add_view(CinemaCardView(self))

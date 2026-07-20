@@ -11,21 +11,38 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.api.bot_guilds import BotGuildsCache
-from src.application.cinema.use_cases import ListWatchlistUseCase, TopWatchedUseCase
+from src.application.activity.use_cases import VoiceLeaderboardUseCase
+from src.application.audit.use_cases import AppendAuditUseCase, ListAuditUseCase
+from src.application.botprofile.use_cases import GetBotProfileUseCase, SetBotProfileUseCase
+from src.application.cinema.use_cases import (
+    GetMovieRatingsUseCase,
+    ListWatchlistUseCase,
+    RemoveMovieUseCase,
+    TopWatchedUseCase,
+)
 from src.application.finds.use_cases import GetActiveFindUseCase, TopCollectorsUseCase
 from src.application.interfaces.unit_of_work import IUnitOfWork
+from src.application.message_activity.use_cases import GetActivityStatsUseCase
+from src.application.metrics.use_cases import GetTrendsUseCase
 from src.application.moderation.use_cases import (
     ClearWarnsUseCase,
     GetWarnsUseCase,
+    ListGuildWarnsUseCase,
     ListTempBansUseCase,
 )
-from src.application.music.use_cases import ListPlaylistsUseCase, LoadPlaylistUseCase
+from src.application.music.use_cases import (
+    DeletePlaylistUseCase,
+    ListPlaylistsUseCase,
+    LoadPlaylistUseCase,
+)
+from src.application.player.use_cases import GetPlayerStateUseCase
 from src.application.relationship.use_cases import (
     GetLeaderboardUseCase,
     GetRankUseCase,
     ListProfilesUseCase,
     SetPointsUseCase,
     ToggleFreezeUseCase,
+    UpcomingBirthdaysUseCase,
 )
 from src.config import Settings
 from src.domain.relationship.policies import PointsToLevelPolicy
@@ -48,8 +65,15 @@ class ApiContainer:
     leaderboard: GetLeaderboardUseCase
     list_watchlist: ListWatchlistUseCase
     top_watched: TopWatchedUseCase
+    movie_ratings: GetMovieRatingsUseCase
+    remove_movie: RemoveMovieUseCase
     list_playlists: ListPlaylistsUseCase
     load_playlist: LoadPlaylistUseCase
+    delete_playlist: DeletePlaylistUseCase
+    now_playing: GetPlayerStateUseCase
+    # витрины «Обзора»: топ по войсу + ближайшие ДР
+    voice_leaderboard: VoiceLeaderboardUseCase
+    upcoming_birthdays: UpcomingBirthdaysUseCase
     # люди/отношения: карточка человека + admin-действия
     get_rank: GetRankUseCase
     set_points: SetPointsUseCase
@@ -57,11 +81,22 @@ class ApiContainer:
     list_profiles: ListProfilesUseCase
     # модерация (только чтение + безопасный сброс варнов — без Discord-побочки)
     get_warns: GetWarnsUseCase
+    guild_warns: ListGuildWarnsUseCase
     clear_warns: ClearWarnsUseCase
     list_bans: ListTempBansUseCase
     # находки: активная находка + топ коллекционеров сервера
     active_find: GetActiveFindUseCase
     top_collectors: TopCollectorsUseCase
+    # тренды дашборда: серии суточных снапшотов метрик
+    get_trends: GetTrendsUseCase
+    # активность сервера: сообщения/день + хитмап день-недели×час
+    activity_stats: GetActivityStatsUseCase
+    # журнал действий панели
+    append_audit: AppendAuditUseCase
+    list_audit: ListAuditUseCase
+    # пер-серверный профиль бота (ник/аватар/баннер)
+    get_bot_profile: GetBotProfileUseCase
+    set_bot_profile: SetBotProfileUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -104,16 +139,29 @@ def assemble_container(
         leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=guild_settings),
         list_watchlist=ListWatchlistUseCase(uow_factory),
         top_watched=TopWatchedUseCase(uow_factory),
+        movie_ratings=GetMovieRatingsUseCase(uow_factory),
+        remove_movie=RemoveMovieUseCase(uow_factory),
         list_playlists=ListPlaylistsUseCase(uow_factory),
         load_playlist=LoadPlaylistUseCase(uow_factory),
+        delete_playlist=DeletePlaylistUseCase(uow_factory),
+        now_playing=GetPlayerStateUseCase(uow_factory),
+        voice_leaderboard=VoiceLeaderboardUseCase(uow_factory),
+        upcoming_birthdays=UpcomingBirthdaysUseCase(uow_factory),
         get_rank=GetRankUseCase(uow_factory, policy, settings_provider=guild_settings),
         set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),
         list_profiles=ListProfilesUseCase(uow_factory, policy, settings_provider=guild_settings),
         get_warns=GetWarnsUseCase(uow_factory),
+        guild_warns=ListGuildWarnsUseCase(uow_factory),
         clear_warns=ClearWarnsUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),
         active_find=GetActiveFindUseCase(uow_factory),
         top_collectors=TopCollectorsUseCase(uow_factory),
+        get_trends=GetTrendsUseCase(uow_factory),
+        activity_stats=GetActivityStatsUseCase(uow_factory),
+        append_audit=AppendAuditUseCase(uow_factory),
+        list_audit=ListAuditUseCase(uow_factory),
+        get_bot_profile=GetBotProfileUseCase(uow_factory),
+        set_bot_profile=SetBotProfileUseCase(uow_factory),
         settings_listener=settings_listener,
     )

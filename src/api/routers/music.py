@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
@@ -66,6 +67,61 @@ async def playlist_tracks(
     }
 
 
+@router.delete("/playlists/{name}")
+async def delete_playlist(
+    name: str,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Удалить плейлист сервера (админ панели). Прямо в БД."""
+    result = await container.delete_playlist.execute(
+        guild_id, name, requester_id=session.user_id, is_admin=True
+    )
+    if result == "not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Плейлист не найден")
+    await record_audit(
+        container, guild_id, session.user_id, "playlist.delete", target=name, result=result
+    )
+    return {"status": result}
+
+
+@router.get("/now")
+async def now_playing(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict | None:
+    """Живое состояние плеера (снапшот от бота) или null, если не играет.
+    Позиция + position_at: фронт сам тикает прогресс между опросами."""
+    state = await container.now_playing.execute(guild_id)
+    if state is None or not state.is_active or state.current is None:
+        return None
+
+    ids = {state.current.requested_by} | {t.requested_by for t in state.queue}
+    users = await fetch_users(container.settings.discord_token, list(ids))
+
+    def track(t) -> dict:
+        return {
+            "title": t.title,
+            "url": t.url,
+            "duration": t.duration,
+            "uploader": t.uploader,
+            "thumbnail": t.thumbnail,
+            "requested_by": str(t.requested_by),
+            "requested_name": users.get(t.requested_by, {}).get("username"),
+        }
+
+    return {
+        "current": track(state.current),
+        "queue": [track(t) for t in state.queue],
+        "position_seconds": state.position_seconds,
+        "position_at": state.position_at.isoformat() if state.position_at else None,
+        "is_paused": state.is_paused,
+        "repeat": state.repeat,
+        "volume": state.volume,
+    }
+
+
 @router.post("/control")
 async def control(
     body: ControlBody,
@@ -75,6 +131,10 @@ async def control(
 ) -> dict:
     """Управление живой сессией плеера через командный мост: pause/resume/
     skip/stop. Запуск нового трека невозможен — для него нужен участник в войсе."""
-    return await run_command(
+    cmd = await run_command(
         container, guild_id, f"music.{body.action}", {}, session.user_id
     )
+    await record_audit(
+        container, guild_id, session.user_id, f"music.{body.action}", result=cmd.get("status")
+    )
+    return cmd

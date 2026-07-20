@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
@@ -66,6 +67,26 @@ async def bans(
     ]
 
 
+@router.get("/warns")
+async def guild_warns(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> list[dict]:
+    """Кто на сервере сейчас с варнами: участник + число + последний варн."""
+    rows = await container.guild_warns.execute(guild_id)
+    users = await fetch_users(container.settings.discord_token, [uid for uid, _, _ in rows])
+    return [
+        {
+            "user_id": str(uid),
+            "username": users.get(uid, {}).get("username"),
+            "avatar": users.get(uid, {}).get("avatar"),
+            "count": count,
+            "last_at": last_at.isoformat(),
+        }
+        for uid, count, last_at in rows
+    ]
+
+
 @router.get("/warns/{user_id}")
 async def warns(
     user_id: int,
@@ -92,10 +113,15 @@ async def warns(
 async def clear_warns(
     user_id: int,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
     """Сброс всех варнов участника. Чистая БД — в Discord ничего не меняется."""
     cleared = await container.clear_warns.execute(user_id, guild_id)
+    await record_audit(
+        container, guild_id, session.user_id, "warns.clear",
+        target=user_id, result=f"снято {cleared}",
+    )
     return {"cleared": cleared}
 
 
@@ -109,13 +135,18 @@ async def ban(
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
-    return await run_command(
+    cmd = await run_command(
         container,
         guild_id,
         "mod.tempban",
         {"user_id": body.user_id, "minutes": body.minutes, "reason": body.reason},
         session.user_id,
     )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.ban", target=body.user_id,
+        details={"minutes": body.minutes, "reason": body.reason}, result=cmd.get("status"),
+    )
+    return cmd
 
 
 @router.post("/unban")
@@ -125,9 +156,14 @@ async def unban(
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
-    return await run_command(
+    cmd = await run_command(
         container, guild_id, "mod.unban", {"user_id": body.user_id}, session.user_id
     )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.unban",
+        target=body.user_id, result=cmd.get("status"),
+    )
+    return cmd
 
 
 @router.post("/mute")
@@ -137,13 +173,18 @@ async def mute(
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
-    return await run_command(
+    cmd = await run_command(
         container,
         guild_id,
         "mod.mute",
         {"user_id": body.user_id, "minutes": body.minutes, "reason": body.reason},
         session.user_id,
     )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.mute", target=body.user_id,
+        details={"minutes": body.minutes, "reason": body.reason}, result=cmd.get("status"),
+    )
+    return cmd
 
 
 @router.post("/unmute")
@@ -153,6 +194,11 @@ async def unmute(
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
-    return await run_command(
+    cmd = await run_command(
         container, guild_id, "mod.unmute", {"user_id": body.user_id}, session.user_id
     )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.unmute",
+        target=body.user_id, result=cmd.get("status"),
+    )
+    return cmd

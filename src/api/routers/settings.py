@@ -7,10 +7,17 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from src.api.dependencies import get_container, require_guild_manager
+from src.api.audit import record_audit
+from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.schemas import BatchUpdate, SettingFieldDTO, SettingUpdate
+from src.api.security import Session
 from src.application.guild_config.schema import SETTING_KEYS
-from src.infrastructure.guild_settings import SETTING_SPECS, GuildSettingsService
+from src.infrastructure.guild_settings import (
+    FEATURE_FLAG_KEYS,
+    FEATURE_MODULES,
+    SETTING_SPECS,
+    GuildSettingsService,
+)
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/settings", tags=["settings"])
 
@@ -49,7 +56,37 @@ async def list_settings(
     container=Depends(get_container),
 ) -> list[SettingFieldDTO]:
     service = container.guild_settings
-    return [_field(service, guild_id, key) for key in SETTING_SPECS]
+    # тумблеры модулей здесь не показываем — у них своя вкладка «Модули»
+    return [_field(service, guild_id, key) for key in SETTING_SPECS if key not in FEATURE_FLAG_KEYS]
+
+
+@router.get("/modules")
+async def list_modules(
+    guild_id: int = Depends(require_guild_manager),
+    container=Depends(get_container),
+) -> list[dict]:
+    """Отключаемые модули и их подфункции (вкладка «Модули»). Значения — из тех же
+    пер-серверных настроек; запись идёт через PUT /settings/{key} по каждому флагу."""
+    s: GuildSettingsService = container.guild_settings
+
+    def flag(key: str) -> dict:
+        return {
+            "key": key,
+            "label": SETTING_SPECS[key].label,
+            "value": bool(s.current(guild_id, key)),
+            "is_override": s.is_override(guild_id, key),
+        }
+
+    return [
+        {
+            "key": m.key,
+            "label": m.label,
+            "description": m.description,
+            "master": flag(m.master),
+            "subs": [flag(k) for k in m.subs],
+        }
+        for m in FEATURE_MODULES
+    ]
 
 
 @router.get("/complex")
@@ -80,6 +117,7 @@ async def complex_settings(
 async def update_batch(
     body: BatchUpdate,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container=Depends(get_container),
 ) -> Response:
     """Несколько настроек разом (роли: пороги+имена; лимиты). Валидируются
@@ -91,6 +129,10 @@ async def update_batch(
         await container.guild_settings.set_many(guild_id, body.values)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    await record_audit(
+        container, guild_id, session.user_id, "settings.batch",
+        details={"keys": list(body.values.keys())},
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -99,6 +141,7 @@ async def update_setting(
     key: str,
     body: SettingUpdate,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container=Depends(get_container),
 ) -> SettingFieldDTO:
     if key not in SETTING_SPECS:
@@ -108,6 +151,10 @@ async def update_setting(
         await service.set(guild_id, key, str(body.value))
     except ValueError as exc:  # невалидное значение или нарушен инвариант
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    await record_audit(
+        container, guild_id, session.user_id, "settings.set",
+        target=key, details={"value": body.value},
+    )
     return _field(service, guild_id, key)
 
 
@@ -115,10 +162,14 @@ async def update_setting(
 async def reset_setting(
     key: str,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container=Depends(get_container),
 ) -> SettingFieldDTO:
     if key not in SETTING_SPECS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "неизвестная настройка")
     service = container.guild_settings
     await service.reset(guild_id, key)  # вернётся глобальный дефолт
+    await record_audit(
+        container, guild_id, session.user_id, "settings.reset", target=key
+    )
     return _field(service, guild_id, key)

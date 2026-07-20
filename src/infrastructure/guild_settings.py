@@ -82,6 +82,17 @@ _LABELS: dict[str, tuple[str, str]] = {
     "voice_points_per_hour": ("Очки за час в войсе (0=выкл)", ""),
     "lonely_hours": ("Часов тишины до «скучаю»", "ч"),
     "absent_days_threshold": ("Дней отсутствия до «с возвращением»", "дн"),
+    # тумблеры модуля «Активность» (вкладка «Модули»)
+    "activity_enabled": ("Активность (весь модуль)", ""),
+    "activity_greetings": ("Приветствия и прощания", ""),
+    "activity_return_remarks": ("Реплики о возвращении", ""),
+    "activity_album": ("Альбом Попоси", ""),
+    "activity_voice_points": ("Очки за войс", ""),
+    "activity_holidays": ("Праздники", ""),
+    "activity_birthdays": ("Дни рождения", ""),
+    "activity_decay": ("Угасание очков", ""),
+    "activity_lonely": ("«Скучаю» в тишине", ""),
+    "activity_random_thoughts": ("Случайные мысли", ""),
     # киноклуб
     "cinema_rating_hours": ("Сбор оценок после просмотра", "ч"),
     "cinema_watchlist_max": ("Предел вотчлиста", ""),
@@ -95,13 +106,23 @@ _LABELS: dict[str, tuple[str, str]] = {
     # музыка
     "music_karaoke_ansi": ("Цветное караоке (ANSI)", ""),
     # «остаться или уйти»
-    "staykick_enabled": ("ЛС новичку «остаться/уйти»", ""),
+    "staykick_enabled": ("Остаться или уйти (весь модуль)", ""),
     "staykick_hours": ("Через сколько часов авто-кик", "ч"),
     # каморки (временные голосовые каналы)
     "tempvoice_hub_channel": ("Канал-хаб «создать каморку» (0=выкл)", ""),
     "tempvoice_category": ("Категория каморок (0 = категория хаба)", ""),
     "tempvoice_max_per_guild": ("Потолок каморок на сервере", ""),
     "tempvoice_default_limit": ("Мест в новой каморке (0=без лимита)", ""),
+    # тумблеры модуля «Каморки» (вкладка «Модули»)
+    "tempvoice_enabled": ("Каморки (весь модуль)", ""),
+    "tempvoice_panel": ("Панель управления каналом", ""),
+    # мастера прочих модулей
+    "fun_enabled": ("Развлечения (весь модуль)", ""),
+    "introduce_enabled": ("Знакомство/анкета (весь модуль)", ""),
+    "secret_room_enabled": ("Тайная комната (весь модуль)", ""),
+    "music_enabled": ("Музыка (весь модуль)", ""),
+    "cinema_enabled": ("Киноклуб (весь модуль)", ""),
+    "finds_enabled": ("Находки (весь модуль)", ""),
 }
 
 
@@ -163,6 +184,132 @@ class SettingSpec:
         return value
 
 
+@dataclass(frozen=True)
+class ModuleSpec:
+    """Модуль на вкладке «Модули»: мастер-флаг + подфункции. Все ключи —
+    обычные bool-настройки GuildSettings; наследование (мастер выкл ⇒ подфункции
+    выкл) применяет хелпер в боте, а не хранилище."""
+
+    key: str  # "activity"
+    label: str  # "Активность"
+    master: str  # ключ мастер-флага
+    subs: tuple[str, ...]  # ключи подфункций
+    description: str = ""  # что входит в модуль (подпись на карточке)
+
+
+# Реестр отключаемых модулей. Новый модуль = добавить сюда + гарды в его коге.
+FEATURE_MODULES: tuple[ModuleSpec, ...] = (
+    ModuleSpec(
+        key="activity",
+        label="Активность",
+        master="activity_enabled",
+        subs=(
+            "activity_greetings",
+            "activity_return_remarks",
+            "activity_album",
+            "activity_voice_points",
+            "activity_holidays",
+            "activity_birthdays",
+            "activity_decay",
+            "activity_lonely",
+            "activity_random_thoughts",
+        ),
+        description=(
+            "Живость бота: приветствия и прощания, реакция на возвращение, «Альбом» "
+            "лучших сообщений, очки за время в войсе, праздники и дни рождения, "
+            "угасание очков за молчание, реплики «скучаю» и случайные мысли."
+        ),
+    ),
+    ModuleSpec(
+        key="tempvoice",
+        label="Каморки (временные войс-каналы)",
+        master="tempvoice_enabled",
+        subs=("tempvoice_panel",),
+        description=(
+            "Свой временный голосовой канал по входу в хаб-канал; удаляется, когда "
+            "пустеет. Подфункция — панель управления каналом (переименование, лимит "
+            "мест, замок, скрытие) для владельца."
+        ),
+    ),
+    ModuleSpec(
+        key="fun",
+        label="Развлечения",
+        master="fun_enabled",
+        subs=(),
+        description=(
+            "Команды: /dice (кубик/дуэль), /coinflip, /topic, /profile, /serverstats, "
+            "/rules, /send (сообщение через бота в ЛС), /remind (напоминание), "
+            "/birthday (указать день рождения)."
+        ),
+    ),
+    ModuleSpec(
+        key="introduce",
+        label="Знакомство и анкета",
+        master="introduce_enabled",
+        subs=(),
+        description=(
+            "Анкета участника (интересы, «о себе», предпочтения по общению) и бонус "
+            "очков за заполнение."
+        ),
+    ),
+    ModuleSpec(
+        key="secret_room",
+        label="Тайная комната",
+        master="secret_room_enabled",
+        subs=(),
+        description=(
+            "По достижении высокого уровня бот в ЛС выдаёт ключ; команда /secret "
+            "открывает скрытые текст+войс каналы «для своих» на несколько часов."
+        ),
+    ),
+    ModuleSpec(
+        key="staykick",
+        label="Остаться или уйти",
+        master="staykick_enabled",
+        subs=(),
+        description=(
+            "Новичку в ЛС приходит выбор «остаться/уйти»; кто не остался за отведённое "
+            "время — автоматически кикается."
+        ),
+    ),
+    ModuleSpec(
+        key="music",
+        label="Музыка",
+        master="music_enabled",
+        subs=(),
+        description=(
+            "Проигрывание в голосовых: /play, очередь, пропуск/перемотка, плейлисты, "
+            "лайки, радио (авто-подбор похожего) и караоке (текст песни)."
+        ),
+    ),
+    ModuleSpec(
+        key="cinema",
+        label="Киноклуб",
+        master="cinema_enabled",
+        subs=(),
+        description=(
+            "Вотчлист фильмов с голосованием, киновечера с опросом, оценки после "
+            "просмотра и «золотой фонд»."
+        ),
+    ),
+    ModuleSpec(
+        key="finds",
+        label="Находки",
+        master="finds_enabled",
+        subs=(),
+        description=(
+            "Ночные находки («Токийские трофеи»): бот подкидывает предметы, участники "
+            "ловят их и ходят в «прогулки», собирают коллекции и дарят Попосе."
+        ),
+    ),
+)
+
+# все ключи-флаги — их прячем из /config и вкладки «Настройки» (только «Модули»)
+FEATURE_FLAG_KEYS: frozenset[str] = frozenset(
+    {m.master for m in FEATURE_MODULES} | {s for m in FEATURE_MODULES for s in m.subs}
+)
+
+
 def _build_specs() -> dict[str, SettingSpec]:
     specs: dict[str, SettingSpec] = {}
     for key in SETTING_KEYS:
@@ -175,8 +322,13 @@ def _build_specs() -> dict[str, SettingSpec]:
     return specs
 
 
-# ключ -> спека; порядок как в модели (модерация → отношения → AI → …)
+# ПОЛНЫЙ реестр скаляров (включая тумблеры модулей) — на нём держится
+# парсинг/запись. Отображение фильтрует флаги: обычные настройки vs «Модули».
 SETTING_SPECS: dict[str, SettingSpec] = _build_specs()
+# тумблеры модулей отдельным срезом — для вкладки «Модули»
+FEATURE_SPECS: dict[str, SettingSpec] = {
+    k: SETTING_SPECS[k] for k in SETTING_SPECS if k in FEATURE_FLAG_KEYS
+}
 
 
 class GuildSettingsService(ISettingsProvider):

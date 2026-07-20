@@ -10,6 +10,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import RelationshipRoleChanged
+from src.infrastructure.discord.feature_flags import block_if_module_off
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,11 @@ class SecretRoomCog(commands.Cog):
         self._min_role_index = max(0, settings.secret_room_min_level - 2)
         self._cleanup_task: asyncio.Task | None = None
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await block_if_module_off(
+            interaction, self.settings, self.gs, "secret_room_enabled"
+        )
 
     def _role_names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""

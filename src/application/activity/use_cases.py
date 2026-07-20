@@ -100,6 +100,18 @@ class GetVoiceHoursUseCase:
             return await uow.voice_progress.total_minutes(guild_id, user_id) / 60
 
 
+class VoiceLeaderboardUseCase:
+    """Топ по времени в войсе: (user_id, часы), убывание — для панели."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int, limit: int = 10) -> list[tuple[int, float]]:
+        async with self._uow_factory() as uow:
+            rows = await uow.voice_progress.top_by_minutes(guild_id, limit)
+        return [(uid, round(minutes / 60, 1)) for uid, minutes in rows]
+
+
 class TryMarkAlbumPostUseCase:
     """True — сообщение ещё не было в альбоме и теперь помечено;
     False — уже публиковалось (дедупликация переживает рестарт)."""

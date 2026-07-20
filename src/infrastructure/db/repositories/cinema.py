@@ -142,6 +142,17 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         )
         return (await self._session.execute(stmt)).scalar_one()
 
+    async def count_watched(self, guild_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(MovieEntryModel)
+            .where(
+                MovieEntryModel.guild_id == guild_id,
+                MovieEntryModel.status == "watched",
+            )
+        )
+        return (await self._session.execute(stmt)).scalar_one()
+
     async def count_proposed(self, guild_id: int, user_id: int) -> int:
         stmt = (
             select(func.count())

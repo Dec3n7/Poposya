@@ -333,6 +333,40 @@ class SetBirthdayUseCase:
             return True
 
 
+def _days_until_birthday(today: date, month: int, day: int) -> int:
+    """Дней до ближайшего наступления даты (в этом году или следующем).
+    29 февраля в невисокосный год клэмпится к 28-му."""
+    import calendar
+
+    for year in (today.year, today.year + 1):
+        d = min(day, calendar.monthrange(year, month)[1])
+        bd = date(year, month, d)
+        if bd >= today:
+            return (bd - today).days
+    return 0
+
+
+class UpcomingBirthdaysUseCase:
+    """Ближайшие дни рождения сервера: (user_id, месяц, день, дней_до),
+    по возрастанию. Виджет на «Обзоре»."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(
+        self, guild_id: int, today: date, limit: int = 5
+    ) -> list[tuple[int, int, int, int]]:
+        async with self._uow_factory() as uow:
+            profiles = await uow.relationships.all_for_guild(guild_id)
+        upcoming = [
+            (p.user_id, p.birthday_month, p.birthday_day, _days_until_birthday(today, p.birthday_month, p.birthday_day))
+            for p in profiles
+            if p.birthday_month and p.birthday_day
+        ]
+        upcoming.sort(key=lambda r: r[3])
+        return upcoming[:limit]
+
+
 @dataclass(frozen=True)
 class BirthdayEvents:
     remind: list[tuple[int, int]]  # (guild_id, user_id) — ДР через N дней
@@ -410,6 +444,8 @@ class ProfileSummary:
     is_exclusive: bool
     frozen: bool
     last_dialog_at: datetime | None
+    next_threshold: int | None
+    role_progress: float  # доля прогресса к следующей роли (0..1)
 
 
 class ListProfilesUseCase:
@@ -434,6 +470,8 @@ class ListProfilesUseCase:
                     is_exclusive=p.is_exclusive,
                     frozen=p.frozen_by_admin,
                     last_dialog_at=p.last_dialog_at,
+                    next_threshold=policy.next_threshold(p.points),
+                    role_progress=policy.progress_to_next(p.points, p.is_exclusive),
                 )
                 for p in profiles
             ]
@@ -473,7 +511,15 @@ class DecayPointsUseCase:
         async with self._uow_factory() as uow:
             profiles = await uow.relationships.list_decayable(inactive_before, decayed_before)
             touched_guilds: set[int] = set()
+            decayed_count = 0
             for profile in profiles:
+                # per-server тумблер «Угасание очков» (вкладка «Модули»): выкл —
+                # профили этого сервера не трогаем
+                if self._settings is not None and not (
+                    self._settings.get(profile.guild_id, "activity_enabled", True)
+                    and self._settings.get(profile.guild_id, "activity_decay", True)
+                ):
+                    continue
                 policy = _policy_of(self._settings, profile.guild_id, self._policy)
                 old_role = policy.role_index(profile.points, profile.is_exclusive)
                 profile.points = max(0, profile.points - self._amount)
@@ -481,6 +527,7 @@ class DecayPointsUseCase:
                 new_role = policy.role_index(profile.points, profile.is_exclusive)
                 await uow.relationships.save(profile)
                 touched_guilds.add(profile.guild_id)
+                decayed_count += 1
                 if new_role != old_role and not profile.is_exclusive:
                     uow.add_event(
                         RelationshipRoleChanged(
@@ -534,7 +581,7 @@ class DecayPointsUseCase:
                     transfers.append((guild_id, challenger.user_id, holder.user_id))
 
             await uow.commit()
-            return DecayResult(decayed=len(profiles), transfers=transfers)
+            return DecayResult(decayed=decayed_count, transfers=transfers)
 
 
 class RecordDeepDialogUseCase:

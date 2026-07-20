@@ -41,6 +41,10 @@ class FakeRepo(IRelationshipRepository):
         rows = [p for p in self.profiles.values() if p.guild_id == guild_id and p.points > 0]
         return sorted(rows, key=lambda p: p.points, reverse=True)[:limit]
 
+    async def points_summary(self, guild_id):
+        pts = [p.points for p in self.profiles.values() if p.guild_id == guild_id]
+        return sum(pts), sum(1 for v in pts if v > 0)
+
     async def all_for_guild(self, guild_id):
         rows = [p for p in self.profiles.values() if p.guild_id == guild_id]
         return sorted(rows, key=lambda p: p.points, reverse=True)

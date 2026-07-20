@@ -152,6 +152,30 @@ async def test_decay_skips_recent_activity(uow_factory):
     assert result.decayed == 0
 
 
+async def test_decay_skips_guild_with_toggle_off(uow_factory):
+    """Тумблер «Угасание очков» (вкладка «Модули») выключен -> профили сервера
+    не угасают, хотя подходят по неактивности."""
+    from src.application.relationship.use_cases import AwardPointUseCase
+
+    class _DecayOff:
+        def get(self, guild_id, key, default):
+            return False if key == "activity_decay" else default
+
+    await SetPointsUseCase(uow_factory, POLICY).execute(1, 10, 300)
+    old = NOW - timedelta(days=40)
+    await AwardPointUseCase(uow_factory, POLICY, daily_cap=20, absence_days=30).execute(
+        1, 10, 0, old
+    )
+
+    decay = DecayPointsUseCase(
+        uow_factory, POLICY, after_days=30, every_days=7, amount=10, settings_provider=_DecayOff()
+    )
+    result = await decay.execute(NOW)
+    assert result.decayed == 0  # выключено -> не тронули
+    rank = await GetRankUseCase(uow_factory, POLICY).execute(1, 10)
+    assert rank.points == 301  # 300 + 1 award, без списания
+
+
 # --- Deep dialogs / summaries ----------------------------------------------
 
 

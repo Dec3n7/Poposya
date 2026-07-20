@@ -9,10 +9,12 @@ ToggleFreeze). Приватные заметки Поповы и анкету Н
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from src.api.audit import record_audit
 from src.api.container import ApiContainer
-from src.api.dependencies import get_container, require_guild_manager
+from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.discord_members import fetch_guild_members
 from src.api.discord_users import fetch_users
+from src.api.security import Session
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/people", tags=["people"])
 
@@ -34,6 +36,7 @@ def _detail(container: ApiContainer, guild_id: int, user_id: int, rank, user: di
         "points": rank.points,
         "level": rank.level,
         "role": _role_name(container, guild_id, rank.role_index),
+        "role_index": rank.role_index,
         "is_exclusive": rank.is_exclusive,
         "frozen": rank.frozen,
         "next_threshold": rank.next_threshold,
@@ -62,9 +65,12 @@ async def people(
             "avatar": m["avatar"],
             "points": p.points if p else 0,
             "role": _role_name(container, guild_id, p.role_index) if p else None,
+            "role_index": p.role_index if p else None,
             "is_exclusive": p.is_exclusive if p else False,
             "frozen": p.frozen if p else False,
             "has_profile": p is not None,
+            "next_threshold": p.next_threshold if p else None,
+            "role_progress": p.role_progress if p else 0.0,
             "last_dialog_at": (
                 p.last_dialog_at.isoformat() if p and p.last_dialog_at else None
             ),
@@ -92,9 +98,14 @@ async def set_points(
     user_id: int,
     body: PointsUpdate,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
     await container.set_points.execute(user_id, guild_id, body.value)
+    await record_audit(
+        container, guild_id, session.user_id, "points.set",
+        target=user_id, details={"value": body.value},
+    )
     rank = await container.get_rank.execute(user_id, guild_id)
     users = await fetch_users(container.settings.discord_token, [user_id])
     return _detail(container, guild_id, user_id, rank, users.get(user_id))
@@ -104,8 +115,13 @@ async def set_points(
 async def toggle_freeze(
     user_id: int,
     guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
     """Тоглит заморозку (не начисляем очки замороженному). Возвращает новое состояние."""
     frozen = await container.toggle_freeze.execute(user_id, guild_id)
+    await record_audit(
+        container, guild_id, session.user_id, "freeze.toggle",
+        target=user_id, result="frozen" if frozen else "unfrozen",
+    )
     return {"frozen": frozen}

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import discord
 from discord.ext import commands
@@ -52,17 +52,33 @@ class ActivityCog(commands.Cog):
         self.gs = guild_settings
         self.calendar = HolidayCalendar(settings.holidays)
         self._holiday_announced: set[tuple[int, str]] = set()
+        self._snapshot_taken: set[tuple[int, str]] = set()  # (guild_id, UTC-дата)
         self._main_last_activity: dict[int, float] = {}  # guild_id -> monotonic
         self._lonely_notified: set[int] = set()
         self._touch_throttle: dict[tuple[int, int], float] = {}
         self._mood_bump_throttle: dict[int, float] = {}  # guild_id -> monotonic
         self._voice_minutes: dict[tuple[int, int], float] = {}  # накопленные минуты в войсе
+        # почасовой счётчик сообщений (guild_id, UTC-дата, час) -> кол-во; копится
+        # в памяти и доливается в БД пачкой — хитмап/сообщения-в-день на панели
+        self._msg_counts: dict[tuple[int, date, int], int] = {}
         self._loops_started = False
         self._tasks: list[asyncio.Task] = []
 
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _feature(self, guild_id: int, sub: str) -> bool:
+        """Подфункция «Активности» активна: мастер модуля И сам подтумблер
+        (наследование). Выкл на сервере через вкладку «Модули» панели. Флаг,
+        отсутствующий в настройках (тест-заглушки), считаем включённым."""
+
+        def on(key: str) -> bool:
+            default = getattr(self.settings, key, True)
+            value = self.gs.get(guild_id, key, default) if self.gs is not None else default
+            return bool(value)
+
+        return on("activity_enabled") and on(sub)
 
     def cog_unload(self) -> None:
         for task in self._tasks:
@@ -103,6 +119,8 @@ class ActivityCog(commands.Cog):
                     "Роль AUTO_ROLE не найдена на сервере",
                     extra={"role": self.settings.auto_role, "guild_id": member.guild.id},
                 )
+        if not self._feature(member.guild.id, "activity_greetings"):
+            return  # приветствия выключены на сервере (авто-роль выше — оставляем)
         channel = self._welcome_channel(member.guild)
         text = _FALLBACK_WELCOME.format(name=member.display_name)
         if self.chat is not None:
@@ -120,6 +138,8 @@ class ActivityCog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
         if member.bot:
+            return
+        if not self._feature(member.guild.id, "activity_greetings"):
             return
         channel = self._welcome_channel(member.guild)
         text = _FALLBACK_FAREWELL.format(name=member.display_name)
@@ -141,6 +161,12 @@ class ActivityCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
             return
+
+        # почасовой учёт (агрегат, без пользователя/текста) — до любых throttle,
+        # чтобы считать КАЖДОЕ сообщение; доливается в БД flush-циклом
+        stamp = datetime.now(UTC)
+        mkey = (message.guild.id, stamp.date(), stamp.hour)
+        self._msg_counts[mkey] = self._msg_counts.get(mkey, 0) + 1
 
         # человеческая активность в главном канале сбрасывает «одиночество»
         # и поднимает настроение (+2, не чаще раза в минуту)
@@ -167,7 +193,11 @@ class ActivityCog(commands.Cog):
             logger.exception("Не удалось обновить активность участника")
             return
 
-        if touch.returned_after_absence and self.chat is not None:
+        if (
+            touch.returned_after_absence
+            and self.chat is not None
+            and self._feature(message.guild.id, "activity_return_remarks")
+        ):
             # «не беспокоить» из анкеты — возвращение не комментируем
             rank = await self.chat.get_rank(message.author.id, message.guild.id)
             if rank.survey.contact == "quiet":
@@ -194,6 +224,8 @@ class ActivityCog(commands.Cog):
             return
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
+            return
+        if not self._feature(guild.id, "activity_album"):
             return
         album = discord.utils.get(guild.text_channels, name=self.settings.album_channel)
         if album is None or payload.channel_id == album.id:
@@ -281,6 +313,10 @@ class ActivityCog(commands.Cog):
         started = ["дрейф настроения", "календарь/ДР"]
         self._tasks.append(asyncio.create_task(self._mood_drift_loop()))
         self._tasks.append(asyncio.create_task(self._calendar_loop()))
+        self._tasks.append(asyncio.create_task(self._snapshot_loop()))
+        started.append("снапшот метрик")
+        self._tasks.append(asyncio.create_task(self._activity_flush_loop()))
+        started.append("учёт сообщений")
         # войс-очки можно включать/выключать пер-сервер через /config, поэтому
         # цикл запускаем всегда; в тике гильдии с 0 пропускаются
         try:
@@ -315,6 +351,8 @@ class ActivityCog(commands.Cog):
         holiday = self.calendar.holiday_name(now.date())
         if holiday:
             for guild in self.bot.guilds:
+                if not self._feature(guild.id, "activity_holidays"):
+                    continue
                 key = (guild.id, now.date().isoformat())
                 if key in self._holiday_announced:
                     continue
@@ -349,6 +387,8 @@ class ActivityCog(commands.Cog):
             guild = self.bot.get_guild(guild_id)
             if guild is None:
                 continue
+            if not self._feature(guild_id, "activity_birthdays"):
+                continue
             channel = self._main_channel(guild)
             if channel is None:
                 continue
@@ -363,6 +403,8 @@ class ActivityCog(commands.Cog):
         for guild_id, user_id in events.congratulate:
             guild = self.bot.get_guild(guild_id)
             if guild is None:
+                continue
+            if not self._feature(guild_id, "activity_birthdays"):
                 continue
             channel = self._main_channel(guild)
             if channel is None:
@@ -390,6 +432,64 @@ class ActivityCog(commands.Cog):
             except discord.HTTPException:
                 pass
 
+    # --- суточный снапшот метрик (тренды на панели) ---
+
+    async def _snapshot_loop(self) -> None:
+        # частый опрос, но запись — раз в UTC-день на гильдию (дедуп ниже).
+        # Работает и на SQLite: снапшоты не требуют NOTIFY, тренды копятся в dev.
+        while True:
+            try:
+                await self._snapshot_tick()
+            except Exception:
+                logger.exception("Ошибка снапшота метрик")
+            await asyncio.sleep(3600)
+
+    async def _snapshot_tick(self) -> None:
+        now = datetime.now(UTC)
+        today = now.date()
+        key_date = today.isoformat()
+        for guild in self.bot.guilds:
+            key = (guild.id, key_date)
+            if key in self._snapshot_taken:
+                continue
+            try:
+                await self.container.record_snapshot.execute(
+                    guild.id, today, extra={"members": float(guild.member_count or 0)}
+                )
+                self._snapshot_taken.add(key)
+            except Exception:
+                logger.exception("Снапшот метрик гильдии %s не записан", guild.id)
+
+    # --- почасовой учёт сообщений (хитмап/сообщения-в-день на панели) ---
+
+    async def _activity_flush_loop(self) -> None:
+        # доливаем накопленное раз в 2 минуты: сглаживает нагрузку на БД против
+        # записи на каждое сообщение; макс. потеря при падении — один интервал
+        while True:
+            await asyncio.sleep(120)
+            try:
+                await self._flush_message_counts()
+            except Exception:
+                logger.exception("Ошибка доливки счётчиков сообщений")
+
+    async def _flush_message_counts(self) -> None:
+        if not self._msg_counts:
+            return
+        # атомарно снимаем накопленное; новые сообщения пойдут в свежий словарь
+        pending, self._msg_counts = self._msg_counts, {}
+        by_guild: dict[int, dict[tuple[date, int], int]] = {}
+        for (guild_id, bucket_date, hour), count in pending.items():
+            by_guild.setdefault(guild_id, {})[(bucket_date, hour)] = count
+        for guild_id, buckets in by_guild.items():
+            try:
+                await self.container.record_message_activity.execute(guild_id, buckets)
+            except Exception:
+                # не теряем несохранённое — возвращаем корзины гильдии обратно
+                logger.exception("Счётчики сообщений гильдии %s не записаны", guild_id)
+                for (bucket_date, hour), count in buckets.items():
+                    key = (guild_id, bucket_date, hour)
+                    self._msg_counts[key] = self._msg_counts.get(key, 0) + count
+
     # --- очки за голосовые каналы ---
 
     _VOICE_TICK_SECONDS = 300  # шаг учёта присутствия
@@ -410,6 +510,8 @@ class ActivityCog(commands.Cog):
         now = datetime.now(UTC)
         changed: dict[tuple[int, int], float] = {}
         for guild in self.bot.guilds:
+            if not self._feature(guild.id, "activity_voice_points"):
+                continue  # войс-очки выключены на сервере (вкладка «Модули»)
             per_hour = self._cfg(guild.id, "voice_points_per_hour")
             if per_hour <= 0:
                 continue  # войс-очки выключены на этом сервере
@@ -461,6 +563,8 @@ class ActivityCog(commands.Cog):
                 last = self._main_last_activity.get(guild.id)
                 if last is None or guild.id in self._lonely_notified:
                     continue
+                if not self._feature(guild.id, "activity_lonely"):
+                    continue
                 lonely_hours = self._cfg(guild.id, "lonely_hours")
                 if now - last < lonely_hours * 3600:
                     continue
@@ -488,6 +592,8 @@ class ActivityCog(commands.Cog):
                 last = self._main_last_activity.get(guild.id)
                 # только если в канале была активность за последний час
                 if last is None or time.monotonic() - last > 3600:
+                    continue
+                if not self._feature(guild.id, "activity_random_thoughts"):
                     continue
                 try:
                     text = await self.chat.freeform_remark(

@@ -120,6 +120,19 @@ class TempVoiceCog(commands.Cog):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
+    def _feature(self, guild_id: int, sub: str | None = None) -> bool:
+        """Модуль «Каморки» (мастер) и подфункция (вкладка «Модули»). Флаг,
+        отсутствующий в настройках (тест-заглушки), считаем включённым."""
+
+        def on(key: str) -> bool:
+            default = getattr(self.settings, key, True)
+            value = self.gs.get(guild_id, key, default) if self.gs is not None else default
+            return bool(value)
+
+        if not on("tempvoice_enabled"):
+            return False
+        return on(sub) if sub is not None else True
+
     # --- старт: подмести осиротевшие, вернуть панель в хаб ---
 
     @commands.Cog.listener()
@@ -140,6 +153,8 @@ class TempVoiceCog(commands.Cog):
         """Панель в чате хаба должна быть всегда. Проверяем один раз на хаб:
         при старте и при первом входе (последнее — чтобы панель появилась
         сразу после /config, не дожидаясь рестарта)."""
+        if not self._feature(guild.id):
+            return  # модуль выключен — не выкладываем приглашение в хаб
         hub_id = self._cfg(guild.id, "tempvoice_hub_channel")
         if not hub_id or hub_id in self._panelled:
             return
@@ -220,6 +235,8 @@ class TempVoiceCog(commands.Cog):
 
     async def _maybe_create(self, member: discord.Member, channel: discord.abc.Connectable) -> None:
         guild = member.guild
+        if not self._feature(guild.id):
+            return  # модуль «Каморки» выключен на сервере (вкладка «Модули»)
         hub_id = self._cfg(guild.id, "tempvoice_hub_channel")
         if not hub_id or channel.id != hub_id:
             return  # не хаб (или фича выключена)
@@ -258,6 +275,8 @@ class TempVoiceCog(commands.Cog):
     async def _post_panel(self, channel: discord.VoiceChannel, owner_id: int) -> None:
         """Панель — в текстовый чат самой каморки: умрёт вместе с ней, никаких
         осиротевших сообщений."""
+        if not self._feature(channel.guild.id, "tempvoice_panel"):
+            return  # панель управления выключена на сервере (каморка работает и так)
         try:
             await channel.send(embed=panel_embed(channel, owner_id), view=TempVoicePanel())
         except discord.HTTPException:

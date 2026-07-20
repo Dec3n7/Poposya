@@ -76,6 +76,11 @@ class FakeMovies(IMovieEntryRepository):
             [e for e in self.rows.values() if e.guild_id == guild_id and e.status == "listed"]
         )
 
+    async def count_watched(self, guild_id):
+        return len(
+            [e for e in self.rows.values() if e.guild_id == guild_id and e.status == "watched"]
+        )
+
     async def count_proposed(self, guild_id, user_id):
         return len(
             [e for e in self.rows.values() if e.guild_id == guild_id and e.added_by == user_id]

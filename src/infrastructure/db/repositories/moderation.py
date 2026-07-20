@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
@@ -49,6 +50,18 @@ class SqlAlchemyWarnRepository(IWarnRepository):
             )
             for row in rows
         ]
+
+    async def list_guild_counts(self, guild_id: int) -> Sequence[tuple[int, int, datetime]]:
+        count = func.count()
+        last = func.max(WarnModel.created_at)
+        stmt = (
+            select(WarnModel.user_id, count, last)
+            .where(WarnModel.guild_id == guild_id)
+            .group_by(WarnModel.user_id)
+            .order_by(count.desc(), last.desc())
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(uid, cnt, last_at.replace(tzinfo=UTC)) for uid, cnt, last_at in rows]
 
     async def clear(self, user_id: int, guild_id: int) -> None:
         await self._session.execute(

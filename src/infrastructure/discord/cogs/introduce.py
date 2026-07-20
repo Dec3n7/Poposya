@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
+from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
 
 logger = logging.getLogger(__name__)
@@ -179,11 +180,18 @@ class IntroduceCog(commands.Cog):
         container: RelationshipContainer,
         role_sync: RoleSyncService,
         settings: Settings,
+        guild_settings=None,
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
         self.settings = settings
+        self.gs = guild_settings
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await block_if_module_off(
+            interaction, self.settings, self.gs, "introduce_enabled"
+        )
 
     async def cog_load(self) -> None:
         # регистрация персистентной view: кнопки работают после рестарта

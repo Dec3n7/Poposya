@@ -152,11 +152,15 @@ class StayKickCog(commands.Cog):
 
     async def _tick(self, now: datetime) -> None:
         for pk in await self.container.due_reminders.execute(now):
+            if not self._cfg(pk.guild_id, "staykick_enabled"):
+                continue  # модуль выключен на сервере
             member = self._member(pk.guild_id, pk.user_id)
             if member is not None:
                 await _dm_quiet(member, phrases.pick(phrases.REMIND_REPLIES))
 
         for pk in await self.container.pop_due_kicks.execute(now):
+            if not self._cfg(pk.guild_id, "staykick_enabled"):
+                continue  # модуль выключен — не кикаем
             member = self._member(pk.guild_id, pk.user_id)
             if member is None:
                 continue  # уже ушёл сам

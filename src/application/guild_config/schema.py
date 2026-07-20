@@ -99,6 +99,19 @@ class GuildSettings(BaseModel):
     lonely_hours: int = Field(12, ge=1, le=168)
     absent_days_threshold: int = Field(7, ge=1, le=365)
 
+    # --- тумблеры модуля «Активность» (per-server вкл/выкл, вкладка «Модули»);
+    # мастер выкл => все подфункции выкл (наследование в хелпере) ---
+    activity_enabled: bool = True
+    activity_greetings: bool = True
+    activity_return_remarks: bool = True
+    activity_album: bool = True
+    activity_voice_points: bool = True
+    activity_holidays: bool = True
+    activity_birthdays: bool = True
+    activity_decay: bool = True
+    activity_lonely: bool = True
+    activity_random_thoughts: bool = True
+
     # --- киноклуб ---
     cinema_rating_hours: int = Field(24, ge=1, le=336)
     cinema_watchlist_max: int = Field(50, ge=5, le=500)
@@ -121,6 +134,17 @@ class GuildSettings(BaseModel):
     # 50 — жёсткий лимит Discord на число каналов в одной категории
     tempvoice_max_per_guild: int = Field(25, ge=1, le=50)
     tempvoice_default_limit: int = Field(0, ge=0, le=99)  # 99 — максимум Discord
+    # тумблеры модуля «Каморки» (вкладка «Модули»)
+    tempvoice_enabled: bool = True
+    tempvoice_panel: bool = True
+
+    # тумблеры прочих модулей (мастера, вкладка «Модули»); staykick_enabled ниже
+    fun_enabled: bool = True
+    introduce_enabled: bool = True
+    secret_room_enabled: bool = True
+    music_enabled: bool = True
+    cinema_enabled: bool = True
+    finds_enabled: bool = True
 
     # --- музыка ---
     music_karaoke_ansi: bool = False

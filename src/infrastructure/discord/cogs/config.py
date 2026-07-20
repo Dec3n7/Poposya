@@ -14,7 +14,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.infrastructure.guild_settings import SETTING_SPECS, GuildSettingsService
+from src.infrastructure.guild_settings import (
+    FEATURE_FLAG_KEYS,
+    SETTING_SPECS,
+    GuildSettingsService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +122,9 @@ class ConfigCog(commands.Cog):
         return [
             app_commands.Choice(name=f"{spec.key} — {spec.label}"[:100], value=spec.key)
             for spec in SETTING_SPECS.values()
-            if spec.kind in kinds and (needle in spec.key.lower() or needle in spec.label.lower())
+            if spec.kind in kinds
+            and spec.key not in FEATURE_FLAG_KEYS  # тумблеры модулей — только через панель
+            and (needle in spec.key.lower() or needle in spec.label.lower())
         ][:25]
 
     async def _key_autocomplete(
@@ -177,6 +183,8 @@ class ConfigCog(commands.Cog):
         gid = interaction.guild_id
         lines = []
         for spec in SETTING_SPECS.values():
+            if spec.key in FEATURE_FLAG_KEYS:
+                continue  # тумблеры модулей — на вкладке «Модули» панели
             value = self.settings.current(gid, spec.key)
             mark = "🔧" if self.settings.is_override(gid, spec.key) else "·"
             lines.append(f"{mark} **{spec.key}** — {_fmt(spec, value)}  *{spec.label}*")

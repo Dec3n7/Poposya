@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -313,6 +313,16 @@ class SqlAlchemyRelationshipRepository(IRelationshipRepository):
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return self._cached(rows)
+
+    async def points_summary(self, guild_id: int) -> tuple[int, int]:
+        # case(...) вместо FILTER — портируется на SQLite и Postgres одинаково
+        active = case((RelationshipProfileModel.points > 0, 1), else_=0)
+        stmt = select(
+            func.coalesce(func.sum(RelationshipProfileModel.points), 0),
+            func.coalesce(func.sum(active), 0),
+        ).where(RelationshipProfileModel.guild_id == guild_id)
+        total, active_count = (await self._session.execute(stmt)).one()
+        return int(total), int(active_count)
 
     async def all_for_guild(self, guild_id: int) -> list[RelationshipProfile]:
         stmt = (

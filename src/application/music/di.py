@@ -11,6 +11,7 @@ from src.application.music.use_cases import (
     SavePlaylistUseCase,
     ToggleLikeUseCase,
 )
+from src.application.player.use_cases import SavePlayerStateUseCase
 from src.config import Settings
 from src.domain.events.bus import IEventBus
 
@@ -30,3 +31,5 @@ class MusicContainer:
     list_liked: ListLikedUseCase
     remove_liked: RemoveLikedUseCase
     resolve_liked: ResolveLikedUseCase
+    # снапшот живого плеера для панели (бот пишет на каждое изменение)
+    save_player_state: SavePlayerStateUseCase

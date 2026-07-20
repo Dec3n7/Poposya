@@ -30,6 +30,7 @@ from src.infrastructure.discord.cogs.music.views import (
     QueueView,
     SearchView,
 )
+from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.presence import PresenceService
 
 
@@ -59,6 +60,7 @@ class MusicCog(commands.Cog):
         self.bot = bot
         self.container = container
         self.settings = container.settings
+        self.gs = guild_settings
         self.audio = container.audio_source
         self.spotify = SpotifyLinkResolver()
         # композиция музыкального модуля: сервисы и их взаимные связи.
@@ -92,6 +94,9 @@ class MusicCog(commands.Cog):
     async def cog_unload(self) -> None:
         self.presence.stop()
         await self.service.shutdown()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await block_if_module_off(interaction, self.settings, self.gs, "music_enabled")
 
     @commands.Cog.listener()
     async def on_voice_state_update(

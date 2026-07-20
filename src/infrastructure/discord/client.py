@@ -115,7 +115,7 @@ class PoposyaBot(commands.Bot):
         )
 
         await self.add_cog(
-            IntroduceCog(self, self.container.relationship, role_sync, self.container.settings)
+            IntroduceCog(self, self.container.relationship, role_sync, self.container.settings, gs)
         )
         await self.add_cog(
             SecretRoomCog(

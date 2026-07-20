@@ -182,6 +182,16 @@ class Settings(BaseSettings):
     # потолок живых каморок: у Discord жёсткий лимит 50 каналов в категории
     tempvoice_max_per_guild: int = 25
     tempvoice_default_limit: int = 0  # мест в новой каморке (0 = без лимита)
+    # тумблеры модуля «Каморки» (per-server через панель «Модули»)
+    tempvoice_enabled: bool = True
+    tempvoice_panel: bool = True
+    # тумблеры прочих модулей (мастера); staykick_enabled — рядом со staykick
+    fun_enabled: bool = True
+    introduce_enabled: bool = True
+    secret_room_enabled: bool = True
+    music_enabled: bool = True
+    cinema_enabled: bool = True
+    finds_enabled: bool = True
 
     # слова, которые бот считает оскорблением в свой адрес (настроение −5)
     bot_insult_words: list[str] = [
@@ -206,6 +216,19 @@ class Settings(BaseSettings):
     # дневной потолок общий с очками за сообщения, AFK-канал и заглушённые
     # «в наушниках» не считаются
     voice_points_per_hour: int = 3
+
+    # --- тумблеры модуля «Активность» (per-server через панель «Модули»);
+    # глобальный дефолт = вкл, сервер может выключить ---
+    activity_enabled: bool = True
+    activity_greetings: bool = True
+    activity_return_remarks: bool = True
+    activity_album: bool = True
+    activity_voice_points: bool = True
+    activity_holidays: bool = True
+    activity_birthdays: bool = True
+    activity_decay: bool = True
+    activity_lonely: bool = True
+    activity_random_thoughts: bool = True
 
     # --- ночные находки («Токийские трофеи») ---
     finds_channel: str = ""  # канал анонсов по ИМЕНИ; пусто = main_channel

@@ -8,9 +8,12 @@
 CommandError — панель покажет их админу.
 """
 
+import base64
+import binascii
 import logging
 from datetime import UTC, datetime, timedelta
 
+import aiohttp
 import discord
 from discord.ext import commands as discord_commands
 
@@ -18,6 +21,41 @@ from src.application.moderation.di import ModerationContainer
 from src.infrastructure.commands.bridge import Command, CommandError
 
 logger = logging.getLogger(__name__)
+
+# аватар/баннер Discord принимает картинкой; качаем по URL из панели. Лимит и
+# проверка типа — чтобы не тянуть гигантский/непонятный файл.
+_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+
+
+async def _download_image(url: str) -> bytes:
+    if not url.startswith(("http://", "https://")):
+        raise CommandError("URL картинки должен начинаться с http(s)://")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    raise CommandError(f"Не удалось скачать картинку (HTTP {resp.status}).")
+                ctype = resp.headers.get("Content-Type", "")
+                if not ctype.startswith("image/"):
+                    raise CommandError("По ссылке не картинка.")
+                data = await resp.content.read(_IMAGE_MAX_BYTES + 1)
+                if len(data) > _IMAGE_MAX_BYTES:
+                    raise CommandError("Картинка больше 8 МБ.")
+                return data
+    except aiohttp.ClientError as exc:
+        raise CommandError(f"Ошибка загрузки картинки: {exc}") from exc
+
+
+def _decode_data_url(data_url: str) -> bytes:
+    """data:image/...;base64,XXXX -> байты. Загруженный+обрезанный в панели аватар."""
+    b64 = data_url.split(",", 1)[1] if data_url.startswith("data:") else data_url
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise CommandError("Битые данные загруженной картинки.") from exc
+    if len(raw) > _IMAGE_MAX_BYTES:
+        raise CommandError("Картинка больше 8 МБ.")
+    return raw
 
 
 class DiscordCommandExecutor:
@@ -131,6 +169,37 @@ class DiscordCommandExecutor:
         await service.cleanup(guild.id, "⏹️ Остановлено из панели.")
         return "Остановлено."
 
+    # --- профиль бота на сервере (ник/аватар/баннер) ---
+
+    async def _profile_apply(self, guild: discord.Guild, command: Command) -> str:
+        """Применяет пер-серверный профиль бота: guild.me.edit(nick/avatar/banner).
+        Пустое значение = сброс к глобальному (None). Значения приходят в payload."""
+        p = command.payload
+        kwargs: dict = {}
+        if "nick" in p:
+            kwargs["nick"] = (str(p["nick"]).strip() or None)
+        # загруженный аватар (base64) приоритетнее URL
+        avatar_data = str(p.get("avatar_data") or "").strip()
+        if avatar_data:
+            kwargs["avatar"] = _decode_data_url(avatar_data)
+        elif "avatar_url" in p:
+            url = str(p["avatar_url"]).strip()
+            kwargs["avatar"] = await _download_image(url) if url else None
+        if "banner_url" in p:
+            url = str(p["banner_url"]).strip()
+            kwargs["banner"] = await _download_image(url) if url else None
+        if not kwargs:
+            return "Нечего менять."
+        try:
+            await guild.me.edit(**kwargs)
+        except discord.Forbidden as exc:
+            raise CommandError("Нет прав на смену профиля (нужно Change Nickname).") from exc
+        except discord.HTTPException as exc:
+            # Discord может отклонить аватар/баннер (формат/размер/недоступно приложению)
+            raise CommandError(f"Discord отклонил профиль: {exc.text or exc}") from exc
+        parts = [k for k in ("nick", "avatar", "banner") if k in kwargs]
+        return "Профиль обновлён: " + ", ".join(parts) + "."
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -141,4 +210,5 @@ _HANDLERS = {
     "music.resume": DiscordCommandExecutor._resume,
     "music.skip": DiscordCommandExecutor._skip,
     "music.stop": DiscordCommandExecutor._stop,
+    "profile.apply": DiscordCommandExecutor._profile_apply,
 }

@@ -21,6 +21,7 @@ from discord.ext import commands
 from src.application.music.di import MusicContainer
 from src.application.music.player import GuildPlayer
 from src.domain.music.entities import Track
+from src.domain.player.entities import PlayerState, PlayerTrack
 from src.infrastructure.discord.cogs.music.formatting import (
     EMBED_COLOR,
     REPEAT_LABELS,
@@ -60,6 +61,8 @@ class MusicPlayerService:
         self.settings = container.settings
         self.audio = container.audio_source
         self.bus = container.event_bus
+        # снапшот плеера для панели (побочный путь; в тестах-заглушках может не быть)
+        self._save_state = getattr(container, "save_player_state", None)
         self.sessions: dict[int, GuildMusicSession] = {}
         self._background: set[asyncio.Task] = set()
         self._empty_grace: dict[int, asyncio.Task] = {}  # таймеры выхода из пустого войса
@@ -243,13 +246,43 @@ class MusicPlayerService:
         session.player.text_channel_id = message.channel.id
         self._start_updater(guild_id)
 
+    def _player_snapshot(self, player: GuildPlayer) -> PlayerState:
+        def pt(t: Track) -> PlayerTrack:
+            return PlayerTrack(
+                title=t.title, url=t.url, duration=t.duration, requested_by=t.requested_by,
+                uploader=t.uploader, thumbnail=t.thumbnail,
+            )
+
+        cur = player.current
+        return PlayerState(
+            guild_id=player.guild_id,
+            is_active=cur is not None,
+            current=pt(cur) if cur is not None else None,
+            queue=[pt(t) for t in player.queue],
+            position_seconds=player.elapsed(),
+            is_paused=player.is_paused,
+            repeat=player.repeat.value,
+            volume=player.volume,
+        )
+
+    async def _write_snapshot(self, state: PlayerState) -> None:
+        # снапшот для панели — побочный путь; сбой БД не должен трогать плеер
+        if self._save_state is None:
+            return
+        try:
+            await self._save_state.execute(state)
+        except Exception:
+            logger.debug("Снапшот плеера не записан", exc_info=True)
+
     async def _on_player_state(self, guild_id: int) -> None:
         await self._refresh_message(guild_id)
         await self.refresh_presence()
         # префетч текста в кэш при каждом старте трека — кнопка 📜 сработает мгновенно
         player = self.get_player(guild_id)
-        if player is not None and player.current is not None and self.prefetch_lyrics:
-            self.prefetch_lyrics(player.current)
+        if player is not None:
+            await self._write_snapshot(self._player_snapshot(player))
+            if player.current is not None and self.prefetch_lyrics:
+                self.prefetch_lyrics(player.current)
 
     async def _on_track_failed(self, guild_id: int, track: Track, reason: str) -> None:
         """Трек не удалось включить — сказать об этом в чат вместо молчания.
@@ -447,4 +480,6 @@ class MusicPlayerService:
                 await session.message.edit(embed=embed, view=None)
             except discord.HTTPException:
                 pass
+        # панель: плеер остановлен — гасим live-блок
+        await self._write_snapshot(PlayerState(guild_id=guild_id, is_active=False))
         await self.refresh_presence()  # больше не играем в этой гильдии

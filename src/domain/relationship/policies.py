@@ -39,3 +39,21 @@ class PointsToLevelPolicy:
         if points < self.exclusive_threshold:
             return self.exclusive_threshold
         return None
+
+    def progress_to_next(self, points: int, is_exclusive: bool) -> float:
+        """Доля прогресса внутри текущей ступени к следующей роли (0..1).
+        На максимуме (следующей ступени нет) -> 1.0. Для прогресс-бара в панели."""
+        nxt = self.next_threshold(points)
+        if nxt is None:
+            return 1.0
+        idx = self.role_index(points, is_exclusive)
+        if idx is None:
+            lower = 0
+        elif idx >= self.exclusive_role_index:
+            lower = self.exclusive_threshold
+        else:
+            lower = self.thresholds[idx]
+        span = nxt - lower
+        if span <= 0:
+            return 1.0
+        return max(0.0, min(1.0, (points - lower) / span))

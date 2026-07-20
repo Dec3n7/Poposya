@@ -1,17 +1,26 @@
 import type {
+  ActivityStats,
+  AuditEntry,
   Ban,
+  BotProfile,
   Channel,
   Cinema,
   CommandResult,
   ComplexSettings,
   FindsOverview,
+  GuildModule,
+  GuildSummary,
+  GuildWarn,
   Me,
+  MovieDetail,
+  NowPlaying,
   Overview,
   PersonDetail,
   PersonListItem,
   PlaylistDetail,
   PlaylistItem,
   SettingField,
+  Trends,
   Warn,
 } from "./types";
 
@@ -66,6 +75,8 @@ export const api = {
     req<SettingField>(`/api/guilds/${guildId}/settings/${key}`, { method: "DELETE" }),
   complexSettings: (guildId: string): Promise<ComplexSettings> =>
     req<ComplexSettings>(`/api/guilds/${guildId}/settings/complex`),
+  modules: (guildId: string): Promise<GuildModule[]> =>
+    req<GuildModule[]>(`/api/guilds/${guildId}/settings/modules`),
   batch: (guildId: string, values: Record<string, unknown>): Promise<void> =>
     req<void>(`/api/guilds/${guildId}/settings/batch`, {
       method: "PUT",
@@ -73,9 +84,31 @@ export const api = {
     }),
   channels: (guildId: string): Promise<Channel[]> =>
     req<Channel[]>(`/api/guilds/${guildId}/channels`),
+  botProfile: (guildId: string): Promise<BotProfile> =>
+    req<BotProfile>(`/api/guilds/${guildId}/bot-profile`),
+  setBotProfile: (
+    guildId: string,
+    body: BotProfile,
+  ): Promise<{ profile: BotProfile; command: CommandResult }> =>
+    req<{ profile: BotProfile; command: CommandResult }>(`/api/guilds/${guildId}/bot-profile`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   overview: (guildId: string): Promise<Overview> =>
     req<Overview>(`/api/guilds/${guildId}/overview`),
+  summary: (guildId: string): Promise<GuildSummary> =>
+    req<GuildSummary>(`/api/guilds/${guildId}/summary`),
+  trends: (guildId: string, days = 30): Promise<Trends> =>
+    req<Trends>(`/api/guilds/${guildId}/overview/trends?days=${days}`),
+  activity: (guildId: string, days = 30): Promise<ActivityStats> =>
+    req<ActivityStats>(`/api/guilds/${guildId}/activity?days=${days}`),
   cinema: (guildId: string): Promise<Cinema> => req<Cinema>(`/api/guilds/${guildId}/cinema`),
+  movieRatings: (guildId: string, entryId: number): Promise<MovieDetail> =>
+    req<MovieDetail>(`/api/guilds/${guildId}/cinema/movies/${entryId}`),
+  removeMovie: (guildId: string, entryId: number): Promise<{ status: string }> =>
+    req<{ status: string }>(`/api/guilds/${guildId}/cinema/movies/${entryId}`, {
+      method: "DELETE",
+    }),
   people: (guildId: string): Promise<PersonListItem[]> =>
     req<PersonListItem[]>(`/api/guilds/${guildId}/people`),
   person: (guildId: string, userId: string): Promise<PersonDetail> =>
@@ -89,6 +122,8 @@ export const api = {
     req<{ frozen: boolean }>(`/api/guilds/${guildId}/people/${userId}/freeze`, { method: "POST" }),
   bans: (guildId: string): Promise<Ban[]> =>
     req<Ban[]>(`/api/guilds/${guildId}/moderation/bans`),
+  guildWarns: (guildId: string): Promise<GuildWarn[]> =>
+    req<GuildWarn[]>(`/api/guilds/${guildId}/moderation/warns`),
   warns: (guildId: string, userId: string): Promise<Warn[]> =>
     req<Warn[]>(`/api/guilds/${guildId}/moderation/warns/${userId}`),
   clearWarns: (guildId: string, userId: string): Promise<{ cleared: number }> =>
@@ -99,8 +134,16 @@ export const api = {
     req<PlaylistItem[]>(`/api/guilds/${guildId}/music/playlists`),
   playlist: (guildId: string, name: string): Promise<PlaylistDetail> =>
     req<PlaylistDetail>(`/api/guilds/${guildId}/music/playlists/${encodeURIComponent(name)}`),
+  nowPlaying: (guildId: string): Promise<NowPlaying | null> =>
+    req<NowPlaying | null>(`/api/guilds/${guildId}/music/now`),
+  deletePlaylist: (guildId: string, name: string): Promise<{ status: string }> =>
+    req<{ status: string }>(`/api/guilds/${guildId}/music/playlists/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
   finds: (guildId: string): Promise<FindsOverview> =>
     req<FindsOverview>(`/api/guilds/${guildId}/finds/overview`),
+  audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
+    req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>
     req<CommandResult>(`/api/guilds/${guildId}/moderation/ban`, {
       method: "POST",

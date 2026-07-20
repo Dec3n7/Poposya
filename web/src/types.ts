@@ -38,6 +38,28 @@ export interface ComplexSettings {
   rate_limits: ComplexField<Record<string, number>>;
 }
 
+export interface BotProfile {
+  nick: string;
+  avatar_url: string;
+  banner_url: string;
+  avatar_data: string; // загруженный+обрезанный аватар (data-URL); приоритетнее avatar_url
+}
+
+export interface ModuleFlag {
+  key: string;
+  label: string;
+  value: boolean;
+  is_override: boolean;
+}
+
+export interface GuildModule {
+  key: string;
+  label: string;
+  description: string;
+  master: ModuleFlag;
+  subs: ModuleFlag[];
+}
+
 export interface Channel {
   id: string;
   name: string;
@@ -51,15 +73,53 @@ export interface LeaderEntry {
   avatar: string | null;
   points: number;
   role: string | null;
+  role_index: number | null;
   is_exclusive: boolean;
+}
+
+// доля роли-статуса в распределении сервера (для пончика на «Обзоре»)
+export interface RoleSlice {
+  index: number;
+  name: string | null;
+  count: number;
+}
+
+export interface VoiceEntry {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  hours: number;
+}
+
+export interface BirthdayEntry {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  month: number;
+  day: number;
+  in_days: number;
 }
 
 export interface Overview {
   leaderboard: LeaderEntry[];
   counts: { watchlist: number; watched: number; playlists: number };
+  voice: VoiceEntry[];
+  birthdays: BirthdayEntry[];
+  distribution: RoleSlice[];
+}
+
+// серия суточных снапшотов: [день-ISO, значение][]; ключ — имя метрики
+export type TrendPoint = [string, number];
+export type Trends = Record<string, TrendPoint[]>;
+
+// активность сервера: сообщения/день + хитмап день-недели×час (7×24, UTC)
+export interface ActivityStats {
+  daily: TrendPoint[];
+  heatmap: number[][];
 }
 
 export interface WatchlistItem {
+  id: number;
   title: string;
   year: number | null;
   up: number;
@@ -67,12 +127,25 @@ export interface WatchlistItem {
 }
 
 export interface WatchedItem {
+  id: number;
   title: string;
   year: number | null;
   avg_score: number | null;
   ratings_count: number;
   poposya_score: number | null;
   poposya_review: string;
+}
+
+export interface MovieRating {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  score: number | null;
+  review: string | null;
+}
+
+export interface MovieDetail {
+  ratings: MovieRating[];
 }
 
 export interface Cinema {
@@ -86,10 +159,20 @@ export interface PersonListItem {
   avatar: string | null;
   points: number;
   role: string | null;
+  role_index: number | null;
   is_exclusive: boolean;
   frozen: boolean;
   has_profile: boolean;
   last_dialog_at: string | null;
+  next_threshold: number | null;
+  role_progress: number; // доля к следующей роли, 0..1
+}
+
+// лёгкие счётчики для бейджей на сайдбаре
+export interface GuildSummary {
+  bans: number;
+  warns_users: number;
+  frozen: number;
 }
 
 export interface PlaylistItem {
@@ -109,6 +192,26 @@ export interface PlaylistTrack {
 export interface PlaylistDetail {
   name: string;
   tracks: PlaylistTrack[];
+}
+
+export interface NowTrack {
+  title: string;
+  url: string;
+  duration: number | null;
+  uploader: string | null;
+  thumbnail: string | null;
+  requested_by: string;
+  requested_name: string | null;
+}
+
+export interface NowPlaying {
+  current: NowTrack;
+  queue: NowTrack[];
+  position_seconds: number;
+  position_at: string | null;
+  is_paused: boolean;
+  repeat: string;
+  volume: number;
 }
 
 export interface ActiveFind {
@@ -158,6 +261,27 @@ export interface Warn {
   created_at: string;
 }
 
+export interface GuildWarn {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  count: number;
+  last_at: string;
+}
+
+export interface AuditEntry {
+  id: number;
+  actor_id: string;
+  actor_name: string | null;
+  actor_avatar: string | null;
+  action: string;
+  target: string | null;
+  target_name: string | null;
+  details: string | null; // компактный JSON
+  result: string | null;
+  created_at: string;
+}
+
 export interface PersonDetail {
   user_id: string;
   username: string | null;
@@ -165,6 +289,7 @@ export interface PersonDetail {
   points: number;
   level: number;
   role: string | null;
+  role_index: number | null;
   is_exclusive: boolean;
   frozen: boolean;
   next_threshold: number | null;

@@ -1,15 +1,27 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
-import type { Guild, Me } from "../types";
+import { api } from "../api";
+import type { Guild, GuildSummary, Me } from "../types";
+import { Audit } from "./Audit";
 import { Cinema } from "./Cinema";
 import { Dashboard } from "./Dashboard";
 import { Finds } from "./Finds";
 import { GuildSettings } from "./GuildSettings";
 import { Moderation } from "./Moderation";
+import { Modules } from "./Modules";
 import { Music } from "./Music";
 import { People } from "./People";
 
-type Tab = "overview" | "people" | "cinema" | "music" | "finds" | "moderation" | "settings";
+type Tab =
+  | "overview"
+  | "people"
+  | "cinema"
+  | "music"
+  | "finds"
+  | "moderation"
+  | "audit"
+  | "modules"
+  | "settings";
 
 const I = { fill: "none", stroke: "currentColor", strokeWidth: 2, viewBox: "0 0 24 24" } as const;
 
@@ -57,6 +69,20 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    id: "audit",
+    label: "Журнал",
+    icon: (
+      <svg {...I}><path d="M5 4h11l3 3v13H5z" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
+    ),
+  },
+  {
+    id: "modules",
+    label: "Модули",
+    icon: (
+      <svg {...I}><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /><path d="M17 14v6M14 17h6" /></svg>
+    ),
+  },
+  {
     id: "settings",
     label: "Настройки",
     icon: (
@@ -65,19 +91,41 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   },
 ];
 
+// бейдж-счётчик на пункте рельса для вкладки (null = без бейджа)
+function tabBadge(id: Tab, s: GuildSummary | null): number | null {
+  if (!s) return null;
+  if (id === "moderation") return s.bans || null;
+  if (id === "people") return s.frozen || null;
+  return null;
+}
+
 export function GuildView({
   guild,
   me,
+  tab: tabProp,
+  onTab,
   onBack,
   onLogout,
 }: {
   guild: Guild;
   me: Me;
+  tab: string | null;
+  onTab: (tab: string) => void;
   onBack: () => void;
   onLogout: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const tab: Tab = TABS.find((t) => t.id === tabProp)?.id ?? "overview";
   const active = TABS.find((t) => t.id === tab)!;
+  const setTab = onTab;
+
+  const [summary, setSummary] = useState<GuildSummary | null>(null);
+  useEffect(() => {
+    setSummary(null);
+    api
+      .summary(guild.id)
+      .then(setSummary)
+      .catch(() => setSummary(null)); // бейджи не критичны
+  }, [guild.id]);
 
   return (
     <div className="shell">
@@ -92,16 +140,24 @@ export function GuildView({
 
         <div className="rail-label">Меню</div>
         <nav className="rail-nav">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className={`rail-item${tab === t.id ? " active" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const badge = tabBadge(t.id, summary);
+            return (
+              <button
+                key={t.id}
+                className={`rail-item${tab === t.id ? " active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.icon}
+                {t.label}
+                {badge != null && (
+                  <span className={`rail-badge${t.id === "moderation" ? " alert" : ""}`}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="rail-user">
@@ -151,6 +207,8 @@ export function GuildView({
           {tab === "music" && <Music guild={guild} />}
           {tab === "finds" && <Finds guild={guild} />}
           {tab === "moderation" && <Moderation guild={guild} />}
+          {tab === "audit" && <Audit guild={guild} />}
+          {tab === "modules" && <Modules guild={guild} />}
           {tab === "settings" && <GuildSettings guild={guild} />}
         </div>
       </main>

@@ -38,6 +38,10 @@ class IMovieEntryRepository(ABC):
     async def count_listed(self, guild_id: int) -> int: ...
 
     @abstractmethod
+    async def count_watched(self, guild_id: int) -> int:
+        """Сколько фильмов на сервере в статусе watched — для снапшота."""
+
+    @abstractmethod
     async def count_proposed(self, guild_id: int, user_id: int) -> int:
         """Сколько фильмов предложил пользователь (в любом статусе)."""
 

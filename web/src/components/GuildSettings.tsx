@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Channel, Guild, SettingField as Field } from "../types";
+import { BotProfileCard } from "./BotProfileCard";
 import { ComplexSettings } from "./ComplexSettings";
 import { SettingField } from "./SettingField";
 
@@ -77,6 +78,9 @@ export function GuildSettings({ guild }: { guild: Guild }) {
       </p>
 
       {error && <div className="error-banner">{error}</div>}
+
+      {!error && <BotProfileCard guildId={guild.id} />}
+
       {!error && !fields && (
         <div className="center" style={{ minHeight: 200 }}>
           <div className="spinner" aria-label="Загрузка" />

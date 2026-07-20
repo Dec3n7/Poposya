@@ -197,6 +197,14 @@ class SqlAlchemyCollectionRepository(ICollectionRepository):
         rows = (await self._session.execute(stmt)).all()
         return [(user_id, tot, gif) for user_id, tot, gif in rows]
 
+    async def count_for_guild(self, guild_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(CollectionItemModel)
+            .where(CollectionItemModel.guild_id == guild_id)
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
 
 class SqlAlchemyFindAttemptRepository(IFindAttemptRepository):
     def __init__(self, session: AsyncSession):

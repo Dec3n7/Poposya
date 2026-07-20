@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { Ban, Guild } from "../types";
+import type { Ban, Guild, GuildWarn } from "../types";
 
 function fmtExpires(iso: string): string {
   const d = new Date(iso);
@@ -11,6 +11,45 @@ function fmtExpires(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+}
+
+function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const name = w.username ?? `ID ${w.user_id}`;
+
+  async function clear() {
+    setBusy(true);
+    try {
+      await api.clearWarns(guildId, w.user_id);
+      onDone();
+    } catch {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="cine-row">
+      <span className="cine-title">
+        {w.avatar ? (
+          <img className="leader-avatar sm" src={w.avatar} alt="" />
+        ) : (
+          <span className="leader-avatar sm fallback">{name.slice(0, 1).toUpperCase()}</span>
+        )}
+        {name}
+        <span className="badge">{w.count} ⚠️</span>
+      </span>
+      <span className="cine-side">
+        <span className="mono faint">последний {fmtDate(w.last_at)}</span>
+        <button className="btn ghost small" onClick={clear} disabled={busy}>
+          Сбросить
+        </button>
+      </span>
+    </div>
+  );
 }
 
 function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: () => void }) {
@@ -60,6 +99,7 @@ function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: (
 
 export function Moderation({ guild }: { guild: Guild }) {
   const [bans, setBans] = useState<Ban[] | null>(null);
+  const [warns, setWarns] = useState<GuildWarn[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
@@ -70,10 +110,15 @@ export function Moderation({ guild }: { guild: Guild }) {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить баны");
       });
+    api
+      .guildWarns(guild.id)
+      .then(setWarns)
+      .catch(() => setWarns([]));
   }
 
   useEffect(() => {
     setBans(null);
+    setWarns(null);
     setError(null);
     load();
   }, [guild.id]);
@@ -98,6 +143,17 @@ export function Moderation({ guild }: { guild: Guild }) {
           <div className="pad muted">Активных временных банов нет.</div>
         ) : (
           bans.map((b) => <BanRow key={b.user_id} guildId={guild.id} ban={b} onDone={load} />)
+        )}
+      </div>
+
+      <h2 className="section-title">С варнами</h2>
+      <div className="card leader-card">
+        {warns === null ? (
+          <div className="pad muted">Загрузка…</div>
+        ) : warns.length === 0 ? (
+          <div className="pad muted">Ни у кого нет активных варнов.</div>
+        ) : (
+          warns.map((w) => <WarnRow key={w.user_id} guildId={guild.id} w={w} onDone={load} />)
         )}
       </div>
     </div>

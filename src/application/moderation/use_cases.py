@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -55,6 +55,17 @@ class GetWarnsUseCase:
     async def execute(self, user_id: int, guild_id: int) -> list[Warn]:
         async with self._uow_factory() as uow:
             return await uow.warns.list(user_id, guild_id)
+
+
+class ListGuildWarnsUseCase:
+    """Кто на сервере сейчас с варнами: (user_id, число, последний_варн)."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int) -> Sequence[tuple[int, int, datetime]]:
+        async with self._uow_factory() as uow:
+            return await uow.warns.list_guild_counts(guild_id)
 
 
 class ClearWarnsUseCase:

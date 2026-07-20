@@ -14,6 +14,7 @@ from src.application.finds.use_cases import ClaimResult
 from src.config import Settings
 from src.domain.finds.catalog import RARITY_EMOJI, RARITY_LABELS, season_for_month
 from src.domain.finds.entities import NightFind, Rarity
+from src.infrastructure.discord.feature_flags import block_if_module_off
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,9 @@ class FindsCog(commands.Cog):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await block_if_module_off(interaction, self.settings, self.gs, "finds_enabled")
+
     def _roll_interval(self, guild_id: int) -> float:
         """Случайный интервал до следующей находки (секунды) по настройкам сервера."""
         lo = self._cfg(guild_id, "finds_min_interval_hours")
@@ -180,6 +184,8 @@ class FindsCog(commands.Cog):
             await asyncio.sleep(60)
             now = time.monotonic()
             for guild in self.bot.guilds:
+                if not self._cfg(guild.id, "finds_enabled"):
+                    continue  # модуль «Находки» выключен на сервере
                 nxt = self._next_spawn.get(guild.id)
                 if nxt is None:
                     self._next_spawn[guild.id] = now + self._roll_interval(guild.id)

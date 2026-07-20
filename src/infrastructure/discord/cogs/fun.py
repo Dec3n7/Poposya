@@ -15,6 +15,7 @@ from src.application.ai_chat.service import ChatService
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
+from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,10 @@ class FunCog(commands.Cog):
         self.gs = guild_settings
         self._reminder_task: asyncio.Task | None = None
         self._send_limiter = InMemoryRateLimiter()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # модуль «Развлечения» выключен на сервере -> команды не работают
+        return await block_if_module_off(interaction, self.settings, self.gs, "fun_enabled")
 
     def _names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
@@ -511,6 +516,9 @@ class FunCog(commands.Cog):
             try:
                 due = await self.activity.pop_due_reminders.execute(datetime.now(UTC))
                 for reminder in due:
+                    # модуль выключен на сервере -> напоминание не шлём
+                    if not flag_on(self.settings, self.gs, reminder.guild_id, "fun_enabled"):
+                        continue
                     user = self.bot.get_user(reminder.user_id)
                     if user is None:
                         try:

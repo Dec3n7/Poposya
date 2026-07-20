@@ -4,15 +4,18 @@ import { ApiError, api } from "./api";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildView } from "./components/GuildView";
 import { Login } from "./components/Login";
-import type { Guild, Me } from "./types";
+import { useHashRoute } from "./route";
+import type { Me } from "./types";
 
 type Status = "loading" | "anon" | "ready" | "error";
 
 export default function App() {
   const [status, setStatus] = useState<Status>("loading");
   const [me, setMe] = useState<Me | null>(null);
-  const [guild, setGuild] = useState<Guild | null>(null);
   const [error, setError] = useState("");
+  const route = useHashRoute();
+  // выбранный сервер выводится из URL (переживает F5, шарится ссылкой)
+  const guild = me?.guilds.find((g) => g.id === route.guildId) ?? null;
 
   useEffect(() => {
     api
@@ -35,7 +38,7 @@ export default function App() {
       await api.logout();
     } finally {
       setMe(null);
-      setGuild(null);
+      route.setGuildId(null);
       setStatus("anon");
     }
   }
@@ -64,7 +67,14 @@ export default function App() {
   // сервер выбран — полноэкранная оболочка с сайдбаром
   if (guild && me) {
     return (
-      <GuildView guild={guild} me={me} onBack={() => setGuild(null)} onLogout={logout} />
+      <GuildView
+        guild={guild}
+        me={me}
+        tab={route.tab}
+        onTab={route.setTab}
+        onBack={() => route.setGuildId(null)}
+        onLogout={logout}
+      />
     );
   }
 
@@ -83,7 +93,7 @@ export default function App() {
       </header>
 
       <main className="container">
-        <GuildPicker guilds={me?.guilds ?? []} onPick={setGuild} />
+        <GuildPicker guilds={me?.guilds ?? []} onPick={(g) => route.setGuildId(g.id)} />
       </main>
     </div>
   );

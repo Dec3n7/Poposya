@@ -51,6 +51,8 @@ def build_root_container(settings: Settings) -> RootContainer:
         TryMarkAlbumPostUseCase,
     )
     from src.application.ai_chat.service import AIQueue, ChatService
+    from src.application.message_activity.use_cases import RecordMessageActivityUseCase
+    from src.application.metrics.use_cases import RecordDailySnapshotUseCase
     from src.application.moderation.use_cases import (
         ClearWarnsUseCase,
         GetWarnsUseCase,
@@ -264,6 +266,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         SavePlaylistUseCase,
         ToggleLikeUseCase,
     )
+    from src.application.player.use_cases import SavePlayerStateUseCase
     from src.infrastructure.audio.cache import AudioCache
 
     audio_cache = (
@@ -292,6 +295,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         list_liked=ListLikedUseCase(uow_factory),
         remove_liked=RemoveLikedUseCase(uow_factory),
         resolve_liked=ResolveLikedUseCase(uow_factory, audio_source),
+        save_player_state=SavePlayerStateUseCase(uow_factory),
     )
 
     moderation = ModerationContainer(
@@ -319,6 +323,8 @@ def build_root_container(settings: Settings) -> RootContainer:
         load_voice_progress=LoadVoiceProgressUseCase(uow_factory),
         save_voice_progress=SaveVoiceProgressUseCase(uow_factory),
         get_voice_hours=GetVoiceHoursUseCase(uow_factory),
+        record_snapshot=RecordDailySnapshotUseCase(uow_factory),
+        record_message_activity=RecordMessageActivityUseCase(uow_factory),
     )
 
     from src.application.finds.use_cases import (

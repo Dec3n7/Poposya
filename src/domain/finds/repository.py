@@ -56,6 +56,10 @@ class ICollectionRepository(ABC):
         """Топ по числу находок: (user_id, всего предметов, из них подарено).
         По убыванию количества."""
 
+    @abstractmethod
+    async def count_for_guild(self, guild_id: int) -> int:
+        """Всего собранных предметов на сервере (по всем участникам) — для снапшота."""
+
 
 class IFindAttemptRepository(ABC):
     """Попытки походов и прогулок: кулдауны и история."""
