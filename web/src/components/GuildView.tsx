@@ -11,10 +11,12 @@ import { Moderation } from "./Moderation";
 import { Modules } from "./Modules";
 import { Music } from "./Music";
 import { People } from "./People";
+import { Roles } from "./Roles";
 
 type Tab =
   | "overview"
   | "people"
+  | "roles"
   | "cinema"
   | "music"
   | "finds"
@@ -38,6 +40,13 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
     label: "Люди",
     icon: (
       <svg {...I}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3 2.9-4.5 5.5-4.5s4.9 1.5 5.5 4.5" /><path d="M16 5.5a3 3 0 0 1 0 5.4M17.5 14.4c2 .6 3.4 2 3.8 4.1" /></svg>
+    ),
+  },
+  {
+    id: "roles",
+    label: "Роли",
+    icon: (
+      <svg {...I}><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-6.2-6.2a2 2 0 0 1-.6-1.4V6a2 2 0 0 1 2-2h6.8a2 2 0 0 1 1.4.6l6.6 6.6a2 2 0 0 1 0 2.2Z" /><circle cx="8.5" cy="8.5" r="1.4" /></svg>
     ),
   },
   {
@@ -203,6 +212,7 @@ export function GuildView({
 
           {tab === "overview" && <Dashboard guild={guild} />}
           {tab === "people" && <People guild={guild} />}
+          {tab === "roles" && <Roles guild={guild} />}
           {tab === "cinema" && <Cinema guild={guild} />}
           {tab === "music" && <Music guild={guild} />}
           {tab === "finds" && <Finds guild={guild} />}

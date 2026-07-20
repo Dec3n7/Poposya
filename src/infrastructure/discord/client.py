@@ -108,11 +108,13 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.config import ConfigCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
+        from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
         from src.infrastructure.discord.cogs.staykick import StayKickCog
         from src.infrastructure.discord.cogs.tempvoice import TempVoiceCog
 
         await self.add_cog(LogRelayCog(self, self.container.settings))
+        await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(ConfigCog(self, self.container.guild_settings))
         await self.add_cog(StayKickCog(self, self.container.staykick, self.container.settings, gs))
         await self.add_cog(

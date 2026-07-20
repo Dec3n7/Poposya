@@ -9,6 +9,7 @@ from src.application.finds.di import FindsContainer
 from src.application.moderation.di import ModerationContainer
 from src.application.music.di import MusicContainer
 from src.application.relationship.di import RelationshipContainer
+from src.application.roles.di import RolesContainer
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
@@ -29,6 +30,7 @@ class RootContainer:
     cinema: CinemaContainer
     staykick: object  # StayKickContainer
     tempvoice: TempVoiceContainer
+    roles: RolesContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
     session_factory: object  # async_sessionmaker; командному мосту в main
@@ -449,6 +451,20 @@ def build_root_container(settings: Settings) -> RootContainer:
         list_channels=ListTempChannelsUseCase(uow_factory),
     )
 
+    from src.application.roles.use_cases import (
+        DeleteRoleUseCase,
+        ListRolesUseCase,
+        SyncGuildRolesUseCase,
+        UpsertRoleUseCase,
+    )
+
+    roles = RolesContainer(
+        sync_guild=SyncGuildRolesUseCase(uow_factory),
+        upsert_role=UpsertRoleUseCase(uow_factory),
+        delete_role=DeleteRoleUseCase(uow_factory),
+        list_roles=ListRolesUseCase(uow_factory),
+    )
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -461,6 +477,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         cinema=cinema,
         staykick=staykick,
         tempvoice=tempvoice,
+        roles=roles,
         guild_settings=guild_settings,
         engine=engine,
         session_factory=session_factory,

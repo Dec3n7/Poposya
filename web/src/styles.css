@@ -2057,3 +2057,101 @@ a {
 .heatmap-note {
   margin-top: 10px;
 }
+
+/* --- вкладка «Роли» (зеркало, read-only) --- */
+.roles-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.roles-hint {
+  margin: var(--sp-2) 0 var(--sp-4);
+  max-width: 68ch;
+}
+.roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.role-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+.role-row.locked {
+  opacity: 0.55; /* выше роли бота или managed — вне досягаемости */
+}
+.role-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.role-swatch.empty {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--fg-faint),
+    var(--fg-faint) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  opacity: 0.5;
+}
+.role-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.role-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.role-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--fg-dim);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  white-space: nowrap;
+}
+.role-badge.admin {
+  color: #fff;
+  background: var(--danger);
+  letter-spacing: 0.04em;
+}
+.role-badge.lock {
+  background: transparent;
+  padding: 2px 2px;
+}
+/* линия бота: всё ниже — доступно для управления */
+.bot-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-hover);
+}
+.bot-line::before,
+.bot-line::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-ring), transparent);
+}

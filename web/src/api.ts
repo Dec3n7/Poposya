@@ -19,6 +19,7 @@ import type {
   PersonListItem,
   PlaylistDetail,
   PlaylistItem,
+  RolesView,
   SettingField,
   Trends,
   Warn,
@@ -142,6 +143,7 @@ export const api = {
     }),
   finds: (guildId: string): Promise<FindsOverview> =>
     req<FindsOverview>(`/api/guilds/${guildId}/finds/overview`),
+  roles: (guildId: string): Promise<RolesView> => req<RolesView>(`/api/guilds/${guildId}/roles`),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>

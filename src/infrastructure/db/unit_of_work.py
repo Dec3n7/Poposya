@@ -42,6 +42,7 @@ from src.infrastructure.db.repositories.relationship import (
     SqlAlchemyRelationshipRepository,
     SqlAlchemySecretRoomRepository,
 )
+from src.infrastructure.db.repositories.roles import SqlAlchemyRoleRepository
 from src.infrastructure.db.repositories.staykick import SqlAlchemyPendingKickRepository
 from src.infrastructure.db.repositories.tempvoice import SqlAlchemyTempVoiceRepository
 from src.infrastructure.events.outbox import outbox_row_for
@@ -90,6 +91,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.audit = SqlAlchemyAuditRepository(self._session)
         self.player_state = SqlAlchemyPlayerStateRepository(self._session)
         self.bot_profile = SqlAlchemyBotProfileRepository(self._session)
+        self.roles = SqlAlchemyRoleRepository(self._session)
         self._events = []
         self._committed = False
         return self

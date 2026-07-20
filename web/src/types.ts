@@ -299,3 +299,26 @@ export interface PersonDetail {
   birthday_month: number | null;
   last_dialog_at: string | null;
 }
+
+// зеркало роли Discord (бот держит актуальным). permissions — строка: битовое
+// поле не влезает в JS-number. editable считает бэкенд (ниже роли бота, не
+// managed/@everyone) — фронт по нему рисует границу и блокировки.
+export interface GuildRole {
+  id: string;
+  name: string;
+  color: number; // 0 = без цвета
+  hoist: boolean;
+  mentionable: boolean;
+  position: number;
+  managed: boolean;
+  permissions: string;
+  is_default: boolean; // @everyone
+  editable: boolean;
+}
+
+export interface RolesView {
+  bot_top_position: number | null;
+  bot_user_id: string | null;
+  synced_at: string | null; // ISO; null — зеркало ещё не синхронизировано
+  roles: GuildRole[]; // уже отсортированы по позиции (сверху вниз)
+}
