@@ -35,3 +35,15 @@ class GuildRoleMetaModel(Base):
     bot_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     bot_top_position: Mapped[int] = mapped_column(Integer, nullable=False)
     synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class MemberRoleModel(Base):
+    """Кто носит какую роль (кроме @everyone). Строка на пару участник×роль;
+    бот держит актуальной событиями участников. Нужна для счётчиков носителей и
+    выдачи/снятия ролей из панели."""
+
+    __tablename__ = "member_roles"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    role_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

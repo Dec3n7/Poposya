@@ -21,6 +21,12 @@ export function roleColor(index: number | null): string {
   return ROLE_COLORS[Math.min(Math.max(index, 0), ROLE_COLORS.length - 1)];
 }
 
+// цвет Discord-роли из int -> #rrggbb; 0 = «без цвета» (null -> нейтральный)
+export function discordColor(c: number): string | null {
+  if (!c) return null;
+  return `#${c.toString(16).padStart(6, "0")}`;
+}
+
 // давность последнего диалога в целых днях; null -> null (никогда/неизвестно)
 export function silentDays(iso: string | null): number | null {
   if (!iso) return null;

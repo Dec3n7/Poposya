@@ -314,6 +314,7 @@ export interface GuildRole {
   permissions: string;
   is_default: boolean; // @everyone
   editable: boolean;
+  holders: number | null; // носителей на сервере; null — не считали (карточка человека)
 }
 
 export interface RolesView {
@@ -321,4 +322,11 @@ export interface RolesView {
   bot_user_id: string | null;
   synced_at: string | null; // ISO; null — зеркало ещё не синхронизировано
   roles: GuildRole[]; // уже отсортированы по позиции (сверху вниз)
+}
+
+// роли одного участника: что носит (held) и что можно выдать (assignable —
+// доступные боту и ещё не выданные)
+export interface MemberRoles {
+  held: GuildRole[];
+  assignable: GuildRole[];
 }

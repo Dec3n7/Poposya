@@ -29,3 +29,25 @@ class IRoleRepository(ABC):
     @abstractmethod
     async def get_meta(self, guild_id: int) -> RoleMeta | None:
         """Мета сервера или None, если синхронизации ещё не было."""
+
+    # --- носители ролей (member_roles) ---
+
+    @abstractmethod
+    async def replace_member_roles(self, guild_id: int, holders: dict[int, list[int]]) -> None:
+        """Полная пере-синхронизация носителей сервера (бэкфилл): user_id -> его role_id."""
+
+    @abstractmethod
+    async def set_member_roles(self, guild_id: int, user_id: int, role_ids: list[int]) -> None:
+        """Роли одного участника изменились — переложить его строки."""
+
+    @abstractmethod
+    async def delete_member(self, guild_id: int, user_id: int) -> None:
+        """Участник вышел — убрать все его строки."""
+
+    @abstractmethod
+    async def holder_counts(self, guild_id: int) -> dict[int, int]:
+        """role_id -> число носителей на сервере."""
+
+    @abstractmethod
+    async def member_role_ids(self, guild_id: int, user_id: int) -> list[int]:
+        """id ролей участника из зеркала."""

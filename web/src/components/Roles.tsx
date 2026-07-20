@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { discordColor } from "../roles";
 import type { Guild, GuildRole, RolesView } from "../types";
-
-// int цвета Discord -> #rrggbb; 0 = «без цвета» (null -> нейтральный свотч)
-function hexColor(c: number): string | null {
-  if (!c) return null;
-  return `#${c.toString(16).padStart(6, "0")}`;
-}
 
 // битовое поле прав не влезает в number — сравниваем через BigInt.
 // 0x8 = Administrator: единственное право, которое стоит подсветить даже в
@@ -32,7 +27,7 @@ function syncedAgo(iso: string | null): string {
 }
 
 function RoleRow({ r }: { r: GuildRole }) {
-  const color = hexColor(r.color);
+  const color = discordColor(r.color);
   return (
     <div className={`role-row${r.editable ? "" : " locked"}`}>
       <span
@@ -42,6 +37,9 @@ function RoleRow({ r }: { r: GuildRole }) {
       />
       <span className="role-row-name" style={color ? { color } : undefined}>
         {r.name}
+      </span>
+      <span className="role-holders faint small" title="носителей на сервере">
+        {r.is_default ? "—" : (r.holders ?? 0)}
       </span>
       <span className="role-badges">
         {hasAdmin(r.permissions) && (

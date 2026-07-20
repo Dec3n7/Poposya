@@ -12,6 +12,7 @@ import type {
   GuildSummary,
   GuildWarn,
   Me,
+  MemberRoles,
   MovieDetail,
   NowPlaying,
   Overview,
@@ -144,6 +145,17 @@ export const api = {
   finds: (guildId: string): Promise<FindsOverview> =>
     req<FindsOverview>(`/api/guilds/${guildId}/finds/overview`),
   roles: (guildId: string): Promise<RolesView> => req<RolesView>(`/api/guilds/${guildId}/roles`),
+  memberRoles: (guildId: string, userId: string): Promise<MemberRoles> =>
+    req<MemberRoles>(`/api/guilds/${guildId}/roles/members/${userId}`),
+  assignRole: (guildId: string, userId: string, roleId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/members/${userId}`, {
+      method: "POST",
+      body: JSON.stringify({ role_id: roleId }),
+    }),
+  unassignRole: (guildId: string, userId: string, roleId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/members/${userId}/${roleId}`, {
+      method: "DELETE",
+    }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>

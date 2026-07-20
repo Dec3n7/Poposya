@@ -454,7 +454,11 @@ def build_root_container(settings: Settings) -> RootContainer:
     from src.application.roles.use_cases import (
         DeleteRoleUseCase,
         ListRolesUseCase,
+        MemberRolesUseCase,
+        RemoveMemberUseCase,
+        SetMemberRolesUseCase,
         SyncGuildRolesUseCase,
+        SyncMembersUseCase,
         UpsertRoleUseCase,
     )
 
@@ -463,6 +467,10 @@ def build_root_container(settings: Settings) -> RootContainer:
         upsert_role=UpsertRoleUseCase(uow_factory),
         delete_role=DeleteRoleUseCase(uow_factory),
         list_roles=ListRolesUseCase(uow_factory),
+        sync_members=SyncMembersUseCase(uow_factory),
+        set_member_roles=SetMemberRolesUseCase(uow_factory),
+        remove_member=RemoveMemberUseCase(uow_factory),
+        member_roles=MemberRolesUseCase(uow_factory),
     )
 
     return RootContainer(

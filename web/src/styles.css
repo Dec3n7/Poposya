@@ -2155,3 +2155,74 @@ a {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-ring), transparent);
 }
+.role-holders {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+
+/* --- роли Discord в карточке человека (выдача/снятие) --- */
+.mrole-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: var(--sp-2) 0;
+}
+.mrole-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  font-size: 13px;
+}
+.mrole-chip.locked {
+  opacity: 0.6;
+  padding-right: 9px; /* нет кнопки × */
+}
+.mrole-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  flex: none;
+}
+.mrole-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mrole-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.mrole-x:hover {
+  background: rgba(255, 122, 145, 0.16);
+  color: var(--danger);
+}
+.mrole-x:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mrole-x svg {
+  width: 12px;
+  height: 12px;
+}
+.mrole-add {
+  margin-top: var(--sp-2);
+}

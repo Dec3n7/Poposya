@@ -204,6 +204,47 @@ class DiscordCommandExecutor:
         parts = [k for k in ("nick", "avatar", "banner") if k in kwargs]
         return "Профиль обновлён: " + ", ".join(parts) + "."
 
+    # --- роли: выдача/снятие участнику ---
+
+    def _manageable_role(self, guild: discord.Guild, role_id: int) -> discord.Role:
+        """Роль, которой боту можно управлять. Проверки повторяют флаг editable
+        панели, но настоящая граница — здесь: панель отдельный процесс и доверять
+        её вводу нельзя."""
+        role = guild.get_role(role_id)
+        if role is None:
+            raise CommandError("Роль не найдена.")
+        if role.is_default():
+            raise CommandError("@everyone нельзя выдавать или снимать.")
+        if role.managed:
+            raise CommandError("Это роль интеграции/бустов — Discord не даёт ею управлять.")
+        if role >= guild.me.top_role:
+            raise CommandError("Эта роль выше моей — не могу ею управлять.")
+        return role
+
+    async def _role_assign(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        member = await self._member(guild, int(p["user_id"]))
+        if role in member.roles:
+            return f"Роль «{role.name}» уже есть."
+        try:
+            await member.add_roles(role, reason="Панель: выдача роли")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+        return f"Выдал роль «{role.name}»."
+
+    async def _role_unassign(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        member = await self._member(guild, int(p["user_id"]))
+        if role not in member.roles:
+            return f"Роли «{role.name}» и так нет."
+        try:
+            await member.remove_roles(role, reason="Панель: снятие роли")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+        return f"Снял роль «{role.name}»."
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -215,4 +256,6 @@ _HANDLERS = {
     "music.skip": DiscordCommandExecutor._skip,
     "music.stop": DiscordCommandExecutor._stop,
     "profile.apply": DiscordCommandExecutor._profile_apply,
+    "role.assign": DiscordCommandExecutor._role_assign,
+    "role.unassign": DiscordCommandExecutor._role_unassign,
 }

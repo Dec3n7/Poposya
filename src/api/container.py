@@ -44,7 +44,7 @@ from src.application.relationship.use_cases import (
     ToggleFreezeUseCase,
     UpcomingBirthdaysUseCase,
 )
-from src.application.roles.use_cases import ListRolesUseCase
+from src.application.roles.use_cases import ListRolesUseCase, MemberRolesUseCase
 from src.config import Settings
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.db.session import create_engine, create_session_factory
@@ -98,8 +98,9 @@ class ApiContainer:
     # пер-серверный профиль бота (ник/аватар/баннер)
     get_bot_profile: GetBotProfileUseCase
     set_bot_profile: SetBotProfileUseCase
-    # роли: зеркало, которое бот держит актуальным (read-only на этом этапе)
+    # роли: зеркало, которое бот держит актуальным; выдача/снятие идёт через мост
     list_roles: ListRolesUseCase
+    member_roles: MemberRolesUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -167,5 +168,6 @@ def assemble_container(
         get_bot_profile=GetBotProfileUseCase(uow_factory),
         set_bot_profile=SetBotProfileUseCase(uow_factory),
         list_roles=ListRolesUseCase(uow_factory),
+        member_roles=MemberRolesUseCase(uow_factory),
         settings_listener=settings_listener,
     )
