@@ -15,6 +15,11 @@
   --accent-hover: #a78bfa;
   --accent-soft: rgba(167, 139, 250, 0.16);
   --accent-ring: rgba(167, 139, 250, 0.5);
+  /* заливка под белый текст: #8b5cf6 с белым даёт лишь 4.23:1 (ниже AA 4.5).
+     Глубже на тон — 5.7:1; hover темнеет до 7.1:1 (тоже проходит). Светлый
+     --accent остаётся для контуров/колец/свечения, где текста нет. */
+  --accent-strong: #7c3aed;
+  --accent-strong-hover: #6d28d9;
   --magenta: #e879f9;
   --success: #46e0a0;
   --danger: #ff7a91;
@@ -53,15 +58,23 @@ body {
   margin: 0;
   font-family: var(--font);
   color: var(--fg);
-  /* ночной Токио под стеклом: фото + ровное затемнение 40% (выбор из примерки) */
-  background:
-    linear-gradient(rgba(6, 7, 13, 0.4), rgba(6, 7, 13, 0.4)),
-    url("/webpoposya.png") center / cover no-repeat,
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg); /* сплошная подложка; фото — в фиксированном ::before */
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+/* ночной Токио под стеклом: фото + ровное затемнение 40% (выбор из примерки).
+   Отдельный fixed-слой вместо background-attachment: fixed — тот на iOS Safari
+   не работает (скачет/подтормаживает) и заставляет перерисовывать фон при
+   скролле на слабых машинах. z-index:-1 держит его за контентом. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(rgba(6, 7, 13, 0.4), rgba(6, 7, 13, 0.4)),
+    url("/webpoposya.png") center / cover no-repeat;
 }
 
 a {
@@ -130,6 +143,12 @@ a {
 .btn {
   appearance: none;
   cursor: pointer;
+  /* inline-flex + центрирование: одиночный контрол выглядит как раньше, но
+     теперь min-height (тач-таргеты ниже) центрирует текст/иконку по вертикали */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
   font: inherit;
   font-weight: 600;
   color: var(--fg);
@@ -153,11 +172,11 @@ a {
   outline-offset: 2px;
 }
 .btn.primary {
-  background: var(--accent);
+  background: var(--accent-strong);
   border-color: transparent;
 }
 .btn.primary:hover {
-  background: var(--accent-hover);
+  background: var(--accent-strong-hover);
 }
 .btn.ghost {
   background: transparent;
@@ -183,6 +202,17 @@ a {
 .btn.danger:hover {
   border-color: #ff6b81;
   background: rgba(255, 107, 129, 0.1);
+}
+/* тач-таргеты: на сенсорных экранах мелкие кнопки дотягиваем до 44px (WCAG/
+   iOS-минимум). На мыши размер не трогаем — плотный дашборд остаётся плотным.
+   Иконочные (единственный ребёнок — svg) добираем и по ширине до квадрата. */
+@media (pointer: coarse) {
+  .btn.small {
+    min-height: 44px;
+  }
+  .btn.small:has(> svg:only-child) {
+    min-width: 44px;
+  }
 }
 
 /* --- misc --- */
@@ -1904,7 +1934,7 @@ a {
 }
 .seg-item.active {
   color: #fff;
-  background: var(--accent);
+  background: var(--accent-strong); /* белый текст ≥4.5:1 (см. --accent-strong) */
 }
 .seg-item:focus-visible {
   outline: 2px solid var(--accent-ring);
@@ -1948,7 +1978,7 @@ a {
 }
 .donut-sub {
   fill: var(--fg-faint);
-  font-size: 10px;
+  font-size: 11px;
   text-anchor: middle;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2001,7 +2031,7 @@ a {
   grid-column: 1;
 }
 .heatmap-hour {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fg-faint);
   text-align: center;
   line-height: 1;
