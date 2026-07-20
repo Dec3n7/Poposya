@@ -2331,6 +2331,103 @@ a {
   margin-left: auto;
 }
 
+/* редактор прав роли */
+.perms-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-ring);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.perms-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.perms-admin-lock {
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 107, 129, 0.35);
+  background: rgba(255, 107, 129, 0.1);
+  color: var(--fg-dim);
+}
+.perms-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.perms-cat-head {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.perms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 12px;
+}
+.perm-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+.perm-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+.perm-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.perm-item:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
+}
+/* тумблер внутри перм-кнопки — чисто визуальный (клик ловит кнопка) */
+.perm-item .toggle {
+  display: inline-block;
+  pointer-events: none;
+}
+.perm-label {
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.perm-item.danger .perm-label {
+  color: color-mix(in srgb, #ff6b81 70%, var(--fg));
+}
+.perm-warn {
+  font-size: 11px;
+}
+.perms-confirm {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 107, 129, 0.45);
+  background: rgba(255, 107, 129, 0.12);
+  line-height: 1.45;
+}
+.perms-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
 /* --- роли Discord в карточке человека (выдача/снятие) --- */
 .mrole-chips {
   display: flex;

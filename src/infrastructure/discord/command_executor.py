@@ -341,6 +341,32 @@ class DiscordCommandExecutor:
             raise CommandError("Нет права Manage Roles.") from exc
         return "Порядок ролей обновлён."
 
+    async def _role_permissions(self, guild: discord.Guild, command: Command) -> str:
+        """Права роли с ограждениями. Здесь — НАСТОЯЩАЯ граница (панель отдельный
+        процесс): Administrator панель не трогает никогда (бит берём из текущего
+        значения), а права, которых нет у самого бота, оставляем как есть —
+        Discord всё равно не даст их выдать, а так ещё и без лишнего 403."""
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        requested = discord.Permissions(int(p["permissions"]))
+        current = role.permissions
+        bot_perms = guild.me.guild_permissions
+        result = discord.Permissions()
+        for name, bot_has in bot_perms:
+            if name == "administrator":
+                setattr(result, name, current.administrator)  # панель admin не меняет
+            elif bot_has:
+                setattr(result, name, getattr(requested, name))
+            else:
+                setattr(result, name, getattr(current, name))  # боту недоступно — как есть
+        if result.value == current.value:
+            return "Права не изменились."
+        try:
+            await role.edit(permissions=result, reason="Панель: права роли")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Manage Roles (или роль выше моей).") from exc
+        return f"Обновил права роли «{role.name}»."
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -358,4 +384,5 @@ _HANDLERS = {
     "role.edit": DiscordCommandExecutor._role_edit,
     "role.delete": DiscordCommandExecutor._role_delete,
     "role.reorder": DiscordCommandExecutor._role_reorder,
+    "role.permissions": DiscordCommandExecutor._role_permissions,
 }

@@ -332,10 +332,31 @@ export interface MemberRoles {
 }
 
 // поля для создания/правки роли. color: int 0..0xFFFFFF или null (без цвета).
-// Права роли (permissions) намеренно отсутствуют — редактирование на этапе 2.
+// Права роли (permissions) редактируются отдельным экраном (см. PermCatalog).
 export interface RoleInput {
   name: string;
   color: number | null;
   hoist: boolean;
   mentionable: boolean;
+}
+
+// каталог прав Discord для редактора. bit/маски — строки: битовое поле не
+// влезает в JS-number, работаем через BigInt.
+export interface PermDef {
+  name: string;
+  bit: string;
+  label: string;
+  dangerous: boolean; // включение требует подтверждения
+}
+
+export interface PermCategory {
+  key: string;
+  label: string;
+  perms: PermDef[];
+}
+
+export interface PermCatalog {
+  categories: PermCategory[];
+  bot_mask: string; // права, доступные самому боту (остальные тумблеры гасим)
+  admin_bit: string; // бит Administrator — показываем как замок, не редактируем
 }

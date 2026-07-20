@@ -14,6 +14,7 @@ from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
+from src.api.permissions_catalog import ADMINISTRATOR_BIT, all_catalog_bits, catalog_json
 from src.api.security import Session
 from src.domain.roles.entities import GuildRole
 
@@ -41,6 +42,10 @@ class EditRoleBody(BaseModel):
 
 class ReorderBody(BaseModel):
     order: list[str]  # id ролей сверху вниз (первая — выше всех)
+
+
+class PermissionsBody(BaseModel):
+    permissions: str  # итоговое битовое поле строкой (не влезает в JS-number)
 
 
 def _editable(role: GuildRole, guild_id: int, bot_top: int | None) -> bool:
@@ -78,6 +83,35 @@ async def list_roles(
         "bot_user_id": str(meta.bot_user_id) if meta is not None else None,
         "synced_at": meta.synced_at.isoformat() if meta is not None else None,
         "roles": [_role_json(r, guild_id, bot_top, counts.get(r.role_id, 0)) for r in ordered],
+    }
+
+
+@router.get("/permissions")
+async def permissions_catalog(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Каталог редактируемых прав + маска «что доступно самому боту» (права, что
+    есть у ролей бота или @everyone; при Administrator у бота — весь каталог).
+    Панель по маске гасит недоступные тумблеры. Administrator в каталог не входит
+    как редактируемый — бот его не выдаёт."""
+    roles, meta, _counts = await container.list_roles.execute(guild_id)
+    bot_mask = 0
+    if meta is not None:
+        by_id = {r.role_id: r for r in roles}
+        everyone = by_id.get(guild_id)  # @everyone: права есть у всех, включая бота
+        if everyone is not None:
+            bot_mask |= everyone.permissions
+        for rid in await container.member_roles.execute(guild_id, meta.bot_user_id):
+            r = by_id.get(rid)
+            if r is not None:
+                bot_mask |= r.permissions
+        if bot_mask & ADMINISTRATOR_BIT:
+            bot_mask = all_catalog_bits() | ADMINISTRATOR_BIT
+    return {
+        "categories": catalog_json(),
+        "bot_mask": str(bot_mask),
+        "admin_bit": str(ADMINISTRATOR_BIT),
     }
 
 
@@ -150,6 +184,27 @@ async def delete_role(
     await record_audit(
         container, guild_id, session.user_id, "role.delete",
         target=role_id, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.put("/{role_id}/permissions")
+async def set_permissions(
+    role_id: int,
+    body: PermissionsBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    # ограждения (Administrator, недоступные боту права) применяет бот —
+    # тут только доставляем желаемое битовое поле через мост
+    cmd = await run_command(
+        container, guild_id, "role.permissions",
+        {"role_id": str(role_id), "permissions": body.permissions}, session.user_id,
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "role.permissions",
+        target=role_id, details={"permissions": body.permissions}, result=cmd.get("status"),
     )
     return cmd
 

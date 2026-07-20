@@ -16,6 +16,7 @@ import type {
   MovieDetail,
   NowPlaying,
   Overview,
+  PermCatalog,
   PersonDetail,
   PersonListItem,
   PlaylistDetail,
@@ -173,6 +174,17 @@ export const api = {
     req<CommandResult>(`/api/guilds/${guildId}/roles/order`, {
       method: "PUT",
       body: JSON.stringify({ order }),
+    }),
+  rolePermissions: (guildId: string): Promise<PermCatalog> =>
+    req<PermCatalog>(`/api/guilds/${guildId}/roles/permissions`),
+  setRolePermissions: (
+    guildId: string,
+    roleId: string,
+    permissions: string,
+  ): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/${roleId}/permissions`, {
+      method: "PUT",
+      body: JSON.stringify({ permissions }),
     }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),

@@ -8,10 +8,12 @@ import {
   IconGrip,
   IconPencil,
   IconPlus,
+  IconShield,
   IconTrash,
 } from "../icons";
 import { discordColor } from "../roles";
 import type { CommandResult, Guild, GuildRole, RoleInput, RolesView } from "../types";
+import { RolePermsEditor } from "./RolePerms";
 
 // битовое поле прав не влезает в number — сравниваем через BigInt.
 // 0x8 = Administrator: единственное право, которое стоит подсветить даже в
@@ -216,7 +218,7 @@ function RoleEditor({
               <IconTrash /> Удалить
             </button>
           ))}
-        <span className="role-editor-hint faint small">Права роли — отдельным этапом.</span>
+        <span className="role-editor-hint faint small">Права роли — по кнопке щита 🛡.</span>
       </div>
     </div>
   );
@@ -231,6 +233,7 @@ export function Roles({ guild }: { guild: Guild }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [permsId, setPermsId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -241,6 +244,7 @@ export function Roles({ guild }: { guild: Guild }) {
     setMsg(null);
     setSnapshot(null);
     setEditingId(null);
+    setPermsId(null);
     setCreating(false);
     api
       .roles(guild.id)
@@ -277,7 +281,8 @@ export function Roles({ guild }: { guild: Guild }) {
   const orderDirty = snapshot !== null;
   const editableIds = roles.filter((r) => r.editable).map((r) => r.id);
   const canReorder = !orderDirty ? editableIds.length >= 2 : true;
-  const rowsLocked = editingId !== null || creating; // редактор открыт — порядок не трогаем
+  // любой редактор открыт — порядок не трогаем
+  const rowsLocked = editingId !== null || permsId !== null || creating;
 
   // --- порядок ---
 
@@ -426,9 +431,9 @@ export function Roles({ guild }: { guild: Guild }) {
         </div>
       </div>
       <p className="muted small roles-hint">
-        Всё, что ниже линии Попоси, можно переименовать, перекрасить, переставить и удалить.
-        Перетаскивай за ручку или жми стрелки — порядок применится по кнопке. Права роли остаются
-        как есть (их редактирование появится позже).
+        Всё, что ниже линии Попоси, можно переименовать, перекрасить, переставить, удалить и
+        настроить права (щит). Перетаскивай за ручку или жми стрелки — порядок применится по
+        кнопке. Administrator панель не выдаёт, опасные права просят подтверждения.
       </p>
 
       {creating && (
@@ -486,6 +491,28 @@ export function Roles({ guild }: { guild: Guild }) {
                     onSubmit={(v) => doEdit(r, v)}
                     onCancel={() => setEditingId(null)}
                     onDelete={() => doDelete(r)}
+                  />
+                </div>
+              );
+            }
+            if (permsId === r.id) {
+              return (
+                <div key={r.id}>
+                  {i === lineBefore && (
+                    <div className="bot-line">
+                      <span>линия Попоси · ниже — доступно боту</span>
+                    </div>
+                  )}
+                  <RolePermsEditor
+                    guildId={guild.id}
+                    role={r}
+                    onClose={() => setPermsId(null)}
+                    onSaved={(permissions) => {
+                      setRoles((rs) =>
+                        rs.map((x) => (x.id === r.id ? { ...x, permissions } : x)),
+                      );
+                      setPermsId(null);
+                    }}
                   />
                 </div>
               );
@@ -563,6 +590,7 @@ export function Roles({ guild }: { guild: Guild }) {
                         className="icon-btn"
                         onClick={() => {
                           setEditingId(r.id);
+                          setPermsId(null);
                           setCreating(false);
                         }}
                         disabled={busy || orderDirty}
@@ -570,6 +598,19 @@ export function Roles({ guild }: { guild: Guild }) {
                         title="Редактировать"
                       >
                         <IconPencil />
+                      </button>
+                      <button
+                        className="icon-btn"
+                        onClick={() => {
+                          setPermsId(r.id);
+                          setEditingId(null);
+                          setCreating(false);
+                        }}
+                        disabled={busy || orderDirty}
+                        aria-label={`Права роли ${r.name}`}
+                        title="Права роли"
+                      >
+                        <IconShield />
                       </button>
                     </span>
                   )}
