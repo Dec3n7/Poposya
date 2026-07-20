@@ -978,6 +978,65 @@ a {
   justify-content: flex-end;
 }
 
+/* --- модальное подтверждение (ConfirmDialog, замена window.confirm) --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100; /* выше меню дропдауна (1000) */
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  padding: var(--sp-4);
+  animation: modal-fade 0.15s var(--ease);
+}
+.modal-box {
+  /* сплошной фон: плавающий слой над фото и стеклом (тот же принцип, что у меню) */
+  background: rgba(16, 18, 28, 0.98);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 var(--glass-hi);
+  padding: var(--sp-5);
+  width: min(380px, 100%);
+  animation: modal-pop 0.18s var(--ease);
+}
+.modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.modal-body {
+  margin-top: var(--sp-2);
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+  margin-top: var(--sp-4);
+}
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-box {
+    animation: none;
+  }
+}
+
 /* --- профиль бота на сервере --- */
 .bot-profile {
   margin-bottom: var(--sp-4);
@@ -1695,6 +1754,16 @@ a {
 .dd-item.active {
   color: #fff;
   background: var(--accent-soft);
+}
+/* курсор клавиатуры (aria-activedescendant): отдельно от выбранного значения —
+   тонкий акцентный контур, чтобы читался и поверх .active */
+.dd-item.hl {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1.5px var(--accent-ring);
+}
+.dd-item.active.hl {
+  background: var(--accent-soft);
+  color: #fff;
 }
 /* пикер канала: шире и с обрезкой длинных имён (совпадает со старым select) */
 .dd-channel {

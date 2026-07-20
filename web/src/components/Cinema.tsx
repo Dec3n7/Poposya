@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import { IconX } from "../icons";
 import type { Cinema as CinemaData, Guild, MovieRating, WatchedItem, WatchlistItem } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 function Rater({ r }: { r: MovieRating }) {
   const name = r.username ?? `ID ${r.user_id}`;
@@ -80,15 +81,16 @@ function WatchlistRow({
   onRemoved: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   async function remove() {
-    if (!window.confirm(`Убрать «${m.title}» из вотчлиста?`)) return;
     setBusy(true);
     try {
       await api.removeMovie(guildId, m.id);
-      onRemoved();
+      onRemoved(); // на успехе строка размонтируется — диалог уходит вместе с ней
     } catch {
       setBusy(false);
+      setAsking(false);
     }
   }
 
@@ -102,10 +104,29 @@ function WatchlistRow({
         <span className="mono">
           👍 {m.up} · 👎 {m.down}
         </span>
-        <button className="btn ghost small" onClick={remove} disabled={busy} title="Убрать из вотчлиста">
+        <button
+          className="btn ghost small"
+          onClick={() => setAsking(true)}
+          disabled={busy}
+          title="Убрать из вотчлиста"
+        >
           <IconX />
         </button>
       </span>
+      <ConfirmDialog
+        open={asking}
+        title="Убрать из вотчлиста?"
+        body={
+          <>
+            «{m.title}» вернётся в список кандидатов только повторным добавлением.
+          </>
+        }
+        confirmLabel="Убрать"
+        danger={false}
+        busy={busy}
+        onConfirm={remove}
+        onCancel={() => setAsking(false)}
+      />
     </div>
   );
 }

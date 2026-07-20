@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import { IconTrash } from "../icons";
 import type { Guild, PlaylistDetail, PlaylistItem } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { NowPlaying } from "./NowPlaying";
 
 function fmtDuration(sec: number | null): string {
@@ -25,6 +26,7 @@ function PlaylistRow({
   const [detail, setDetail] = useState<PlaylistDetail | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   function toggle() {
     const next = !open;
@@ -38,13 +40,13 @@ function PlaylistRow({
   }
 
   async function del() {
-    if (!window.confirm(`Удалить плейлист «${pl.name}»? Это необратимо.`)) return;
     setBusy(true);
     try {
       await api.deletePlaylist(guildId, pl.name);
-      onDeleted();
+      onDeleted(); // на успехе строка размонтируется — диалог уходит вместе с ней
     } catch {
       setBusy(false);
+      setAsking(false);
     }
   }
 
@@ -61,13 +63,26 @@ function PlaylistRow({
         </button>
         <button
           className="btn ghost small pl-del"
-          onClick={del}
+          onClick={() => setAsking(true)}
           disabled={busy}
           title="Удалить плейлист"
         >
           <IconTrash />
         </button>
       </div>
+      <ConfirmDialog
+        open={asking}
+        title="Удалить плейлист?"
+        body={
+          <>
+            Плейлист «{pl.name}» будет удалён безвозвратно.
+          </>
+        }
+        confirmLabel="Удалить"
+        busy={busy}
+        onConfirm={del}
+        onCancel={() => setAsking(false)}
+      />
       {open && (
         <div className="pl-tracks">
           {err ? (
