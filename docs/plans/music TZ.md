@@ -1,3 +1,9 @@
+> Статус: ✅ В ОСНОВНОМ РЕАЛИЗОВАНО — прогресс-бар, thumbnail/uploader/requester,
+> визуализация очереди, `/lyrics` + караоке, радио, префетч аудио уже работают
+> (ког `cogs/music/`). Файл — исходный UX-бэклог плеера.
+
+---
+
 UX/UI плеера
 Теперь-playing embed сделать красивее:
 Progress bar в Unicode или custom emoji.
