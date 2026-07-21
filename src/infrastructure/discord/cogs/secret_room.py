@@ -11,24 +11,11 @@ from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import RelationshipRoleChanged
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
 _CLEANUP_INTERVAL = 60
-
-_DM_TEXT = (
-    "Ты дошёл туда, куда доходят немногие. Держи ключ: **`{code}`**\n\n"
-    "Введи `/secret` с этим ключом на сервере — и на {hours} часов откроется "
-    "место, о котором не пишут в правилах. Дверь увидят только те, кто "
-    "заслужил столько же, сколько ты.\n\n"
-    "Не разбрасывайся. Второго я не дам. ✂️👁🖤"
-)
-
-_ROOM_WELCOME = (
-    "Дверь открыта. У вас есть время до <t:{ts}:t> — потом я всё здесь сотру, "
-    "и этого разговора не было.\n\n"
-    "Кто видит этот канал — тот свой. Ведите себя соответственно. ✂️👁🖤"
-)
 
 
 def _now() -> datetime:
@@ -43,11 +30,14 @@ class SecretRoomCog(commands.Cog):
         settings: Settings,
         event_bus: IEventBus,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
         self.gs = guild_settings
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         # индекс роли, начиная с которого выдаётся ключ и виден канал:
         # тон роли с индексом i = i + 2 => уровень 5 = индекс 3
         self._min_role_index = max(0, settings.secret_room_min_level - 2)
@@ -89,8 +79,13 @@ class SecretRoomCog(commands.Cog):
                 user = await self.bot.fetch_user(event.user_id)
             except discord.HTTPException:
                 return
+        dm_text = str(
+            self.persona.phrase(
+                event.guild_id, "secret_room.dm", code=code, hours=self.settings.secret_room_hours
+            )
+        )
         try:
-            await user.send(_DM_TEXT.format(code=code, hours=self.settings.secret_room_hours))
+            await user.send(dm_text)
         except discord.Forbidden:
             logger.info(
                 "ЛС закрыты — ключ не доставлен (доступен через /secret без аргумента)",
@@ -105,51 +100,51 @@ class SecretRoomCog(commands.Cog):
     @app_commands.describe(code="Ключ из личных сообщений (пусто — показать свой)")
     @app_commands.guild_only()
     async def secret(self, interaction: discord.Interaction, code: str | None = None) -> None:
-        rank = await self.container.get_rank.execute(interaction.user.id, interaction.guild_id)
+        gid = interaction.guild_id
+
+        def p(key: str, **vars: object) -> str:
+            return str(self.persona.phrase(gid, key, **vars))
+
+        rank = await self.container.get_rank.execute(interaction.user.id, gid)
         if rank.level < self.settings.secret_room_min_level:
-            await interaction.response.send_message(
-                "Не понимаю, о чём ты. Здесь нет никаких тайных комнат.", ephemeral=True
-            )
+            await interaction.response.send_message(p("secret_room.no_rooms"), ephemeral=True)
             return
 
         if code is None:
-            stored = await self.container.get_secret_code.execute(
-                interaction.user.id, interaction.guild_id
-            )
+            stored = await self.container.get_secret_code.execute(interaction.user.id, gid)
             if stored is None:
                 # уровень уже есть, а ключа нет (например, порог понизили) — выдаём
                 new_code = await self.container.issue_secret_code.execute(
-                    interaction.user.id, interaction.guild_id, _now()
+                    interaction.user.id, gid, _now()
                 )
                 await interaction.response.send_message(
-                    f"Твой ключ: **`{new_code}`**. Не разбрасывайся.", ephemeral=True
+                    p("secret_room.key_issued", code=new_code), ephemeral=True
                 )
             elif stored.used_at is not None:
                 await interaction.response.send_message(
-                    "Свой ключ ты уже использовал. Дверь открывается один раз.",
-                    ephemeral=True,
+                    p("secret_room.key_used_own"), ephemeral=True
                 )
             else:
                 await interaction.response.send_message(
-                    f"Твой ключ: **`{stored.code}`**. Введи его аргументом, когда решишься.",
-                    ephemeral=True,
+                    p("secret_room.key_show", code=stored.code), ephemeral=True
                 )
             return
 
         check = await self.container.validate_secret_code.execute(
-            interaction.user.id, interaction.guild_id, code, _now()
+            interaction.user.id, gid, code, _now()
         )
         if not check.ok:
             replies = {
-                "room_active": (
-                    f"Комната уже открыта — <#{check.active_room_channel_id}>. Побереги свой ключ."
+                "room_active": p(
+                    "secret_room.room_active",
+                    channel_mention=f"<#{check.active_room_channel_id}>",
                 ),
-                "no_code": "У тебя нет ключа. Ключи я раздаю сама — и не всем.",
-                "used": "Этот ключ уже сгорел. Дверь открывается один раз.",
-                "wrong": "Неверный ключ. Я бы на твоём месте не подбирала.",
+                "no_code": p("secret_room.no_code"),
+                "used": p("secret_room.used"),
+                "wrong": p("secret_room.wrong"),
             }
             await interaction.response.send_message(
-                replies.get(check.reason, "Нет."), ephemeral=True
+                replies.get(check.reason, p("secret_room.fallback_no")), ephemeral=True
             )
             return
 
@@ -179,9 +174,7 @@ class SecretRoomCog(commands.Cog):
                 reason=f"Секретная комната: ключ {interaction.user}",
             )
         except discord.Forbidden:
-            await interaction.followup.send(
-                "Не хватает права Manage Channels — дверь не открылась.", ephemeral=True
-            )
+            await interaction.followup.send(p("secret_room.no_permission"), ephemeral=True)
             return
 
         expires_at = await self.container.register_secret_room.execute(
@@ -192,11 +185,11 @@ class SecretRoomCog(commands.Cog):
             _now(),
         )
         await text_channel.send(
-            _ROOM_WELCOME.format(ts=int(expires_at.timestamp())),
+            p("secret_room.room_welcome", ts=int(expires_at.timestamp())),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         await interaction.followup.send(
-            f"Дверь открыта: {text_channel.mention}. Ключ сгорел — так и задумано.",
+            p("secret_room.opened", channel_mention=text_channel.mention),
             ephemeral=True,
         )
         logger.info(

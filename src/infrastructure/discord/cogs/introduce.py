@@ -1,5 +1,4 @@
 import logging
-import random
 from datetime import UTC, datetime
 
 import discord
@@ -11,29 +10,9 @@ from src.config import Settings
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
-
-INTRO_TEXT = """Добро пожаловать. Раз ты здесь — значит, я тебя впустила. Это первое, что стоит понять: сюда не приходят — сюда **пускают**.
-
-Меня зовут Попося Акамару. Токио, Аояма. Днём я рисую для брендов, у которых денег больше, чем вкуса, — вечером возвращаюсь **сюда**. Это место — моё. Мой дом, мои стены, мой свет. Каналы здесь стоят так, как я захотела. Музыка играет та, которую я разрешила. Люди остаются те, которых я терплю.
-
-Ты сейчас — гость. Веди себя соответственно.
-
-В моём доме так: хочешь говорить — говори по делу, я ценю слова, за которыми что-то стоит. Хочешь музыку — включай, но помни: это мои колонки, и о твоём вкусе я составлю мнение быстро. Лучшие моменты этого места я вешаю на стену — в свой альбом. Попасть туда — честь, которую нельзя выпросить.
-
-Порядок здесь тоже мой. Спам я обрываю после одного предупреждения. Нытьё не обрываю — просто перестаю слушать. А тех, кто всерьёз испортит мне вечер, отсюда выносят. Иногда — лично я, и поверь, это зрелище того стоит.
-
-Но я не только строгость. Я помню своих гостей: кто чем живёт, кто во что играет, у кого когда день рождения. Замечаю, когда кто-то пропадает — и когда возвращается. Захожу в войс, если там кто-то скучает в одиночестве. Это мой дом. Мне не всё равно, что в нём происходит.
-
-И последнее. Гости бывают разные. Одних я забываю к утру. Другим со временем наливаю кофе. Совсем немногим — виски из своей бутылки. А одно кресло у окна здесь всегда стоит для единственного человека. Оно редко бывает занято — и никогда не достаётся просто так.
-
-Располагайся. Я посмотрю, кто ты."""
-
-SURVEY_INTRO = (
-    "Мне быстрее спросить, чем выяснять самой. Хотя выясню в любом случае.\n"
-    "Нажимай, что подходит. Передумаешь — вернёшься и поменяешь. Я не осуждаю. Почти."
-)
 
 _GENDER_OPTIONS = [
     ("👦", "Парень", "парень"),
@@ -61,27 +40,16 @@ _INTEREST_EMOJI = {
     "Кино": "🎬",
 }
 
-_SEASON_REPLIES = {
-    "весна": "Весна. Цветение, аллергия и надежды. Ладно, засчитано.",
-    "лето": "Лето. Надо же — у тебя есть вкус. Моё любимое.",
-    "осень": "Осень. Дожди и меланхолия — уважаю, но лето лучше.",
-    "зима": "Зима. Холодно, как мой ответ тем, кто спамит. Принято.",
-}
-
-_DONE_REPLIES = [
-    "Записала. Посмотрим, совпадёт ли это с тем, что я увижу сама.",
-    "Принято. Анкеты врут реже, чем люди, но я всё равно проверю.",
-    "Хорошо. Теперь я знаю о тебе чуть больше, чем ты рассчитывал.",
-]
-
-
 class SurveyView(discord.ui.View):
-    """Персистентные кнопки анкеты: переживают рестарт бота."""
+    """Персистентные кнопки анкеты: переживают рестарт бота. Кнопки и их
+    подписи — структурные енумы (регистрируются глобально, без контекста
+    гильдии); реплики-ответы — из каталога фраз персоны сервера."""
 
-    def __init__(self, container: RelationshipContainer, settings: Settings):
+    def __init__(self, container: RelationshipContainer, settings: Settings, persona=None):
         super().__init__(timeout=None)
         self.container = container
         self.settings = settings
+        self.persona = persona if persona is not None else RegistryPersona()
         for emoji, label, value in _GENDER_OPTIONS:
             self.add_item(self._choice_button(emoji, label, "gender", value, row=0))
         for emoji, label, value in _CONTACT_OPTIONS:
@@ -115,14 +83,17 @@ class SurveyView(discord.ui.View):
             await self.container.set_survey_choice.execute(
                 interaction.user.id, interaction.guild_id, field, value
             )
+            gid = interaction.guild_id
+            ack = str(self.persona.phrase(gid, "introduce.ack"))
             if field == "season":
-                reply = _SEASON_REPLIES.get(value, "Принято.")
+                seasons = self.persona.phrase(gid, "introduce.season_replies")
+                reply = seasons.get(value, ack) if isinstance(seasons, dict) else ack
             elif field == "contact" and value == "quiet":
-                reply = "Не беспокоить — значит, не беспокою. Сама заговоришь первым. То есть ты."
+                reply = str(self.persona.phrase(gid, "introduce.contact_quiet_reply"))
             elif field == "contact" and value == "attention":
-                reply = "Внимания, значит. Смелое заявление. Посмотрим, заслужишь ли."
+                reply = str(self.persona.phrase(gid, "introduce.contact_attention_reply"))
             else:
-                reply = "Принято."
+                reply = ack
             await interaction.response.send_message(reply, ephemeral=True)
 
         button.callback = callback
@@ -141,10 +112,16 @@ class SurveyView(discord.ui.View):
             added, interests = await self.container.toggle_survey_interest.execute(
                 interaction.user.id, interaction.guild_id, interest
             )
-            state = "добавила" if added else "вычеркнула"
-            current = ", ".join(interests) if interests else "пусто"
+            gid = interaction.guild_id
+            current = (
+                ", ".join(interests)
+                if interests
+                else str(self.persona.phrase(gid, "introduce.interests_empty"))
+            )
+            key = "introduce.interest_added" if added else "introduce.interest_removed"
             await interaction.response.send_message(
-                f"«{interest}» — {state}. Сейчас: {current}.", ephemeral=True
+                str(self.persona.phrase(gid, key, interest=interest, current=current)),
+                ephemeral=True,
             )
 
         button.callback = callback
@@ -154,7 +131,9 @@ class SurveyView(discord.ui.View):
         result = await self.container.complete_survey.execute(
             interaction.user.id, interaction.guild_id, datetime.now(UTC)
         )
-        lines = [random.choice(_DONE_REPLIES)]
+        gid = interaction.guild_id
+        done = await self.persona.render_block(gid, "introduce.done_replies", None)
+        lines = [done] if done else []
         survey = result.survey
         summary = []
         if survey.gender:
@@ -162,13 +141,21 @@ class SurveyView(discord.ui.View):
         if survey.interests:
             summary.append(survey.interests)
         if survey.season:
-            summary.append(f"время года — {survey.season}")
+            summary.append(
+                str(self.persona.phrase(gid, "introduce.summary_season", season=survey.season))
+            )
         if summary:
             lines.append(f"*{'; '.join(summary)}.*")
         if result.first_time and result.bonus_awarded:
-            lines.append(f"+{result.bonus_awarded} очков. Не привыкай к щедрости. ✂️👁🖤")
+            lines.append(
+                str(
+                    self.persona.phrase(
+                        gid, "introduce.survey_bonus", bonus=result.bonus_awarded
+                    )
+                )
+            )
         elif not result.first_time:
-            lines.append("Анкету ты уже заполнял — я просто обновила записи.")
+            lines.append(str(self.persona.phrase(gid, "introduce.survey_updated")))
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
@@ -180,12 +167,15 @@ class IntroduceCog(commands.Cog):
         role_sync: RoleSyncService,
         settings: Settings,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
         self.settings = settings
         self.gs = guild_settings
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(
@@ -194,46 +184,55 @@ class IntroduceCog(commands.Cog):
 
     async def cog_load(self) -> None:
         # регистрация персистентной view: кнопки работают после рестарта
-        self.bot.add_view(SurveyView(self.container, self.settings))
+        self.bot.add_view(SurveyView(self.container, self.settings, self.persona))
+
+    def _p(self, guild_id: int | None, key: str, **vars: object) -> str:
+        return str(self.persona.phrase(guild_id or 0, key, **vars))
 
     def _intro_embed(self, guild_id: int | None) -> discord.Embed:
         embed = discord.Embed(
-            title="Попося.",
-            description=INTRO_TEXT,
+            title=self._p(guild_id, "introduce.intro_title"),
+            description=self._p(guild_id, "introduce.intro"),
             color=accent(guild_id),
         )
         if self.bot.user is not None:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        embed.set_footer(text="Аояма, Токио · ✂️👁🖤")
+        footer = self._p(guild_id, "introduce.intro_footer")
+        if footer:
+            embed.set_footer(text=footer)
         return embed
 
     def _survey_embed(self, guild_id: int | None) -> discord.Embed:
         embed = discord.Embed(
-            title="…расскажи о себе.",
-            description=SURVEY_INTRO,
+            title=self._p(guild_id, "introduce.survey_title"),
+            description=self._p(guild_id, "introduce.survey_intro"),
             color=accent(guild_id),
         )
         embed.add_field(
-            name="👤 Кто ты?",
-            value="Парень · Девушка · Инкогнито",
+            name=self._p(guild_id, "introduce.survey_q_gender"),
+            value=self._p(guild_id, "introduce.survey_a_gender"),
             inline=False,
         )
         embed.add_field(
-            name="💬 Сколько внимания тебе нужно?",
-            value="Не беспокоить · Иногда можно · Хочу внимания",
+            name=self._p(guild_id, "introduce.survey_q_contact"),
+            value=self._p(guild_id, "introduce.survey_a_contact"),
             inline=False,
         )
         embed.add_field(
-            name="🎯 Чем живёшь?",
-            value=" · ".join(self.settings.survey_interest_options) + "\n-# можно несколько",
+            name=self._p(guild_id, "introduce.survey_q_interests"),
+            value=" · ".join(self.settings.survey_interest_options)
+            + "\n"
+            + self._p(guild_id, "introduce.survey_interests_hint"),
             inline=False,
         )
         embed.add_field(
-            name="🌸 Время года?",
-            value="Весна · Лето · Осень · Зима",
+            name=self._p(guild_id, "introduce.survey_q_season"),
+            value=self._p(guild_id, "introduce.survey_a_season"),
             inline=False,
         )
-        embed.set_footer(text="Отвечай честно. Я замечаю, когда врут. ✂️👁🖤")
+        footer = self._p(guild_id, "introduce.survey_footer")
+        if footer:
+            embed.set_footer(text=footer)
         return embed
 
     @app_commands.command(
@@ -247,6 +246,8 @@ class IntroduceCog(commands.Cog):
         await channel.send(embed=self._intro_embed(interaction.guild_id))
         await channel.send(
             embed=self._survey_embed(interaction.guild_id),
-            view=SurveyView(self.container, self.settings),
+            view=SurveyView(self.container, self.settings, self.persona),
         )
-        await interaction.followup.send("Опубликовано.", ephemeral=True)
+        await interaction.followup.send(
+            self._p(interaction.guild_id, "introduce.published"), ephemeral=True
+        )
