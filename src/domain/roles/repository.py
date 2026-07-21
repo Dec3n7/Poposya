@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from src.domain.roles.entities import GuildRole, RoleMeta
+from src.domain.roles.entities import GuildRole, RoleMeta, SavedRoleTemplate, TemplateRole
 
 
 class IRoleRepository(ABC):
     @abstractmethod
-    async def replace_guild_roles(self, guild_id: int, roles: list[GuildRole], now: datetime) -> None:
+    async def replace_guild_roles(
+        self, guild_id: int, roles: list[GuildRole], now: datetime
+    ) -> None:
         """Полная пере-синхронизация зеркала ролей сервера (бэкфилл): старые
         строки сервера сносятся, кладутся переданные."""
 
@@ -51,3 +53,23 @@ class IRoleRepository(ABC):
     @abstractmethod
     async def member_role_ids(self, guild_id: int, user_id: int) -> list[int]:
         """id ролей участника из зеркала."""
+
+    # --- сохранённые шаблоны ролей (панель) ---
+
+    @abstractmethod
+    async def save_template(
+        self, guild_id: int, name: str, roles: list[TemplateRole], now: datetime
+    ) -> SavedRoleTemplate:
+        """Сохранить/обновить именованный шаблон (upsert по guild_id+name)."""
+
+    @abstractmethod
+    async def list_templates(self, guild_id: int) -> list[SavedRoleTemplate]:
+        """Все сохранённые шаблоны сервера (новые сверху)."""
+
+    @abstractmethod
+    async def get_template(self, guild_id: int, template_id: int) -> SavedRoleTemplate | None:
+        """Один шаблон сервера по id или None."""
+
+    @abstractmethod
+    async def delete_template(self, guild_id: int, template_id: int) -> bool:
+        """Удалить шаблон; False — его и не было."""

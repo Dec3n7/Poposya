@@ -17,7 +17,14 @@ import {
 } from "../icons";
 import { discordColor } from "../roles";
 import { POPOSYA_COLORS, ROLE_TEMPLATES, type RoleTemplate } from "../roleTemplates";
-import type { CommandResult, Guild, GuildRole, RoleInput, RolesView } from "../types";
+import type {
+  CommandResult,
+  Guild,
+  GuildRole,
+  RoleInput,
+  RolesView,
+  SavedRoleTemplate,
+} from "../types";
 import { RolePermsEditor } from "./RolePerms";
 
 // битовое поле прав не влезает в number — сравниваем через BigInt.
@@ -350,6 +357,158 @@ function TemplateCard({
         <button className="btn ghost small" onClick={() => setConfirm(true)} disabled={busy}>
           <IconPlus /> Применить
         </button>
+      )}
+    </div>
+  );
+}
+
+// Сохранённые в БД наборы ролей: сохранить текущие под именем, применить, удалить.
+// Самодостаточна; onApplied дёргает рефетч ролей в родителе (создались новые).
+function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => void }) {
+  const [templates, setTemplates] = useState<SavedRoleTemplate[] | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .roleTemplates(guild.id)
+      .then((v) => setTemplates(v.templates))
+      .catch(() => setTemplates([]));
+  }, [guild.id]);
+  useEffect(load, [load]);
+
+  async function save() {
+    const n = name.trim();
+    if (!n) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.saveRoleTemplate(guild.id, n);
+      setName("");
+      setMsg("Сохранено.");
+      load();
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply(id: number) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.applyRoleTemplate(guild.id, id);
+      setMsg(
+        r.status === "failed"
+          ? (r.result ?? "Не вышло")
+          : r.status === "done"
+            ? (r.result ?? "Готово")
+            : "Отправлено — применяется…",
+      );
+      if (r.status !== "failed") window.setTimeout(onApplied, 1200);
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.deleteRoleTemplate(guild.id, id);
+      setConfirmDel(null);
+      load();
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="saved-templates">
+      <div className="role-panel-head">
+        <div className="role-panel-title">Мои шаблоны</div>
+        {msg && <span className="faint small">{msg}</span>}
+      </div>
+      <div className="saved-save-row">
+        <input
+          className="input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Имя нового шаблона из текущих ролей"
+          maxLength={100}
+          aria-label="Имя шаблона"
+          onKeyDown={(e) => e.key === "Enter" && save()}
+        />
+        <button className="btn primary small" onClick={save} disabled={busy || !name.trim()}>
+          <IconCheck /> Сохранить текущие
+        </button>
+      </div>
+      {templates === null ? (
+        <div className="muted small">Загрузка…</div>
+      ) : templates.length === 0 ? (
+        <div className="muted small">Пока нет сохранённых шаблонов.</div>
+      ) : (
+        <div className="template-grid">
+          {templates.map((t) => (
+            <div key={t.id} className="template-card">
+              <div className="template-name">{t.name}</div>
+              <div className="template-roles">
+                {t.roles.map((r, i) => {
+                  const color = r.color ? toHex(r.color) : null;
+                  return (
+                    <span
+                      key={i}
+                      className="template-role-chip"
+                      style={color ? { color, borderColor: color } : undefined}
+                    >
+                      {r.name}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="role-panel-actions">
+                <button className="btn ghost small" onClick={() => apply(t.id)} disabled={busy}>
+                  <IconPlus /> Применить
+                </button>
+                {confirmDel === t.id ? (
+                  <span className="role-del-confirm">
+                    <button
+                      className="btn danger small"
+                      onClick={() => remove(t.id)}
+                      disabled={busy}
+                    >
+                      Удалить
+                    </button>
+                    <button
+                      className="btn ghost small"
+                      onClick={() => setConfirmDel(null)}
+                      disabled={busy}
+                    >
+                      Нет
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    className="btn danger ghost small"
+                    onClick={() => setConfirmDel(t.id)}
+                    disabled={busy}
+                    aria-label={`Удалить шаблон ${t.name}`}
+                    title="Удалить шаблон"
+                  >
+                    <IconTrash />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -830,6 +989,7 @@ export function Roles({ guild }: { guild: Guild }) {
               />
             ))}
           </div>
+          <SavedTemplates guild={guild} onApplied={refresh} />
         </div>
       )}
 

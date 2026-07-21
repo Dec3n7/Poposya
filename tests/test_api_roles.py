@@ -445,6 +445,97 @@ async def test_set_autorole_dedups(client, uow_factory):
     assert resp.json() == {"role_ids": ["1"]}
 
 
+# --- сохранённые шаблоны ролей ---------------------------------------------------
+
+
+async def test_list_templates_empty(client):
+    resp = await client.get(f"/api/guilds/{GUILD}/roles/templates")
+    assert resp.status_code == 200
+    assert resp.json() == {"templates": []}
+
+
+async def test_save_template_from_current_editable_roles(client, uow_factory):
+    everyone = _role(GUILD, name="@everyone", position=0)
+    editable = _role(1, name="Базовая", position=2)
+    above = _role(4, name="Выше бота", position=99)
+    await _seed_roles(uow_factory, [everyone, editable, above], bot_top_position=10)
+
+    resp = await client.post(f"/api/guilds/{GUILD}/roles/templates", json={"name": "Набор"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Набор"
+    assert [r["name"] for r in body["roles"]] == ["Базовая"]  # только editable, без @everyone/выше
+
+    lst = (await client.get(f"/api/guilds/{GUILD}/roles/templates")).json()
+    assert [t["name"] for t in lst["templates"]] == ["Набор"]
+
+    audit = (await client.get(f"/api/guilds/{GUILD}/audit")).json()
+    assert audit[0]["action"] == "role.template_save"
+
+
+async def test_save_template_no_editable_roles_422(client, uow_factory):
+    everyone = _role(GUILD, name="@everyone", position=0)
+    above = _role(4, name="Выше бота", position=99)
+    await _seed_roles(uow_factory, [everyone, above], bot_top_position=10)
+    resp = await client.post(f"/api/guilds/{GUILD}/roles/templates", json={"name": "X"})
+    assert resp.status_code == 422
+
+
+async def test_save_template_empty_name_400(client, uow_factory):
+    everyone = _role(GUILD, name="@everyone", position=0)
+    editable = _role(1, name="Базовая", position=2)
+    await _seed_roles(uow_factory, [everyone, editable], bot_top_position=10)
+    resp = await client.post(f"/api/guilds/{GUILD}/roles/templates", json={"name": "   "})
+    assert resp.status_code == 400
+
+
+async def test_apply_template_roundtrip(client, container, uow_factory):
+    everyone = _role(GUILD, name="@everyone", position=0)
+    editable = _role(1, name="Базовая", position=2)
+    await _seed_roles(uow_factory, [everyone, editable], bot_top_position=10)
+    saved = (
+        await client.post(f"/api/guilds/{GUILD}/roles/templates", json={"name": "Набор"})
+    ).json()
+    tid = saved["id"]
+
+    async def execute(_cmd):
+        return "Создано ролей: 1."
+
+    task, stop, seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.post(f"/api/guilds/{GUILD}/roles/templates/{tid}/apply")
+    finally:
+        stop.set()
+        await task
+    assert resp.status_code == 200 and resp.json()["status"] == "done"
+    assert seen[0].command_type == "role.import"
+    assert seen[0].payload["roles"][0]["name"] == "Базовая"
+
+    audit = (await client.get(f"/api/guilds/{GUILD}/audit")).json()
+    assert audit[0]["action"] == "role.template_apply"
+
+
+async def test_apply_template_not_found_404(client):
+    resp = await client.post(f"/api/guilds/{GUILD}/roles/templates/999/apply")
+    assert resp.status_code == 404
+
+
+async def test_delete_template_then_gone(client, uow_factory):
+    everyone = _role(GUILD, name="@everyone", position=0)
+    editable = _role(1, name="Базовая", position=2)
+    await _seed_roles(uow_factory, [everyone, editable], bot_top_position=10)
+    saved = (await client.post(f"/api/guilds/{GUILD}/roles/templates", json={"name": "T"})).json()
+    tid = saved["id"]
+
+    resp = await client.delete(f"/api/guilds/{GUILD}/roles/templates/{tid}")
+    assert resp.status_code == 200 and resp.json()["deleted"] is True
+    # повторное удаление — 404
+    resp2 = await client.delete(f"/api/guilds/{GUILD}/roles/templates/{tid}")
+    assert resp2.status_code == 404
+    lst = (await client.get(f"/api/guilds/{GUILD}/roles/templates")).json()
+    assert lst["templates"] == []
+
+
 async def test_command_failure_surfaces_not_as_http_error(client, container):
     from src.infrastructure.commands.bridge import CommandError
 

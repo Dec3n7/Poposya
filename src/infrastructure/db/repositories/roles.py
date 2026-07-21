@@ -1,15 +1,43 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.roles.entities import GuildRole, RoleMeta
+from src.domain.roles.entities import GuildRole, RoleMeta, SavedRoleTemplate, TemplateRole
 from src.domain.roles.repository import IRoleRepository
 from src.infrastructure.db.models.roles import (
     GuildRoleMetaModel,
     GuildRoleModel,
+    GuildRoleTemplateModel,
     MemberRoleModel,
 )
+
+
+def _template_to_domain(row: GuildRoleTemplateModel) -> SavedRoleTemplate:
+    data = json.loads(row.payload)
+    roles = tuple(
+        TemplateRole(
+            name=str(d["name"]),
+            color=d.get("color"),
+            hoist=bool(d.get("hoist")),
+            mentionable=bool(d.get("mentionable")),
+        )
+        for d in data
+    )
+    return SavedRoleTemplate(
+        id=row.id, guild_id=row.guild_id, name=row.name, roles=roles, created_at=row.created_at
+    )
+
+
+def _template_payload(roles: list[TemplateRole]) -> str:
+    return json.dumps(
+        [
+            {"name": r.name, "color": r.color, "hoist": r.hoist, "mentionable": r.mentionable}
+            for r in roles
+        ],
+        ensure_ascii=False,
+    )
 
 
 def _to_domain(row: GuildRoleModel) -> GuildRole:
@@ -59,9 +87,7 @@ class SqlAlchemyRoleRepository(IRoleRepository):
         await self._session.merge(_model(role, now))
 
     async def delete_role(self, guild_id: int, role_id: int) -> None:
-        await self._session.execute(
-            delete(GuildRoleModel).where(GuildRoleModel.role_id == role_id)
-        )
+        await self._session.execute(delete(GuildRoleModel).where(GuildRoleModel.role_id == role_id))
         # роль исчезла — снять её со всех носителей в зеркале
         await self._session.execute(
             delete(MemberRoleModel).where(MemberRoleModel.role_id == role_id)
@@ -140,3 +166,55 @@ class SqlAlchemyRoleRepository(IRoleRepository):
             MemberRoleModel.user_id == user_id,
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+    # --- сохранённые шаблоны ролей ---
+
+    async def save_template(
+        self, guild_id: int, name: str, roles: list[TemplateRole], now: datetime
+    ) -> SavedRoleTemplate:
+        payload = _template_payload(roles)
+        existing = (
+            await self._session.execute(
+                select(GuildRoleTemplateModel).where(
+                    GuildRoleTemplateModel.guild_id == guild_id,
+                    GuildRoleTemplateModel.name == name,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            model = GuildRoleTemplateModel(
+                guild_id=guild_id, name=name, payload=payload, created_at=now
+            )
+            self._session.add(model)
+            await self._session.flush()  # получить сгенерированный id
+        else:
+            existing.payload = payload  # повторное сохранение под тем же именем — обновление
+            existing.created_at = now
+            model = existing
+        return _template_to_domain(model)
+
+    async def list_templates(self, guild_id: int) -> list[SavedRoleTemplate]:
+        stmt = (
+            select(GuildRoleTemplateModel)
+            .where(GuildRoleTemplateModel.guild_id == guild_id)
+            .order_by(GuildRoleTemplateModel.created_at.desc())
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_template_to_domain(row) for row in rows]
+
+    async def get_template(self, guild_id: int, template_id: int) -> SavedRoleTemplate | None:
+        stmt = select(GuildRoleTemplateModel).where(
+            GuildRoleTemplateModel.guild_id == guild_id,
+            GuildRoleTemplateModel.id == template_id,
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _template_to_domain(row) if row is not None else None
+
+    async def delete_template(self, guild_id: int, template_id: int) -> bool:
+        result = await self._session.execute(
+            delete(GuildRoleTemplateModel).where(
+                GuildRoleTemplateModel.guild_id == guild_id,
+                GuildRoleTemplateModel.id == template_id,
+            )
+        )
+        return result.rowcount > 0

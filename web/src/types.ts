@@ -340,6 +340,14 @@ export interface RoleInput {
   mentionable: boolean;
 }
 
+// сохранённый в панели именованный набор ролей сервера (косметика, без прав)
+export interface SavedRoleTemplate {
+  id: number;
+  name: string;
+  created_at: string; // ISO
+  roles: RoleInput[];
+}
+
 // каталог прав Discord для редактора. bit/маски — строки: битовое поле не
 // влезает в JS-number, работаем через BigInt.
 export interface PermDef {

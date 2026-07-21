@@ -16,7 +16,10 @@ from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.permissions_catalog import ADMINISTRATOR_BIT, all_catalog_bits, catalog_json
 from src.api.security import Session
-from src.domain.roles.entities import GuildRole
+from src.domain.roles.entities import GuildRole, SavedRoleTemplate, TemplateRole
+
+# потолок сохранённых шаблонов на сервер — чтобы панель не плодила их без предела
+_TEMPLATE_CAP = 30
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/roles", tags=["roles"])
 
@@ -60,6 +63,22 @@ class ImportBody(BaseModel):
 
 class AutoRoleBody(BaseModel):
     role_ids: list[str]  # id ролей, выдаваемых новичку при входе; [] = выключить
+
+
+class TemplateSaveBody(BaseModel):
+    name: str  # имя сохраняемого шаблона (сохраняем текущие редактируемые роли)
+
+
+def _template_json(t: SavedRoleTemplate) -> dict:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "created_at": t.created_at.isoformat(),
+        "roles": [
+            {"name": r.name, "color": r.color, "hoist": r.hoist, "mentionable": r.mentionable}
+            for r in t.roles
+        ],
+    }
 
 
 def _editable(role: GuildRole, guild_id: int, bot_top: int | None) -> bool:
@@ -201,6 +220,110 @@ async def set_autorole(
         details={"count": len(ordered)},
     )
     return {"role_ids": [str(i) for i in ordered]}
+
+
+@router.get("/templates")
+async def list_role_templates(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Сохранённые наборы ролей сервера (новые сверху)."""
+    templates = await container.list_role_templates.execute(guild_id)
+    return {"templates": [_template_json(t) for t in templates]}
+
+
+@router.post("/templates")
+async def save_role_template(
+    body: TemplateSaveBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Сохранить текущие редактируемые роли под именем (upsert по имени). Права не
+    сохраняем — шаблон косметический, как экспорт/импорт."""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Имя шаблона не может быть пустым.")
+    if len(name) > 100:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Имя шаблона длиннее 100 символов.")
+    roles, meta, _counts = await container.list_roles.execute(guild_id)
+    bot_top = meta.bot_top_position if meta is not None else None
+    editable = [
+        r
+        for r in sorted(roles, key=lambda r: r.position, reverse=True)
+        if _editable(r, guild_id, bot_top)
+    ]
+    if not editable:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Нет редактируемых ролей для сохранения."
+        )
+    existing = await container.list_role_templates.execute(guild_id)
+    # обновление одноимённого шаблона предела не тратит; новый — тратит
+    if name not in {t.name for t in existing} and len(existing) >= _TEMPLATE_CAP:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Достигнут предел шаблонов ({_TEMPLATE_CAP}).",
+        )
+    template_roles = [
+        TemplateRole(name=r.name, color=r.color or None, hoist=r.hoist, mentionable=r.mentionable)
+        for r in editable
+    ]
+    saved = await container.save_role_template.execute(guild_id, name, template_roles)
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "role.template_save",
+        details={"name": name, "count": len(template_roles)},
+    )
+    return _template_json(saved)
+
+
+@router.post("/templates/{template_id}/apply")
+async def apply_role_template(
+    template_id: int,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Применить сохранённый шаблон: создать недостающие роли через мост
+    (role.import — совпадения по имени бот пропустит)."""
+    template = await container.get_role_template.execute(guild_id, template_id)
+    if template is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Шаблон не найден.")
+    payload = {
+        "roles": [
+            {"name": r.name, "color": r.color, "hoist": r.hoist, "mentionable": r.mentionable}
+            for r in template.roles
+        ]
+    }
+    cmd = await run_command(container, guild_id, "role.import", payload, session.user_id)
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "role.template_apply",
+        target=template_id,
+        details={"name": template.name},
+        result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.delete("/templates/{template_id}")
+async def delete_role_template(
+    template_id: int,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    deleted = await container.delete_role_template.execute(guild_id, template_id)
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Шаблон не найден.")
+    await record_audit(
+        container, guild_id, session.user_id, "role.template_delete", target=template_id
+    )
+    return {"deleted": True}
 
 
 @router.post("")

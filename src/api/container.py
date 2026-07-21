@@ -44,7 +44,14 @@ from src.application.relationship.use_cases import (
     ToggleFreezeUseCase,
     UpcomingBirthdaysUseCase,
 )
-from src.application.roles.use_cases import ListRolesUseCase, MemberRolesUseCase
+from src.application.roles.use_cases import (
+    DeleteRoleTemplateUseCase,
+    GetRoleTemplateUseCase,
+    ListRolesUseCase,
+    ListRoleTemplatesUseCase,
+    MemberRolesUseCase,
+    SaveRoleTemplateUseCase,
+)
 from src.config import Settings
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.db.session import create_engine, create_session_factory
@@ -101,6 +108,11 @@ class ApiContainer:
     # роли: зеркало, которое бот держит актуальным; выдача/снятие идёт через мост
     list_roles: ListRolesUseCase
     member_roles: MemberRolesUseCase
+    # сохранённые в панели шаблоны ролей (применение — через мост role.import)
+    save_role_template: SaveRoleTemplateUseCase
+    list_role_templates: ListRoleTemplatesUseCase
+    get_role_template: GetRoleTemplateUseCase
+    delete_role_template: DeleteRoleTemplateUseCase
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
@@ -169,5 +181,9 @@ def assemble_container(
         set_bot_profile=SetBotProfileUseCase(uow_factory),
         list_roles=ListRolesUseCase(uow_factory),
         member_roles=MemberRolesUseCase(uow_factory),
+        save_role_template=SaveRoleTemplateUseCase(uow_factory),
+        list_role_templates=ListRoleTemplatesUseCase(uow_factory),
+        get_role_template=GetRoleTemplateUseCase(uow_factory),
+        delete_role_template=DeleteRoleTemplateUseCase(uow_factory),
         settings_listener=settings_listener,
     )

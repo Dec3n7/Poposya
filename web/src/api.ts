@@ -23,6 +23,7 @@ import type {
   PlaylistItem,
   RoleInput,
   RolesView,
+  SavedRoleTemplate,
   SettingField,
   Trends,
   Warn,
@@ -207,6 +208,17 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ role_ids: roleIds }),
     }),
+  roleTemplates: (guildId: string): Promise<{ templates: SavedRoleTemplate[] }> =>
+    req<{ templates: SavedRoleTemplate[] }>(`/api/guilds/${guildId}/roles/templates`),
+  saveRoleTemplate: (guildId: string, name: string): Promise<SavedRoleTemplate> =>
+    req<SavedRoleTemplate>(`/api/guilds/${guildId}/roles/templates`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  applyRoleTemplate: (guildId: string, id: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/templates/${id}/apply`, { method: "POST" }),
+  deleteRoleTemplate: (guildId: string, id: number): Promise<{ deleted: boolean }> =>
+    req<{ deleted: boolean }>(`/api/guilds/${guildId}/roles/templates/${id}`, { method: "DELETE" }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>

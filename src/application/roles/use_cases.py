@@ -2,7 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from src.application.interfaces.unit_of_work import IUnitOfWork
-from src.domain.roles.entities import GuildRole, RoleMeta
+from src.domain.roles.entities import GuildRole, RoleMeta, SavedRoleTemplate, TemplateRole
 
 UowFactory = Callable[[], IUnitOfWork]
 
@@ -122,3 +122,56 @@ class MemberRolesUseCase:
     async def execute(self, guild_id: int, user_id: int) -> list[int]:
         async with self._uow_factory() as uow:
             return await uow.roles.member_role_ids(guild_id, user_id)
+
+
+# --- сохранённые шаблоны ролей (панель) ---
+
+
+class SaveRoleTemplateUseCase:
+    """Сохранить именованный набор ролей сервера (upsert по имени). Запись."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(
+        self, guild_id: int, name: str, roles: list[TemplateRole]
+    ) -> SavedRoleTemplate:
+        async with self._uow_factory() as uow:
+            template = await uow.roles.save_template(guild_id, name, roles, _now())
+            await uow.commit()
+            return template
+
+
+class ListRoleTemplatesUseCase:
+    """Сохранённые шаблоны сервера (новые сверху). Чтение."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int) -> list[SavedRoleTemplate]:
+        async with self._uow_factory() as uow:
+            return await uow.roles.list_templates(guild_id)
+
+
+class GetRoleTemplateUseCase:
+    """Один шаблон сервера по id (для применения). Чтение."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int, template_id: int) -> SavedRoleTemplate | None:
+        async with self._uow_factory() as uow:
+            return await uow.roles.get_template(guild_id, template_id)
+
+
+class DeleteRoleTemplateUseCase:
+    """Удалить шаблон сервера. Запись; False — его и не было."""
+
+    def __init__(self, uow_factory: UowFactory):
+        self._uow_factory = uow_factory
+
+    async def execute(self, guild_id: int, template_id: int) -> bool:
+        async with self._uow_factory() as uow:
+            deleted = await uow.roles.delete_template(guild_id, template_id)
+            await uow.commit()
+            return deleted

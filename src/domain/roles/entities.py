@@ -25,3 +25,24 @@ class RoleMeta:
     bot_user_id: int
     bot_top_position: int  # позиция высшей роли бота: выше — роли ему недоступны
     synced_at: datetime
+
+
+@dataclass(frozen=True)
+class TemplateRole:
+    """Одна роль внутри сохранённого шаблона: только косметика, без прав."""
+
+    name: str
+    color: int | None  # None = без цвета
+    hoist: bool
+    mentionable: bool
+
+
+@dataclass(frozen=True)
+class SavedRoleTemplate:
+    """Именованный набор ролей, сохранённый администратором для сервера."""
+
+    id: int
+    guild_id: int
+    name: str
+    roles: tuple[TemplateRole, ...]
+    created_at: datetime
