@@ -181,6 +181,7 @@ class PoposyaBot(commands.Bot):
                     self.container.event_bus,
                     mood,
                     gs,
+                    persona=persona,
                 )
             )
         else:

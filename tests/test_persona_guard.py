@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # коги, переведённые на каталог фраз (волны P4)
 CONVERTED = [
     "src/infrastructure/discord/cogs/activity.py",
+    "src/infrastructure/discord/cogs/ai_chat.py",
     "src/infrastructure/discord/cogs/finds.py",
     "src/infrastructure/discord/cogs/introduce.py",
     "src/infrastructure/discord/cogs/secret_room.py",

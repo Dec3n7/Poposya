@@ -5,12 +5,12 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from src.application.ai_chat.service import (
-    _BRUSH_OFFS,
     AIQueue,
     ChatReply,
     ChatRequest,
     ChatService,
 )
+from src.application.persona.registry import PHRASE_SPECS, default_phrase
 from src.application.relationship.use_cases import AwardResult, RankInfo, SurveyData
 from src.domain.ai_chat.prompt import PromptTemplate
 from src.domain.shared.holidays import HolidayCalendar
@@ -162,7 +162,9 @@ async def test_respond_rate_limited_returns_brush_off():
     svc = make_service(provider=provider, limiter=FakeRateLimiter(allow=False))
     reply = await svc.respond(make_request(), NOW)
     assert reply.rate_limited is True
-    assert reply.text in _BRUSH_OFFS
+    brush_offs = PHRASE_SPECS["ai_chat.brush_offs"].default
+    assert isinstance(brush_offs, list)
+    assert reply.text in brush_offs
     assert provider.calls == []  # AI не дёргается при лимите
 
 
@@ -324,12 +326,12 @@ def test_role_name_out_of_range():
 
 def test_survey_block_empty():
     svc = make_service()
-    assert svc._survey_block(SurveyData()) == ""
+    assert svc._survey_block(10, SurveyData()) == ""
 
 
 def test_memory_block_empty():
     svc = make_service()
-    assert svc._memory_block(()) == ""
+    assert svc._memory_block(10, ()) == ""
 
 
 # --- comment_on_event / freeform / notes / summary --------------------------
@@ -365,6 +367,10 @@ class _FakePersona:
 
     def render_chime_prompt(self, guild_id, variables):
         return self._prompt
+
+    def phrase(self, guild_id, key, **variables):
+        # персона без override фраз — отдаёт дефолты реестра (как PersonaService)
+        return default_phrase(key, **variables)
 
 
 async def test_persona_prompt_reaches_provider():

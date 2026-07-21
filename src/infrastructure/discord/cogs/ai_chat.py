@@ -16,13 +16,9 @@ from src.domain.music.events import TrackStarted
 from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.discord.scheduler import DeferredScheduler
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
-
-_ERROR_REPLIES = [
-    "Сегодня без разговоров. Не в настроении.",
-    "Помолчим. Так тоже можно. 🖤",
-]
 
 # как часто подчищать протухшие сессии диалогов и кулдауны комментариев
 _SWEEP_INTERVAL_SECONDS = 600
@@ -38,6 +34,7 @@ class AIChatCog(commands.Cog):
         event_bus: IEventBus,
         mood: MoodTracker,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.service = service
@@ -45,6 +42,8 @@ class AIChatCog(commands.Cog):
         self.gs = guild_settings
         self.role_sync = role_sync
         self.mood = mood
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         self._event_cooldowns: dict[int, float] = {}  # channel_id -> monotonic
         self._background: set[asyncio.Task] = set()
         self._sweep_task: asyncio.Task | None = None
@@ -57,6 +56,14 @@ class AIChatCog(commands.Cog):
         """Пер-серверное значение AI-настройки (override /config или глобальный дефолт)."""
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
+
+    async def _pick(self, guild_id: int, key: str) -> str:
+        """Случайный элемент фразы-списка (через render_block: режим/random)."""
+        return await self.persona.render_block(guild_id, key, None) or ""
 
     def _feature(self, guild_id: int, sub: str | None = None) -> bool:
         """Модуль «AI-чат» (мастер) и подфункция (вкладка «Модули»). Флаг,
@@ -144,10 +151,12 @@ class AIChatCog(commands.Cog):
                 )
         except AIProviderError:
             logger.warning("AI-провайдер не ответил", exc_info=True)
-            await message.reply(
-                random.choice(_ERROR_REPLIES),
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
+            error_reply = await self._pick(message.guild.id, "ai_chat.error_replies")
+            if error_reply:
+                await message.reply(
+                    error_reply,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             return
         except Exception:
             logger.exception("Ошибка обработки сообщения ai_chat")
@@ -309,7 +318,9 @@ class AIChatCog(commands.Cog):
                 guild_id=event.guild_id,
                 user_id=event.requested_by,
                 user_display=display,
-                instruction=f"{display} включил в голосовом канале трек «{event.title}».",
+                instruction=self._p(
+                    event.guild_id, "ai_chat.event_track", display=display, title=event.title
+                ),
                 now=datetime.now(UTC),
             )
             await channel.send(comment[:2000], allowed_mentions=discord.AllowedMentions.none())
