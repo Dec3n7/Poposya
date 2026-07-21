@@ -92,7 +92,11 @@ class MusicCog(commands.Cog):
 
     def _make_player_view(self) -> PlayerView:
         return PlayerView(
-            self.service, self.lyrics, self.toggle_like_current, self.save_queue_current
+            self.service,
+            self.lyrics,
+            self.toggle_like_current,
+            self.save_queue_current,
+            persona=self.persona,
         )
 
     def _p(self, guild_id: int, key: str, **vars: object) -> str:
@@ -208,7 +212,9 @@ class MusicCog(commands.Cog):
             return
         await interaction.followup.send(
             self._p(gid, "music.search_results", count=len(results)),
-            view=SearchView(self.service.enqueue_tracks, results, to_front=to_front),
+            view=SearchView(
+                self.service.enqueue_tracks, results, to_front=to_front, persona=self.persona
+            ),
             ephemeral=True,
         )
 
@@ -221,7 +227,7 @@ class MusicCog(commands.Cog):
                 self._p(interaction.guild_id, "music.queue_empty"), ephemeral=True
             )
             return
-        view = QueueView(player)
+        view = QueueView(player, persona=self.persona)
         await interaction.response.send_message(
             embed=view.build_embed(),
             view=view,
@@ -248,7 +254,7 @@ class MusicCog(commands.Cog):
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
-        view = HistoryView(self.service.enqueue_tracks, recent)
+        view = HistoryView(self.service.enqueue_tracks, recent, persona=self.persona)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     # --- сохранение очереди из кнопки плеера ---
@@ -762,7 +768,12 @@ class MusicCog(commands.Cog):
             await interaction.followup.send(text, ephemeral=True)
             return
         view = LikedListView(
-            self.container.resolve_liked, self.service.enqueue_tracks, target, liked
+            self.container.resolve_liked,
+            self.service.enqueue_tracks,
+            target,
+            liked,
+            guild_id=gid,
+            persona=self.persona,
         )
         await interaction.followup.send(
             embed=view.build_embed(interaction.user.id), view=view, ephemeral=True

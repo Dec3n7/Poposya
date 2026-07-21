@@ -15,6 +15,7 @@ from src.infrastructure.discord.cogs.music.formatting import (
     fmt_duration,
     trim,
 )
+from src.infrastructure.persona_service import RegistryPersona
 
 if TYPE_CHECKING:
     from src.application.music.use_cases import ResolveLikedUseCase
@@ -26,10 +27,13 @@ EnqueueFn = Callable[[discord.Interaction, list[Track], bool], Awaitable[bool]]
 
 
 class SearchSelect(discord.ui.Select):
-    def __init__(self, enqueue: EnqueueFn, tracks: list[Track], to_front: bool = False):
+    def __init__(
+        self, enqueue: EnqueueFn, tracks: list[Track], to_front: bool = False, persona=None
+    ):
         self._enqueue = enqueue
         self.tracks = tracks
         self.to_front = to_front
+        self._persona = persona if persona is not None else RegistryPersona()
         options = [
             discord.SelectOption(
                 label=trim(track.title, 95),
@@ -45,23 +49,27 @@ class SearchSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         track = self.tracks[int(self.values[0])]
-        prefix = "Поставила первой" if self.to_front else "Добавила"
+        key = "music.add_front_prefix" if self.to_front else "music.add_prefix"
+        prefix = str(self._persona.phrase(interaction.guild_id, key))
         await interaction.response.edit_message(content=f"{prefix}: **{track.title}**", view=None)
         await self._enqueue(interaction, [track], self.to_front)
 
 
 class SearchView(discord.ui.View):
-    def __init__(self, enqueue: EnqueueFn, tracks: list[Track], to_front: bool = False):
+    def __init__(
+        self, enqueue: EnqueueFn, tracks: list[Track], to_front: bool = False, persona=None
+    ):
         super().__init__(timeout=60)
-        self.add_item(SearchSelect(enqueue, tracks, to_front))
+        self.add_item(SearchSelect(enqueue, tracks, to_front, persona=persona))
 
 
 class HistorySelect(discord.ui.Select):
     """Выбор трека из истории для повторного воспроизведения."""
 
-    def __init__(self, enqueue: EnqueueFn, tracks: list[Track]):
+    def __init__(self, enqueue: EnqueueFn, tracks: list[Track], persona=None):
         self._enqueue = enqueue
         self.tracks = tracks
+        self._persona = persona if persona is not None else RegistryPersona()
         options = [
             discord.SelectOption(
                 label=trim(track.title, 95),
@@ -79,16 +87,19 @@ class HistorySelect(discord.ui.Select):
         from dataclasses import replace
 
         track = replace(self.tracks[int(self.values[0])], requested_by=interaction.user.id)
-        await interaction.response.edit_message(
-            content=f"Добавила снова: **{trim(track.title, 100)}**", view=None
+        content = str(
+            self._persona.phrase(
+                interaction.guild_id, "music.added_again", title=trim(track.title, 100)
+            )
         )
+        await interaction.response.edit_message(content=content, view=None)
         await self._enqueue(interaction, [track], False)
 
 
 class HistoryView(discord.ui.View):
-    def __init__(self, enqueue: EnqueueFn, tracks: list[Track]):
+    def __init__(self, enqueue: EnqueueFn, tracks: list[Track], persona=None):
         super().__init__(timeout=120)
-        self.add_item(HistorySelect(enqueue, tracks))
+        self.add_item(HistorySelect(enqueue, tracks, persona=persona))
 
 
 _QUEUE_PAGE_SIZE = 10
@@ -97,9 +108,10 @@ _QUEUE_PAGE_SIZE = 10
 class QueueView(discord.ui.View):
     """Очередь с пагинацией; читает состояние плеера вживую (эфемерное)."""
 
-    def __init__(self, player):
+    def __init__(self, player, persona=None):
         super().__init__(timeout=120)
         self.player = player
+        self._persona = persona if persona is not None else RegistryPersona()
         self.page = 0
         self._sync()
 
@@ -108,6 +120,7 @@ class QueueView(discord.ui.View):
         return max(1, -(-len(self.player.queue) // _QUEUE_PAGE_SIZE))
 
     def build_embed(self) -> discord.Embed:
+        gid = self.player.guild_id
         queue = list(self.player.queue)
         start = self.page * _QUEUE_PAGE_SIZE
         lines: list[str] = []
@@ -124,15 +137,23 @@ class QueueView(discord.ui.View):
                 f"{fmt_duration(track.duration)} · <@{track.requested_by}>"
             )
         if not queue:
-            lines.append("В очереди пусто — играет только текущий трек.")
+            lines.append(str(self._persona.phrase(gid, "music.queue_only_current")))
         total = sum(t.duration or 0 for t in queue)
         embed = discord.Embed(
-            title=f"🎶 Очередь ({len(queue)})",
+            title=str(self._persona.phrase(gid, "music.queue_title", count=len(queue))),
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
         embed.set_footer(
-            text=f"Стр. {self.page + 1}/{self.total_pages} · всего ~{fmt_duration(total)}"
+            text=str(
+                self._persona.phrase(
+                    gid,
+                    "music.queue_footer",
+                    page=self.page + 1,
+                    total=self.total_pages,
+                    duration=fmt_duration(total),
+                )
+            )
         )
         return embed
 
@@ -170,12 +191,16 @@ class LikedListView(discord.ui.View):
         enqueue: EnqueueFn,
         owner: discord.abc.User,
         tracks: list[LikedTrack],
+        guild_id: int = 0,
+        persona=None,
     ):
         super().__init__(timeout=300)
         self._resolve_liked = resolve_liked
         self._enqueue = enqueue
         self.owner = owner
         self.tracks = tracks
+        self._guild_id = guild_id
+        self._persona = persona if persona is not None else RegistryPersona()
         self.page = 0
         self._rebuild()
 
@@ -194,9 +219,16 @@ class LikedListView(discord.ui.View):
             for i, t in enumerate(self._page_tracks(), 1)
         ]
         title = (
-            f"❤️ Твои лайки ({len(self.tracks)})"
+            str(self._persona.phrase(self._guild_id, "music.liked_title_self", count=len(self.tracks)))
             if self.owner.id == viewer_id
-            else f"❤️ Лайки {self.owner.display_name} ({len(self.tracks)})"
+            else str(
+                self._persona.phrase(
+                    self._guild_id,
+                    "music.liked_title_other",
+                    name=self.owner.display_name,
+                    count=len(self.tracks),
+                )
+            )
         )
         embed = discord.Embed(
             title=title,
@@ -204,7 +236,14 @@ class LikedListView(discord.ui.View):
             color=EMBED_COLOR,
         )
         embed.set_footer(
-            text=f"Страница {self.page + 1}/{self.total_pages} · меню ниже — включить трек"
+            text=str(
+                self._persona.phrase(
+                    self._guild_id,
+                    "music.liked_footer",
+                    page=self.page + 1,
+                    total=self.total_pages,
+                )
+            )
         )
         return embed
 
@@ -242,9 +281,10 @@ class LikedListView(discord.ui.View):
     @discord.ui.select(placeholder="Включить трек с этой страницы…", row=0)
     async def play_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         member = interaction.user
+        gid = interaction.guild_id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                "Сначала зайди в голосовой канал.", ephemeral=True
+                str(self._persona.phrase(gid, "music.join_voice_first")), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
@@ -255,13 +295,13 @@ class LikedListView(discord.ui.View):
         )
         if resolved is None:
             await interaction.followup.send(
-                "Не смогла оживить этот трек: видео умерло, замена не нашлась.",
-                ephemeral=True,
+                str(self._persona.phrase(gid, "music.liked_play_dead_view")), ephemeral=True
             )
             return
         if await self._enqueue(interaction, [resolved], False):
             await interaction.followup.send(
-                f"Добавила: **{trim(resolved.title, 100)}**", ephemeral=True
+                str(self._persona.phrase(gid, "music.liked_view_added", title=trim(resolved.title, 100))),
+                ephemeral=True,
             )
 
 
@@ -275,17 +315,24 @@ class PlayerView(discord.ui.View):
         lyrics: "LyricsService",
         on_like: Callable[[discord.Interaction], Awaitable[None]],
         on_save: Callable[[discord.Interaction], Awaitable[None]] | None = None,
+        persona=None,
     ):
         super().__init__(timeout=None)
         self._service = service
         self._lyrics = lyrics
         self._on_like = on_like
         self._on_save = on_save
+        self._persona = persona if persona is not None else RegistryPersona()
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        return str(self._persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         player = self._service.get_player(interaction.guild_id)
         if player is None:
-            await interaction.response.send_message("Плеер уже не активен.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.player_inactive"), ephemeral=True
+            )
             return False
         # лайк — личное дело: доступен всем, кто видит плеер, без войса
         if (interaction.data or {}).get("custom_id") == "music:like":
@@ -294,7 +341,7 @@ class PlayerView(discord.ui.View):
         member = interaction.user
         if not vc or not member.voice or member.voice.channel != vc.channel:
             await interaction.response.send_message(
-                "Кнопки — для тех, кто в голосовом канале со мной.", ephemeral=True
+                self._p(interaction.guild_id, "music.buttons_voice_only"), ephemeral=True
             )
             return False
         return True
@@ -310,7 +357,9 @@ class PlayerView(discord.ui.View):
         if player is None:
             return
         if not await player.previous():
-            await interaction.followup.send("История пуста — некуда назад.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(interaction.guild_id, "music.history_empty_back"), ephemeral=True
+            )
 
     @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.primary, row=0, custom_id="music:pause")
     async def pause_button(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -342,7 +391,9 @@ class PlayerView(discord.ui.View):
     @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, row=0, custom_id="music:stop")
     async def stop_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        await self._service.cleanup(interaction.guild_id, "⏹️ Остановлено.")
+        await self._service.cleanup(
+            interaction.guild_id, self._p(interaction.guild_id, "music.cleanup_stop_button")
+        )
 
     # --- ряд 1: громкость ---
 
@@ -373,7 +424,7 @@ class PlayerView(discord.ui.View):
             return
         if len(player.queue) < 2:
             await interaction.response.send_message(
-                "Перемешивать нечего — в очереди пусто.", ephemeral=True
+                self._p(interaction.guild_id, "music.shuffle_empty_player"), ephemeral=True
             )
             return
         await interaction.response.defer()
