@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONVERTED = [
     "src/infrastructure/discord/cogs/activity.py",
     "src/infrastructure/discord/cogs/ai_chat.py",
+    "src/infrastructure/discord/cogs/cinema/cog.py",
     "src/infrastructure/discord/cogs/finds.py",
     "src/infrastructure/discord/cogs/introduce.py",
     "src/infrastructure/discord/cogs/music/cog.py",

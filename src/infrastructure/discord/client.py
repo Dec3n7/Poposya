@@ -131,6 +131,7 @@ class PoposyaBot(commands.Bot):
                 mood,
                 movie_search,
                 gs,
+                persona=persona,
             )
         )
         from src.infrastructure.discord.cogs.autorole import AutoRoleCog

@@ -15,6 +15,7 @@ from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.scheduler import DeferredScheduler
+from src.infrastructure.persona_service import RegistryPersona
 
 from .formatting import (
     _DATE_RE,
@@ -51,6 +52,7 @@ class CinemaCog(commands.Cog):
         mood: MoodTracker,
         movie_search: IMovieSearch,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.cinema = container
@@ -60,6 +62,8 @@ class CinemaCog(commands.Cog):
         self.mood = mood
         self.movie_search = movie_search
         self.gs = guild_settings
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         self._scheduler = DeferredScheduler("cinema")
         self._restored = False
         self.forum = CinemaForum(self.bot, self.cinema, self._cfg)
@@ -77,6 +81,10 @@ class CinemaCog(commands.Cog):
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "cinema_enabled")
@@ -150,7 +158,7 @@ class CinemaCog(commands.Cog):
         results = await self.movie_search.search(query) if self.movie_search.enabled else []
         if len(results) > 1:
             await interaction.followup.send(
-                f"Нашла {len(results)} — уточни:",
+                self._p(interaction.guild_id, "cinema.pick_prompt", count=len(results)),
                 view=MoviePickView(self, results),
                 ephemeral=True,
             )
@@ -161,7 +169,9 @@ class CinemaCog(commands.Cog):
         # текстовый режим (нет ключа TMDB или ничего не нашлось)
         title = query.strip()[:100]
         if not title:
-            await interaction.followup.send("Название-то напиши.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(interaction.guild_id, "cinema.add_need_title"), ephemeral=True
+            )
             return
         await self.add_entry(
             interaction,
@@ -186,17 +196,17 @@ class CinemaCog(commands.Cog):
             overview=info.overview,
             poster_url=info.poster_url,
         )
+        gid = interaction.guild_id
         result = await self.cinema.add_movie.execute(entry)
         if result.status == "duplicate":
             await interaction.followup.send(
-                f"**{_trim(info.title, 100)}** уже в вотчлисте — голосуй за него 👍.",
+                self._p(gid, "cinema.add_duplicate", title=_trim(info.title, 100)),
                 ephemeral=True,
             )
             return
         if result.status == "limit":
             await interaction.followup.send(
-                f"Вотчлист переполнен ({self._cfg(interaction.guild_id, 'cinema_watchlist_max')}). "
-                "Сначала посмотрите что-нибудь.",
+                self._p(gid, "cinema.add_limit", max=self._cfg(gid, "cinema_watchlist_max")),
                 ephemeral=True,
             )
             return
@@ -204,12 +214,12 @@ class CinemaCog(commands.Cog):
         embed = discord.Embed(
             title=f"🎬 {_trim(_title_of(saved), 200)}",
             description=(f"{_trim(saved.overview, 350)}\n\n" if saved.overview else "")
-            + f"-# Предложил <@{saved.added_by}> · голосуйте кнопками",
-            color=accent(interaction.guild_id),
+            + self._p(gid, "cinema.card_proposer", proposer=f"<@{saved.added_by}>"),
+            color=accent(gid),
         )
         if saved.poster_url:
             embed.set_thumbnail(url=saved.poster_url)
-        embed.set_footer(text="👍 0 · 👎 0 · счёт 0")
+        embed.set_footer(text=self._p(gid, "cinema.card_footer", up=0, down=0, score="0"))
         try:
             message = await interaction.channel.send(
                 embed=embed,
@@ -217,13 +227,15 @@ class CinemaCog(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
-            await interaction.followup.send("Не смогла отправить карточку.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "cinema.card_send_failed"), ephemeral=True
+            )
             return
         await self.cinema.register_message.execute(
             "card", saved.id, interaction.channel.id, message.id
         )
         await interaction.followup.send(
-            f"В вотчлисте: **{_trim(saved.title, 100)}**", ephemeral=True
+            self._p(gid, "cinema.add_ok", title=_trim(saved.title, 100)), ephemeral=True
         )
 
     async def handle_vote(self, interaction: discord.Interaction, value: int) -> None:
@@ -231,41 +243,51 @@ class CinemaCog(commands.Cog):
         result = await self.cinema.vote_movie.execute(
             interaction.message.id, interaction.user.id, value
         )
+        gid = interaction.guild_id
         if result.status == "gone":
-            await interaction.followup.send("Этот фильм уже не в вотчлисте.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "cinema.vote_gone"), ephemeral=True)
             return
         try:
             embed = interaction.message.embeds[0]
             embed.set_footer(
-                text=f"👍 {result.up} · 👎 {result.down} · счёт {result.up - result.down:+d}"
+                text=self._p(
+                    gid,
+                    "cinema.card_footer",
+                    up=result.up,
+                    down=result.down,
+                    score=f"{result.up - result.down:+d}",
+                )
             )
             await interaction.message.edit(embed=embed)
         except discord.HTTPException:
             pass
-        note = {1: "👍 Учтён.", -1: "👎 Учтён.", None: "Голос снят."}[result.my_vote]
+        note = {
+            1: self._p(gid, "cinema.vote_up"),
+            -1: self._p(gid, "cinema.vote_down"),
+            None: self._p(gid, "cinema.vote_removed"),
+        }[result.my_vote]
         await interaction.followup.send(note, ephemeral=True)
 
     @movie_group.command(name="list", description="Вотчлист сервера по голосам")
     async def movie_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        ranked = await self.cinema.list_watchlist.execute(interaction.guild_id)
+        gid = interaction.guild_id
+        ranked = await self.cinema.list_watchlist.execute(gid)
         if not ranked:
-            await interaction.followup.send(
-                "Вотчлист пуст — `/movie add` в помощь.", ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.list_empty"), ephemeral=True)
             return
         lines = [
             f"`{i}.` **{_trim(_title_of(e), 60)}** · 👍{up} 👎{down}"
             for i, (e, up, down) in enumerate(ranked[:15], 1)
         ]
         if len(ranked) > 15:
-            lines.append(f"…и ещё {len(ranked) - 15}")
+            lines.append(self._p(gid, "cinema.list_more", count=len(ranked) - 15))
         embed = discord.Embed(
-            title=f"🎬 Вотчлист ({len(ranked)})",
+            title=self._p(gid, "cinema.list_title", count=len(ranked)),
             description="\n".join(lines)[:4000],
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
-        embed.set_footer(text="/movienight start — устроить киновечер")
+        embed.set_footer(text=self._p(gid, "cinema.list_footer"))
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def _listed_autocomplete(
@@ -284,19 +306,22 @@ class CinemaCog(commands.Cog):
     @app_commands.autocomplete(movie=_listed_autocomplete)
     async def movie_remove(self, interaction: discord.Interaction, movie: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         if not movie.isdigit():
-            await interaction.followup.send("Выбери фильм из подсказок.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "cinema.pick_from_hints"), ephemeral=True
+            )
             return
         status, entry = await self.cinema.remove_movie.execute(
-            interaction.guild_id,
+            gid,
             int(movie),
             interaction.user.id,
             interaction.user.guild_permissions.administrator,
         )
         replies = {
-            "ok": f"🗑️ Убрала: **{_trim(entry.title if entry else '', 100)}**",
-            "not_found": "Такого фильма в вотчлисте нет.",
-            "forbidden": "Убирать может предложивший или администратор.",
+            "ok": self._p(gid, "cinema.remove_ok", title=_trim(entry.title if entry else "", 100)),
+            "not_found": self._p(gid, "cinema.remove_not_found"),
+            "forbidden": self._p(gid, "cinema.remove_forbidden"),
         }
         await interaction.followup.send(replies[status], ephemeral=True)
         if status == "ok" and entry is not None and entry.message_id:
@@ -313,26 +338,26 @@ class CinemaCog(commands.Cog):
     @app_commands.autocomplete(movie=_listed_autocomplete)
     async def movie_watched(self, interaction: discord.Interaction, movie: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         if not movie.isdigit():
-            await interaction.followup.send("Выбери фильм из подсказок.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "cinema.pick_from_hints"), ephemeral=True
+            )
             return
         entry = await self.cinema.open_rating.execute(int(movie), datetime.now(UTC))
         if entry is None:
-            await interaction.followup.send(
-                "Этот фильм не в вотчлисте или уже оценивается.", ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.watched_bad"), ephemeral=True)
             return
         await self._post_rating_message(interaction.channel, entry)
-        await interaction.followup.send("Открыла сбор оценок.", ephemeral=True)
+        await interaction.followup.send(self._p(gid, "cinema.rating_opened"), ephemeral=True)
 
     @movie_group.command(name="top", description="Золотой фонд: просмотренное по оценкам")
     async def movie_top(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        watched = await self.cinema.top_watched.execute(interaction.guild_id)
+        gid = interaction.guild_id
+        watched = await self.cinema.top_watched.execute(gid)
         if not watched:
-            await interaction.followup.send(
-                "Пока ничего не посмотрели. Всё впереди.", ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.top_empty"), ephemeral=True)
             return
         lines = []
         for i, e in enumerate(watched[:15], 1):
@@ -340,9 +365,9 @@ class CinemaCog(commands.Cog):
             poposya = f" · я: {e.poposya_score}/10" if e.poposya_score else ""
             lines.append(f"`{i}.` {_trim(_title_of(e), 55)} — {score}{poposya}")
         embed = discord.Embed(
-            title=f"🏆 Золотой фонд ({len(watched)})",
+            title=self._p(gid, "cinema.top_title", count=len(watched)),
             description="\n".join(lines)[:4000],
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -389,45 +414,55 @@ class CinemaCog(commands.Cog):
         self, interaction: discord.Interaction, time: str, day: str | None = None
     ) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         when = self._parse_when(day, time)
         now = datetime.now(UTC)
         if when is None or when < now + timedelta(minutes=15):
             await interaction.followup.send(
-                "Не поняла время. Форматы: `20:30`, `завтра 19:00`, `12.07 21:00`; "
-                "минимум за 15 минут.",
-                ephemeral=True,
+                self._p(gid, "cinema.night_bad_time"), ephemeral=True
             )
             return
         result = await self.cinema.start_night.execute(
-            interaction.guild_id, interaction.user.id, when, now
+            gid, interaction.user.id, when, now
         )
         if result.status == "busy":
-            await interaction.followup.send(
-                "Киновечер уже назначен — `/movienight cancel`, если передумали.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(self._p(gid, "cinema.night_busy"), ephemeral=True)
             return
         if result.status == "empty":
-            await interaction.followup.send("Вотчлист пуст — сначала `/movie add`.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "cinema.night_empty"), ephemeral=True)
             return
         night, candidates = result.night, result.candidates
         lines = [f"`{i}.` **{_trim(_title_of(e), 60)}**" for i, e in enumerate(candidates, 1)]
         embed = discord.Embed(
-            title="🍿 Киновечер: выбираем фильм",
+            title=self._p(gid, "cinema.night_poll_title"),
             description=(
                 "\n".join(lines)
-                + f"\n\n**Сеанс:** {_ts(night.scheduled_at, 'F')} ({_ts(night.scheduled_at)})"
-                + f"\n**Голосование до** {_ts(night.poll_ends_at, 't')} ({_ts(night.poll_ends_at)})"
+                + "\n\n"
+                + self._p(
+                    gid,
+                    "cinema.night_session",
+                    when=_ts(night.scheduled_at, "F"),
+                    rel=_ts(night.scheduled_at),
+                )
+                + "\n"
+                + self._p(
+                    gid,
+                    "cinema.night_vote_until",
+                    when=_ts(night.poll_ends_at, "t"),
+                    rel=_ts(night.poll_ends_at),
+                )
             )[:4000],
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
-        embed.set_footer(text="Один голос на человека; можно передумать.")
+        embed.set_footer(text=self._p(gid, "cinema.night_poll_footer"))
         try:
             message = await interaction.channel.send(
                 embed=embed, view=NightPollView(self, night.id, candidates)
             )
         except discord.HTTPException:
-            await interaction.followup.send("Не смогла отправить опрос.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "cinema.night_poll_send_failed"), ephemeral=True
+            )
             return
         await self.cinema.register_message.execute(
             "poll", night.id, interaction.channel.id, message.id
@@ -437,7 +472,7 @@ class CinemaCog(commands.Cog):
             night.poll_ends_at,
             lambda nid=night.id: self.service.close_poll(nid),
         )
-        await interaction.followup.send("Киновечер объявлен. 🍿", ephemeral=True)
+        await interaction.followup.send(self._p(gid, "cinema.night_announced"), ephemeral=True)
 
     @night_group.command(name="cancel", description="Отменить киновечер (автор или админ)")
     async def night_cancel(self, interaction: discord.Interaction) -> None:
@@ -447,10 +482,11 @@ class CinemaCog(commands.Cog):
             interaction.user.id,
             interaction.user.guild_permissions.administrator,
         )
+        gid = interaction.guild_id
         replies = {
-            "ok": "Отменила. Значит, в другой раз.",
-            "none": "Отменять нечего — киновечер не назначен.",
-            "forbidden": "Отменять может устроивший или администратор.",
+            "ok": self._p(gid, "cinema.night_cancel_ok"),
+            "none": self._p(gid, "cinema.night_cancel_none"),
+            "forbidden": self._p(gid, "cinema.night_cancel_forbidden"),
         }
         await interaction.followup.send(replies[status], ephemeral=True)
         if status == "ok" and night is not None:
@@ -466,12 +502,17 @@ class CinemaCog(commands.Cog):
             entry_id,
             datetime.now(UTC),
         )
+        gid = interaction.guild_id
         if status == "closed":
-            await interaction.followup.send("Голосование уже закрыто.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "cinema.night_vote_closed"), ephemeral=True
+            )
             return
         entry = await self.cinema.get_movie.execute(entry_id)
-        title = _trim(entry.title, 80) if entry else "фильм"
-        await interaction.followup.send(f"Голос за **{title}** принят.", ephemeral=True)
+        title = _trim(entry.title, 80) if entry else self._p(gid, "cinema.movie_fallback")
+        await interaction.followup.send(
+            self._p(gid, "cinema.night_vote_ok", title=title), ephemeral=True
+        )
 
     # --- оценки ---
 
@@ -480,9 +521,10 @@ class CinemaCog(commands.Cog):
         entry = await self.cinema.open_rating.execute_by_winner_message(
             interaction.message.id, datetime.now(UTC)
         )
+        gid = interaction.guild_id
         if entry is None:
             await interaction.followup.send(
-                "Оценки уже открыты или киновечер не активен.", ephemeral=True
+                self._p(gid, "cinema.rating_already_open"), ephemeral=True
             )
             return
         try:
@@ -490,7 +532,7 @@ class CinemaCog(commands.Cog):
         except discord.HTTPException:
             pass
         await self.service.post_rating_message(interaction.channel, entry)
-        await interaction.followup.send("Открыла сбор оценок.", ephemeral=True)
+        await interaction.followup.send(self._p(gid, "cinema.rating_opened"), ephemeral=True)
 
     async def handle_rate(self, interaction: discord.Interaction, score: int) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -498,8 +540,9 @@ class CinemaCog(commands.Cog):
         result = await self.cinema.rate_movie.execute(
             interaction.message.id, interaction.user.id, score, now
         )
+        gid = interaction.guild_id
         if result.status == "closed":
-            await interaction.followup.send("Сбор оценок уже закрыт.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "cinema.rating_closed"), ephemeral=True)
             return
         if result.first_time and self.settings.cinema_rating_points > 0:
             try:
@@ -514,11 +557,15 @@ class CinemaCog(commands.Cog):
                 logger.exception("Очки за оценку не начислились")
         try:
             embed = interaction.message.embeds[0]
-            embed.set_footer(text=f"Оценок: {result.count} · Отзывов: {result.reviews}")
+            embed.set_footer(
+                text=self._p(gid, "cinema.rating_footer", count=result.count, reviews=result.reviews)
+            )
             await interaction.message.edit(embed=embed)
         except (discord.HTTPException, IndexError):
             pass
-        await interaction.followup.send(f"Записала: **{score}/10**.", ephemeral=True)
+        await interaction.followup.send(
+            self._p(gid, "cinema.rating_recorded", score=score), ephemeral=True
+        )
 
     async def handle_review(
         self, interaction: discord.Interaction, rating_message_id: int, text: str
@@ -527,18 +574,21 @@ class CinemaCog(commands.Cog):
         result = await self.cinema.review_movie.execute(
             rating_message_id, interaction.user.id, text, datetime.now(UTC)
         )
+        gid = interaction.guild_id
         if result.status == "closed":
-            await interaction.followup.send("Сбор оценок уже закрыт.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "cinema.rating_closed"), ephemeral=True)
             return
         # у сабмита модалки нет message — дотягиваем карточку по id, чтобы
         # освежить счётчик отзывов в футере
         try:
             message = await interaction.channel.fetch_message(rating_message_id)
             embed = message.embeds[0]
-            embed.set_footer(text=f"Оценок: {result.count} · Отзывов: {result.reviews}")
+            embed.set_footer(
+                text=self._p(gid, "cinema.rating_footer", count=result.count, reviews=result.reviews)
+            )
             await message.edit(embed=embed)
         except (discord.HTTPException, IndexError, AttributeError):
             pass
         await interaction.followup.send(
-            "Отзыв записан — появится в ветке под итогами. ✂️👁🖤", ephemeral=True
+            self._p(gid, "cinema.review_recorded"), ephemeral=True
         )
