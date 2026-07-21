@@ -16,44 +16,12 @@ from src.domain.finds.catalog import RARITY_EMOJI, RARITY_LABELS, season_for_mon
 from src.domain.finds.entities import NightFind, Rarity
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 # «только если в основном канале была активность» — окно, в котором сервер
 # считается живым для спавна находки
 _ACTIVITY_WINDOW_SECONDS = 12 * 3600
-
-_OPENERS = [
-    "Я сегодня гуляла под мелким дождём около {place}. Заметила кое-что… интересное.",
-    "Опять бродила ночью. Нашла кое-что, что может тебе понравиться.",
-    "Иногда город сам подкидывает подарки. Сегодня был такой момент.",
-    "Не удержалась. В старом районе кое-что блеснуло под фонарём.",
-]
-_FAIL_LINES = [
-    "Пусто? Как неожиданно. Хотя… я же не говорила, что оно будет лежать и ждать именно тебя.",
-    "Ничего? Жаль. В следующий раз смотри внимательнее.",
-    "Пф. Пустые руки. Не расстраивайся, я тоже иногда возвращаюсь ни с чем. Хотя и реже.",
-]
-# тепло реакции растёт с уровнем отношений
-_SUCCESS_LOW = "Хорошо. Ты его действительно забрал. Не ожидала."
-_SUCCESS_MID = "Неплохо. Это даже мило с твоей стороны."
-_SUCCESS_HIGH = "…Ты правда пошёл туда ради этого? Хм. Спасибо. ✂️👁🖤"
-_SUCCESS_LEGENDARY = "…Стой. Ты нашёл ЭТО? Я запомню этот момент. Надолго. ✂️👁🖤"
-
-_GIFT_LINES = {
-    Rarity.COMMON: "Ты серьёзно решил мне это подарить? …Ладно. Я приму. И запомню.",
-    Rarity.UNCOMMON: "Хм. У тебя неплохой вкус. Приму. И да — я запомню.",
-    Rarity.RARE: "…Это правда мне? Такое я не забываю. Спасибо. 🖤",
-    Rarity.LEGENDARY: "…Я не знаю, что сказать. Это со мной навсегда. Как и этот момент. ✂️👁🖤",
-}
-
-_WALK_SUCCESS = [
-    "Прогулялась. Дождь, фонари, один подозрительный кот. И вот — держи.",
-    "Сходила. Ради тебя, между прочим. Смотри, что принесла.",
-]
-_WALK_FAIL = [
-    "Прогулялась впустую. Город сегодня жадный. Бывает.",
-    "Ничего. Даже кот куда-то делся. Не мой вечер — и не твой.",
-]
 
 
 def _ts(dt: datetime) -> str:
@@ -90,12 +58,15 @@ class FindsCog(commands.Cog):
         settings: Settings,
         mood: MoodTracker,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.finds = container
         self.settings = settings
         self.mood = mood
         self.gs = guild_settings
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         self._main_last_activity: dict[int, float] = {}  # guild_id -> monotonic
         self._expiry_tasks: dict[int, asyncio.Task] = {}  # find_id -> task
         self._next_spawn: dict[int, float] = {}  # guild_id -> monotonic след. спавна
@@ -106,6 +77,14 @@ class FindsCog(commands.Cog):
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
+
+    async def _pick(self, guild_id: int, key: str, **vars: object) -> str:
+        """Случайный элемент фразы-списка (через render_block: режим/random)."""
+        return await self.persona.render_block(guild_id, key, None, **vars) or ""
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "finds_enabled")
@@ -224,19 +203,19 @@ class FindsCog(commands.Cog):
         if result is None:  # активная находка уже висит
             return None
         find, location, _item = result
-        opener = self._rng.choice(_OPENERS).format(place=location.name)
+        opener = await self._pick(guild.id, "finds.opener", place=location.name)
+        body = self._p(guild.id, "finds.announce_body")
+        place = self._p(
+            guild.id, "finds.announce_place", place=location.name, place_flavor=location.flavor
+        )
         embed = discord.Embed(
-            title="🌙 Ночная находка",
-            description=(
-                f"{opener}\n\n"
-                "Не обещаю, что оно всё ещё там — Токио быстрый. "
-                "Но если хочешь, можешь сходить посмотреть.\n\n"
-                f"**Место:** {location.name}\n"
-                f"-# {location.flavor}"
-            ),
+            title=self._p(guild.id, "finds.announce_title"),
+            description="\n\n".join(part for part in (opener, body, place) if part),
             color=accent(guild.id),
         )
-        embed.set_footer(text="Одна попытка на находку. Заберёт первый, кому повезёт.")
+        footer = self._p(guild.id, "finds.announce_footer")
+        if footer:
+            embed.set_footer(text=footer)
         try:
             message = await channel.send(
                 embed=embed,
@@ -271,7 +250,7 @@ class FindsCog(commands.Cog):
         fresh = await self.finds.list_live_finds.execute(now)
         if any(f.id == find.id for f in fresh):
             return
-        await self._close_announcement(find, "-# 🌙 Опоздали. Токио быстрый — находки не ждут.")
+        await self._close_announcement(find, self._p(find.guild_id, "finds.expired"))
 
     async def _close_announcement(self, find: NightFind, note: str) -> None:
         """Убрать кнопку с анонса и дописать итог."""
@@ -297,72 +276,83 @@ class FindsCog(commands.Cog):
         result = await self.finds.claim_find.execute(
             interaction.guild_id, interaction.user.id, interaction.message.id, now
         )
+        gid = interaction.guild_id
         if result.status == "gone":
-            await interaction.followup.send(
-                "Там уже пусто. Или кто-то успел раньше, или Токио забрал своё.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(self._p(gid, "finds.claim_gone"), ephemeral=True)
             return
         if result.status == "already":
-            await interaction.followup.send(
-                "Ты уже ходил к этой находке. Второго шанса город не даёт.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(self._p(gid, "finds.claim_already"), ephemeral=True)
             return
         if result.status == "cooldown":
             await interaction.followup.send(
-                f"Ноги ещё гудят после прошлого похода. Возвращайся {_ts(result.retry_at)}.",
+                self._p(gid, "finds.claim_cooldown", retry=_ts(result.retry_at)),
                 ephemeral=True,
             )
             return
         if result.status == "fail":
-            line = self._rng.choice(_FAIL_LINES)
-            await interaction.followup.send(
-                f"{line}\n-# {result.points_delta} очков. Сейчас у тебя {result.points_total}.",
-                ephemeral=True,
+            line = await self._pick(gid, "finds.claim_fail")
+            tail = self._p(
+                gid, "finds.points_tail", delta=result.points_delta, total=result.points_total
             )
+            await interaction.followup.send(f"{line}\n{tail}".strip(), ephemeral=True)
             return
 
         # success
         item = result.item
         await self._announce_claim(interaction, result)
         await interaction.followup.send(
-            f"{item.emoji} **{item.name}** теперь в твоей коллекции "
-            f"(`/collection`). +{result.points_delta} очков.",
+            self._p(
+                gid,
+                "finds.claim_success_note",
+                item_emoji=item.emoji,
+                item=item.name,
+                delta=result.points_delta,
+            ),
             ephemeral=True,
         )
 
     async def _announce_claim(self, interaction: discord.Interaction, result: ClaimResult) -> None:
         item = result.item
         user = interaction.user
+        gid = interaction.guild_id
         # закрыть анонс
         try:
             message = interaction.message
             embed = message.embeds[0] if message.embeds else None
             if embed is not None:
-                embed.description = (
-                    f"{embed.description}\n\n-# ✅ Забрал {user.mention} — {item.emoji} {item.name}"
+                taken = self._p(
+                    gid,
+                    "finds.claim_taken_note",
+                    user_mention=user.mention,
+                    item_emoji=item.emoji,
+                    item=item.name,
                 )
+                embed.description = f"{embed.description}\n\n{taken}"
             await message.edit(embed=embed, view=None)
         except discord.HTTPException:
             pass
-        # публичная реакция Попоси
+        # публичная реакция Попоси: тепло растёт с уровнем отношений
         if item.rarity is Rarity.LEGENDARY:
-            line = _SUCCESS_LEGENDARY
+            line_key = "finds.success_legendary"
         elif result.level >= 6:
-            line = _SUCCESS_HIGH
+            line_key = "finds.success_high"
         elif result.level >= 3:
-            line = _SUCCESS_MID
+            line_key = "finds.success_mid"
         else:
-            line = _SUCCESS_LOW
+            line_key = "finds.success_low"
+        line = self._p(gid, line_key)
+        award = self._p(
+            gid,
+            "finds.claim_award",
+            user_mention=user.mention,
+            delta=result.points_delta,
+            rarity_emoji=RARITY_EMOJI[item.rarity],
+            rarity=RARITY_LABELS[item.rarity],
+        )
         embed = discord.Embed(
             title=f"{item.emoji} {item.name}",
-            description=(
-                f"-# {item.flavor}\n\n{line}\n\n"
-                f"{user.mention} получает **+{result.points_delta}** очков "
-                f"({RARITY_EMOJI[item.rarity]} {RARITY_LABELS[item.rarity]} находка)."
-            ),
-            color=accent(interaction.guild_id),
+            description="\n\n".join(part for part in (f"-# {item.flavor}", line, award) if part),
+            color=accent(gid),
         )
         try:
             await interaction.channel.send(
@@ -386,51 +376,54 @@ class FindsCog(commands.Cog):
         channel = self._announce_channel(guild)
         if channel is None:
             await interaction.response.send_message(
-                "Не нашла канал для находок. Задай его: "
-                "`/config set finds_channel_id #канал` — или создай канал «основной».",
-                ephemeral=True,
+                self._p(guild.id, "finds.admin_no_channel"), ephemeral=True
             )
             return
         existing = await self.finds.get_active_find.execute(guild.id, datetime.now(UTC))
         if existing is not None:
             await interaction.response.send_message(
-                "Активная находка уже висит — сначала заберите её.", ephemeral=True
+                self._p(guild.id, "finds.admin_active_exists"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
         find = await self._try_spawn(guild, force=True)
         if find is not None:
             await interaction.followup.send(
-                f"🌙 Находка заспавнена в {channel.mention}.", ephemeral=True
+                self._p(guild.id, "finds.admin_spawned", channel_mention=channel.mention),
+                ephemeral=True,
             )
         else:
             await interaction.followup.send(
-                "Не вышло заспавнить — глянь логи бота.", ephemeral=True
+                self._p(guild.id, "finds.admin_spawn_failed"), ephemeral=True
             )
 
     @app_commands.command(name="finds", description="Активная ночная находка на сервере")
     @app_commands.guild_only()
     async def finds_command(self, interaction: discord.Interaction) -> None:
-        view = await self.finds.get_active_find.execute(interaction.guild_id, datetime.now(UTC))
+        gid = interaction.guild_id
+        view = await self.finds.get_active_find.execute(gid, datetime.now(UTC))
         if view is None:
             await interaction.response.send_message(
-                "Сейчас находок нет. Я хожу гулять, когда сама захочу.", ephemeral=True
+                self._p(gid, "finds.none_active"), ephemeral=True
             )
             return
-        jump = ""
+        body = self._p(
+            gid,
+            "finds.active_body",
+            place=view.location.name,
+            place_flavor=view.location.flavor,
+            expires=_ts(view.find.expires_at),
+        )
         if view.find.channel_id and view.find.message_id:
-            jump = (
-                f"\n[К анонсу](https://discord.com/channels/"
-                f"{interaction.guild_id}/{view.find.channel_id}/{view.find.message_id})"
+            url = (
+                f"https://discord.com/channels/"
+                f"{gid}/{view.find.channel_id}/{view.find.message_id}"
             )
+            body += "\n" + self._p(gid, "finds.active_jump", url=url)
         embed = discord.Embed(
-            title="🌙 Активная находка",
-            description=(
-                f"**Место:** {view.location.name}\n"
-                f"-# {view.location.flavor}\n\n"
-                f"Пропадёт {_ts(view.find.expires_at)}.{jump}"
-            ),
-            color=accent(interaction.guild_id),
+            title=self._p(gid, "finds.active_title"),
+            description=body,
+            color=accent(gid),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -438,14 +431,13 @@ class FindsCog(commands.Cog):
     @app_commands.guild_only()
     async def collection_command(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        entries = await self.finds.get_collection.execute(interaction.guild_id, interaction.user.id)
+        gid = interaction.guild_id
+        entries = await self.finds.get_collection.execute(gid, interaction.user.id)
         if not entries:
-            await interaction.followup.send(
-                "Пока пусто. Следи за моими ночными прогулками — и успевай первым.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(self._p(gid, "finds.collection_empty"), ephemeral=True)
             return
         order = [Rarity.LEGENDARY, Rarity.RARE, Rarity.UNCOMMON, Rarity.COMMON]
+        gifted_mark = self._p(gid, "finds.collection_gifted_mark")
         lines: list[str] = []
         for rarity in order:
             group = [e for e in entries if e.item.rarity is rarity]
@@ -453,13 +445,13 @@ class FindsCog(commands.Cog):
                 continue
             lines.append(f"**{RARITY_EMOJI[rarity]} {RARITY_LABELS[rarity].capitalize()}:**")
             for entry in group:
-                mark = " · 🎁 подарено мне" if entry.gifted_at is not None else ""
+                mark = gifted_mark if entry.gifted_at is not None else ""
                 lines.append(f"{entry.item.emoji} {entry.item.name}{mark}")
             lines.append("")
         embed = discord.Embed(
-            title=f"🗃️ Коллекция ({len(entries)})",
+            title=self._p(gid, "finds.collection_title", count=len(entries)),
             description="\n".join(lines).strip()[:4000],
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -471,20 +463,20 @@ class FindsCog(commands.Cog):
         result = await self.finds.gift_item.execute(
             interaction.guild_id, interaction.user.id, item, datetime.now(UTC)
         )
+        gid = interaction.guild_id
         if result.status != "ok":
-            await interaction.followup.send(
-                "У тебя нет такого предмета. Дарить чужое — не твой уровень.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(self._p(gid, "finds.gift_no_item"), ephemeral=True)
             return
         gifted = result.item
+        gift_lines = self.persona.phrase(gid, "finds.gift")
+        line = gift_lines.get(gifted.rarity.value, "") if isinstance(gift_lines, dict) else ""
+        award = self._p(
+            gid, "finds.gift_award", user_mention=interaction.user.mention, bonus=result.bonus
+        )
         embed = discord.Embed(
             title=f"🎁 {gifted.emoji} {gifted.name}",
-            description=(
-                f"{_GIFT_LINES[gifted.rarity]}\n\n"
-                f"{interaction.user.mention} получает **+{result.bonus}** очков."
-            ),
-            color=accent(interaction.guild_id),
+            description="\n\n".join(part for part in (line, award) if part),
+            color=accent(gid),
         )
         await interaction.followup.send(
             embed=embed, allowed_mentions=discord.AllowedMentions(users=True)
@@ -521,32 +513,37 @@ class FindsCog(commands.Cog):
             season=season_for_month(now.month),
             holiday=self._holiday_key(now),
         )
+        gid = interaction.guild_id
         if result.status == "cooldown":
             await interaction.followup.send(
-                f"Я тебе не такси. Следующая прогулка — {_ts(result.retry_at)}.",
+                self._p(gid, "finds.walk_cooldown", retry=_ts(result.retry_at)),
                 ephemeral=True,
             )
             return
         if result.status == "poor":
             await interaction.followup.send(
-                f"Прогулка стоит **{result.cost}** очков, у тебя {result.points_total}. "
-                "Сначала заслужи.",
+                self._p(gid, "finds.walk_poor", cost=result.cost, total=result.points_total),
                 ephemeral=True,
             )
             return
         if result.status == "fail":
-            await interaction.followup.send(
-                f"{self._rng.choice(_WALK_FAIL)}\n"
-                f"-# −{result.cost} очков за прогулку. Сейчас у тебя {result.points_total}.",
-                ephemeral=True,
+            line = await self._pick(gid, "finds.walk_fail")
+            tail = self._p(
+                gid, "finds.walk_fail_tail", cost=result.cost, total=result.points_total
             )
+            await interaction.followup.send(f"{line}\n{tail}".strip(), ephemeral=True)
             return
         item = result.item
         sign = "+" if result.points_delta >= 0 else "−"
-        await interaction.followup.send(
-            f"{self._rng.choice(_WALK_SUCCESS)}\n"
-            f"{item.emoji} **{item.name}** — в твоей коллекции.\n"
-            f"-# Итог: {sign}{abs(result.points_delta)} очков "
-            f"(прогулка −{result.cost}, находка сверху). Сейчас у тебя {result.points_total}.",
-            ephemeral=True,
+        line = await self._pick(gid, "finds.walk_success")
+        tail = self._p(
+            gid,
+            "finds.walk_success_tail",
+            item_emoji=item.emoji,
+            item=item.name,
+            sign=sign,
+            delta=abs(result.points_delta),
+            cost=result.cost,
+            total=result.points_total,
         )
+        await interaction.followup.send(f"{line}\n{tail}".strip(), ephemeral=True)

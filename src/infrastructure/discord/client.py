@@ -110,7 +110,11 @@ class PoposyaBot(commands.Bot):
                 gs,
             )
         )
-        await self.add_cog(FindsCog(self, self.container.finds, self.container.settings, mood, gs))
+        await self.add_cog(
+            FindsCog(
+                self, self.container.finds, self.container.settings, mood, gs, persona=persona
+            )
+        )
         tmdb = TmdbClient(self.container.settings.tmdb_api_key)
         kinopoisk = KinopoiskClient(self.container.settings.kinopoisk_api_key)
         if self.container.settings.movie_provider == "kinopoisk":

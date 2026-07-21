@@ -17,19 +17,22 @@ from src.application.finds.use_cases import (
     GiftResult,
     WalkResult,
 )
+from src.application.persona.registry import PHRASE_SPECS
 from src.domain.finds import catalog
 from src.domain.finds.entities import NightFind
 from src.infrastructure.discord.cogs import finds as finds_module
 from src.infrastructure.discord.cogs.finds import (
-    _SUCCESS_HIGH,
-    _SUCCESS_LEGENDARY,
-    _SUCCESS_LOW,
-    _SUCCESS_MID,
     FindClaimView,
     FindsCog,
     _ts,
 )
 from tests.cog_fakes import http_error, make_interaction
+
+# реакции успеха теперь в каталоге фраз (P4); дефолты — 1:1 со старыми константами
+_SUCCESS_LOW = PHRASE_SPECS["finds.success_low"].default
+_SUCCESS_MID = PHRASE_SPECS["finds.success_mid"].default
+_SUCCESS_HIGH = PHRASE_SPECS["finds.success_high"].default
+_SUCCESS_LEGENDARY = PHRASE_SPECS["finds.success_legendary"].default
 
 NOW = datetime(2026, 7, 11, 22, 0, tzinfo=UTC)
 COMMON = catalog.get_item("postcard_90s")  # COMMON

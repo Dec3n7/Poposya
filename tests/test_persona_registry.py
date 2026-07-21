@@ -47,9 +47,15 @@ def test_template_placeholders_declared_and_renderable():
 
 
 def test_non_template_specs_have_no_placeholders():
+    # str/dict — без подстановки; list может объявлять плейсхолдеры (элементы
+    # форматируются после random-выбора в render_block)
     for spec in PHRASE_SPECS.values():
-        if spec.kind != "template":
+        if spec.kind in ("str", "dict"):
             assert not spec.placeholders, spec.key
+        if spec.kind == "list":
+            for item in spec.default:
+                used = {name for _, name, _, _ in string.Formatter().parse(item) if name}
+                assert used <= set(spec.placeholders), spec.key
 
 
 def test_default_attributes_shape():
