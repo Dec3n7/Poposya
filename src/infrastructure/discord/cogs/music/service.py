@@ -35,6 +35,7 @@ from src.infrastructure.discord.cogs.music.session import (
     delete_message_quiet,
 )
 from src.infrastructure.discord.voice import DiscordVoiceConnection
+from src.infrastructure.persona_service import RegistryPersona
 
 if TYPE_CHECKING:
     from src.infrastructure.discord.cogs.music.radio import RadioService
@@ -47,18 +48,15 @@ _EMPTY_GRACE_SECONDS = 120
 # не сыпать репликой на каждый мёртвый трек битого плейлиста
 _FAIL_NOTIFY_COOLDOWN = 15
 
-# реплики о не заигравшем треке — в характере, без дежурности
-_FAIL_PHRASES = (
-    "«{title}» включить не вышло — то ли удалили, то ли YouTube капризничает. Пропускаю.",
-    "«{title}» не запускается, хоть тресни. Ставь другую.",
-    "С «{title}» что-то не так — не отдаётся. Дальше по очереди.",
-)
-
 
 class MusicPlayerService:
-    def __init__(self, bot: commands.Bot, container: MusicContainer, presence=None):
+    def __init__(
+        self, bot: commands.Bot, container: MusicContainer, presence=None, persona=None
+    ):
         self.bot = bot
         self.settings = container.settings
+        # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         self.audio = container.audio_source
         self.bus = container.event_bus
         # снапшот плеера для панели (побочный путь; в тестах-заглушках может не быть)
@@ -73,6 +71,10 @@ class MusicPlayerService:
         self.radio: RadioService | None = None
         self.prefetch_lyrics: Callable[[Track], None] | None = None
         self.view_factory: Callable[[], discord.ui.View] | None = None
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     # --- инфраструктура ---
 
@@ -111,7 +113,7 @@ class MusicPlayerService:
         for session in self.sessions.values():
             session.cancel_tasks()
         for guild_id in list(self.sessions):
-            await self.cleanup(guild_id, "Бот выключается.")
+            await self.cleanup(guild_id, self._p(guild_id, "music.cleanup_shutdown"))
 
     # --- постановка в очередь ---
 
@@ -133,7 +135,9 @@ class MusicPlayerService:
         member = interaction.user
         guild = interaction.guild
         if not member.voice or not member.voice.channel:
-            await interaction.followup.send("Ты уже не в голосовом канале.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(guild.id, "music.no_longer_in_voice"), ephemeral=True
+            )
             return None
         channel = member.voice.channel
 
@@ -149,7 +153,7 @@ class MusicPlayerService:
             existing = self.sessions.get(guild.id)
             if existing is not None and existing.player.is_playing:
                 await interaction.followup.send(
-                    "Я уже играю в другом голосовом канале.", ephemeral=True
+                    self._p(guild.id, "music.already_playing_elsewhere"), ephemeral=True
                 )
                 return None
             await vc.move_to(channel)
@@ -175,10 +179,11 @@ class MusicPlayerService:
     # --- сообщение плеера и прогресс ---
 
     def build_embed(self, player: GuildPlayer) -> discord.Embed:
+        gid = player.guild_id
         if player.current is None:
             return discord.Embed(
-                title="🎵 Плеер",
-                description="Очередь пуста. Добавь трек через `/play`.",
+                title=self._p(gid, "music.player_title"),
+                description=self._p(gid, "music.player_empty"),
                 color=EMBED_COLOR,
             )
         track = player.current
@@ -189,8 +194,10 @@ class MusicPlayerService:
                 f"`{fmt_duration(elapsed)} / {fmt_duration(track.duration)}`"
             )
         else:
-            progress = f"🔴 Прямой эфир · `{fmt_duration(elapsed)}`"
-        title = "⏸️ Пауза" if player.is_paused else "▶️ Сейчас играет"
+            progress = f"{self._p(gid, 'music.player_live')} · `{fmt_duration(elapsed)}`"
+        title = self._p(
+            gid, "music.player_paused_title" if player.is_paused else "music.player_now_title"
+        )
         # исполнитель/канал + метаданные (просмотры/год) под названием
         meta_parts: list[str] = []
         if track.uploader:
@@ -211,19 +218,21 @@ class MusicPlayerService:
         )
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
-        embed.add_field(name="Громкость", value=f"{int(player.volume * 100)}%")
-        embed.add_field(name="Повтор", value=REPEAT_LABELS[player.repeat])
-        embed.add_field(name="Заказал", value=f"<@{track.requested_by}>")
+        embed.add_field(name=self._p(gid, "music.field_volume"), value=f"{int(player.volume * 100)}%")
+        embed.add_field(name=self._p(gid, "music.field_repeat"), value=REPEAT_LABELS[player.repeat])
+        embed.add_field(name=self._p(gid, "music.field_requester"), value=f"<@{track.requested_by}>")
         if self.radio is not None and self.radio.is_enabled(player.guild_id):
-            embed.add_field(name="Радио", value="📻 вкл")
+            embed.add_field(
+                name=self._p(gid, "music.field_radio"), value=self._p(gid, "music.field_radio_on")
+            )
         if player.queue:
             preview = "\n".join(
                 f"`{i}.` {trim(t.title, 60)}" for i, t in enumerate(list(player.queue)[:3], 1)
             )
             rest = len(player.queue) - 3
             if rest > 0:
-                preview += f"\n…и ещё {rest}"
-            embed.add_field(name="Далее", value=preview, inline=False)
+                preview += "\n" + self._p(gid, "music.player_more", rest=rest)
+            embed.add_field(name=self._p(gid, "music.field_next"), value=preview, inline=False)
         return embed
 
     async def _ensure_message(self, guild_id: int, channel: discord.abc.Messageable) -> None:
@@ -299,7 +308,9 @@ class MusicPlayerService:
         )
         if channel is None:
             return
-        text = random.choice(_FAIL_PHRASES).format(title=trim(track.title, 100))
+        phrases = self.persona.phrase(guild_id, "music.fail_phrases")
+        pool = phrases if isinstance(phrases, list) and phrases else [""]
+        text = random.choice(pool).format(title=trim(track.title, 100))
         try:
             await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
@@ -390,8 +401,7 @@ class MusicPlayerService:
             if channel is not None:
                 try:
                     prompt = await channel.send(
-                        "Очередь закончилась. Включить что-то ещё? `/play` — "
-                        f"или через {max(1, warn // 60)} мин я ухожу. ✂️👁🖤"
+                        self._p(guild_id, "music.idle_prompt", minutes=max(1, warn // 60))
                     )
                     session = self.sessions.get(guild_id)
                     if session is not None:
@@ -404,7 +414,7 @@ class MusicPlayerService:
             # снять СВОЮ задачу с сессии до cleanup: иначе cleanup отменит
             # нас же и умрёт на полпути
             session.idle_task = None
-            await self.cleanup(guild_id, "💤 Ушла: тишина.")
+            await self.cleanup(guild_id, self._p(guild_id, "music.cleanup_idle"))
 
     async def handle_voice_state(
         self,
@@ -418,7 +428,7 @@ class MusicPlayerService:
         if member.id == self.bot.user.id:
             # бота отключили — прибираем; переместили — переоценим новый канал ниже
             if after.channel is None:
-                await self.cleanup(guild.id, "Меня отключили от канала.")
+                await self.cleanup(guild.id, self._p(guild.id, "music.cleanup_kicked"))
                 return
         elif member.bot:
             return
@@ -454,7 +464,7 @@ class MusicPlayerService:
         if vc is None or vc.channel is None:
             return
         if not [m for m in vc.channel.members if not m.bot]:
-            await self.cleanup(guild_id, "Все вышли из канала — ушла и я.")
+            await self.cleanup(guild_id, self._p(guild_id, "music.cleanup_all_left"))
 
     # --- завершение ---
 
@@ -475,7 +485,9 @@ class MusicPlayerService:
         except Exception:
             logger.exception("Ошибка при остановке плеера")
         if session.message is not None:
-            embed = discord.Embed(title="🎵 Плеер", description=reason, color=EMBED_COLOR)
+            embed = discord.Embed(
+                title=self._p(guild_id, "music.player_title"), description=reason, color=EMBED_COLOR
+            )
             try:
                 await session.message.edit(embed=embed, view=None)
             except discord.HTTPException:

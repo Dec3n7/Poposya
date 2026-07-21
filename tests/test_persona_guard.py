@@ -19,6 +19,8 @@ CONVERTED = [
     "src/infrastructure/discord/cogs/finds.py",
     "src/infrastructure/discord/cogs/introduce.py",
     "src/infrastructure/discord/cogs/music/cog.py",
+    "src/infrastructure/discord/cogs/music/lyrics.py",
+    "src/infrastructure/discord/cogs/music/service.py",
     "src/infrastructure/discord/cogs/secret_room.py",
 ]
 

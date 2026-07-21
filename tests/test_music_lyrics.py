@@ -83,14 +83,14 @@ def test_plain_embed():
 def test_karaoke_embed_before_start():
     svc = make_service()
     blocks = [(0.0, ["a", "b"]), (5.0, ["c"])]
-    embed = svc._karaoke_embed("T", blocks, index=-1, elapsed=0)
+    embed = svc._karaoke_embed(10, "T", blocks, index=-1, elapsed=0)
     assert "сейчас начнётся" in embed.description
 
 
 def test_karaoke_embed_current_block_bold():
     svc = make_service()
     blocks = [(0.0, ["строка"]), (5.0, ["следующая"])]
-    embed = svc._karaoke_embed("T", blocks, index=0, elapsed=3)
+    embed = svc._karaoke_embed(10, "T", blocks, index=0, elapsed=3)
     assert "**строка**" in embed.description
     assert "абзац 1/2" in embed.footer.text
 
@@ -98,7 +98,7 @@ def test_karaoke_embed_current_block_bold():
 def test_karaoke_embed_ansi_colored():
     svc = make_service()
     blocks = [(0.0, ["строка"]), (5.0, ["следующая"])]
-    embed = svc._karaoke_embed("T", blocks, index=0, elapsed=3, ansi=True)
+    embed = svc._karaoke_embed(10, "T", blocks, index=0, elapsed=3, ansi=True)
     assert "```ansi" in embed.description  # цветной блок
     assert "\x1b[1;36m" in embed.description  # текущая строка — цветом
     assert "**строка**" not in embed.description  # не markdown-жирный

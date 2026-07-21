@@ -20,6 +20,7 @@ from src.infrastructure.discord.cogs.music.session import (
     GuildMusicSession,
     delete_message_quiet,
 )
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,21 @@ class LyricsService:
         get_session: Callable[[int], GuildMusicSession | None],
         spawn: Callable[[Coroutine], None],
         guild_settings=None,
+        persona=None,
     ):
         self._client = client
         self._settings = settings
         self._get_session = get_session
         self._spawn = spawn
         self._gs = guild_settings
+        # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
+        self._persona = persona if persona is not None else RegistryPersona()
         self._cache: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
         self._pending: set[str] = set()
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self._persona.phrase(guild_id, key, **vars))
 
     def _ansi_enabled(self, guild_id: int) -> bool:
         """Цветное караоке включено на сервере? (тумблер /config music_karaoke_ansi)"""
@@ -114,7 +122,13 @@ class LyricsService:
         return embed
 
     def _karaoke_embed(
-        self, title: str, blocks: Blocks, index: int, elapsed: int, ansi: bool = False
+        self,
+        guild_id: int,
+        title: str,
+        blocks: Blocks,
+        index: int,
+        elapsed: int,
+        ansi: bool = False,
     ) -> discord.Embed:
         """Текущий абзац крупно, следующий — приглушённо. ansi — цветной режим."""
         description = (
@@ -126,7 +140,13 @@ class LyricsService:
             color=EMBED_COLOR,
         )
         embed.set_footer(
-            text=f"{fmt_duration(elapsed)} · абзац {max(index, 0) + 1}/{len(blocks)} · lrclib.net"
+            text=self._p(
+                guild_id,
+                "music.karaoke_footer",
+                duration=fmt_duration(elapsed),
+                index=max(index, 0) + 1,
+                total=len(blocks),
+            )
         )
         return embed
 
@@ -195,7 +215,7 @@ class LyricsService:
         ansi = self._ansi_enabled(guild_id)
         index = block_index(blocks, player.elapsed_precise() + offset)
         message = await channel.send(
-            embed=self._karaoke_embed(track.title, blocks, index, player.elapsed(), ansi)
+            embed=self._karaoke_embed(guild_id, track.title, blocks, index, player.elapsed(), ansi)
         )
         task = asyncio.create_task(
             self._live_loop(guild_id, message, blocks, track.video_id, index)
@@ -208,21 +228,27 @@ class LyricsService:
         """Кнопка 📜 в плеере: включает/выключает караоке; текст уже в кэше."""
         guild_id = interaction.guild_id
         if self.stop_karaoke(guild_id):
-            await interaction.response.send_message("📜 Караоке выключено.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(guild_id, "music.karaoke_off"), ephemeral=True
+            )
             return
         session = self._get_session(guild_id)
         if session is None or session.player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(guild_id, "music.nothing_playing"), ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True)
         track = session.player.current
         synced, plain = await self.get(track)
         if synced and await self.start_karaoke(interaction.channel, guild_id, track, synced):
-            await interaction.followup.send("🎤 Караоке включено.", ephemeral=True)
+            await interaction.followup.send(self._p(guild_id, "music.karaoke_on"), ephemeral=True)
         elif plain:
             await interaction.followup.send(embed=self.plain_embed(track, plain), ephemeral=True)
         else:
-            await interaction.followup.send("Текста для этого трека не нашла.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(guild_id, "music.karaoke_no_text"), ephemeral=True
+            )
 
     async def _live_loop(
         self,
@@ -263,7 +289,7 @@ class LyricsService:
                     try:
                         message = await message.channel.send(
                             embed=self._karaoke_embed(
-                                track.title, blocks, current_index, player.elapsed(), ansi
+                                guild_id, track.title, blocks, current_index, player.elapsed(), ansi
                             )
                         )
                     except discord.HTTPException:
@@ -280,7 +306,7 @@ class LyricsService:
                     try:
                         await message.edit(
                             embed=self._karaoke_embed(
-                                player.current.title, blocks, index, player.elapsed(), ansi
+                                guild_id, player.current.title, blocks, index, player.elapsed(), ansi
                             )
                         )
                     except discord.NotFound:

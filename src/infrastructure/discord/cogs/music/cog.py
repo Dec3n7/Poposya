@@ -76,13 +76,14 @@ class MusicCog(commands.Cog):
         # PresenceService — единый владелец статуса: музыка отдаёт ему играющий
         # трек, а без музыки он крутит занятия из жизни Попоси
         self.presence = PresenceService(bot, self.settings.presence_rotate_minutes)
-        self.service = MusicPlayerService(bot, container, self.presence)
+        self.service = MusicPlayerService(bot, container, self.presence, persona=self.persona)
         self.lyrics = LyricsService(
             LrclibLyricsClient(),
             self.settings,
             self.service.get_session,
             self.service.spawn,
             guild_settings=guild_settings,
+            persona=self.persona,
         )
         self.radio = RadioService(bot, container, self.service.get_session)
         self.service.radio = self.radio
