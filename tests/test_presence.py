@@ -74,3 +74,49 @@ async def test_presence_none_in_service_is_safe():
     )
     svc = MusicPlayerService(MagicMock(), container)  # presence=None по умолчанию
     await svc.refresh_presence()  # не падает, просто ничего не делает
+
+
+# --- P3: пул занятий из персоны ----------------------------------------------
+
+
+async def test_pool_defaults_to_builtin_canon():
+    svc, _bot = make_service()
+    assert svc._pool() is _ACTIVITIES
+
+
+async def test_pool_uses_persona_lines():
+    svc, _bot = make_service()
+    svc.set_lines_provider(lambda: ["читает Мураками", "гуляет"])
+    assert svc._pool() == [(None, "читает Мураками"), (None, "гуляет")]
+    activity = svc._random_activity()
+    assert isinstance(activity, discord.CustomActivity)
+    assert activity.name in ("читает Мураками", "гуляет")
+
+
+async def test_pool_falls_back_when_provider_empty_or_broken():
+    svc, _bot = make_service()
+    svc.set_lines_provider(lambda: [])
+    assert svc._pool() is _ACTIVITIES
+
+    def broken() -> list[str]:
+        raise RuntimeError("боль")
+
+    svc.set_lines_provider(broken)
+    assert svc._pool() is _ACTIVITIES
+
+
+async def test_refresh_applies_when_music_silent():
+    svc, bot = make_service()
+    svc.set_lines_provider(lambda: ["один статус"])
+    await svc.refresh()
+    activity = bot.change_presence.await_args.kwargs["activity"]
+    assert activity.name == "один статус"
+
+
+async def test_refresh_noop_while_music_playing():
+    svc, bot = make_service()
+    svc.set_lines_provider(lambda: ["статус"])
+    await svc.set_now_playing("трек")
+    count_before = bot.change_presence.await_count
+    await svc.refresh()  # музыка владеет статусом — не трогаем
+    assert bot.change_presence.await_count == count_before

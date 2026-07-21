@@ -39,6 +39,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.cinema.kinopoisk import KinopoiskClient
         from src.infrastructure.cinema.provider import FallbackMovieSearch
         from src.infrastructure.cinema.tmdb import TmdbClient
+        from src.infrastructure.discord import accent
         from src.infrastructure.discord.cogs.activity import ActivityCog
         from src.infrastructure.discord.cogs.ai_chat import AIChatCog
         from src.infrastructure.discord.cogs.cinema import CinemaCog
@@ -53,6 +54,9 @@ class PoposyaBot(commands.Bot):
         # единая сеть безопасности для необработанных ошибок слеш-команд
         setup_error_handler(self)
 
+        # accent-цвет эмбедов — из персоны сервера (мягкая личность, P3)
+        accent.set_persona_service(self.container.persona)
+
         role_sync = RoleSyncService(
             self,
             self.container.settings.relationship_role_names,
@@ -61,7 +65,13 @@ class PoposyaBot(commands.Bot):
         mood = MoodTracker()
 
         gs = self.container.guild_settings
-        await self.add_cog(MusicCog(self, self.container.music, gs))
+        music_cog = MusicCog(self, self.container.music, gs)
+        await self.add_cog(music_cog)
+        # presence из персоны: строки статуса берутся из библиотек, а по NOTIFY
+        # (панель сменила персону/присвоение) статус переустанавливается сразу
+        persona = self.container.persona
+        music_cog.presence.set_lines_provider(persona.presence_lines)
+        persona.add_reload_hook(music_cog.presence.refresh)
         await self.add_cog(
             ModerationCog(self, self.container.moderation, self.container.settings, gs)
         )

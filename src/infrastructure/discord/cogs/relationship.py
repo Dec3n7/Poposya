@@ -8,12 +8,12 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
 
 logger = logging.getLogger(__name__)
 
-_EMBED_COLOR = 0x9B59B6
 
 
 class RelationshipCog(commands.Cog):
@@ -98,7 +98,7 @@ class RelationshipCog(commands.Cog):
         embed = discord.Embed(
             title=f"✂️👁🖤 {interaction.user.display_name}",
             description="\n".join(lines),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -126,7 +126,7 @@ class RelationshipCog(commands.Cog):
         embed = discord.Embed(
             title="🏆 Кто ближе всех к Попосе",
             description="\n".join(lines),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         embed.set_footer(text="Очки за общение с ней · титул Единственного — у лидера от 350")
         await interaction.followup.send(embed=embed)

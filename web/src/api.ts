@@ -19,6 +19,7 @@ import type {
   Overview,
   PermCatalog,
   PersonaDetail,
+  PersonaIdentity,
   PersonaSummary,
   PersonDetail,
   PersonListItem,
@@ -281,6 +282,16 @@ export const api = {
       body: JSON.stringify({ prompt }),
     }),
   exportPersona: (id: number): Promise<unknown> => req<unknown>(`/api/personas/${id}/export`),
+  personaIdentity: (id: number): Promise<PersonaIdentity> =>
+    req<PersonaIdentity>(`/api/personas/${id}/identity`),
+  setPersonaIdentity: (
+    id: number,
+    body: Pick<PersonaIdentity, "display_name" | "signature" | "accent_color" | "presence">,
+  ): Promise<PersonaIdentity> =>
+    req<PersonaIdentity>(`/api/personas/${id}/identity`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   importPersona: (data: unknown): Promise<PersonaDetail> =>
     req<PersonaDetail>("/api/personas/import", {
       method: "POST",

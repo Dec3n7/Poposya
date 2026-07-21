@@ -8,6 +8,7 @@
 import asyncio
 import logging
 import random
+from collections.abc import Callable
 
 import discord
 
@@ -66,6 +67,18 @@ class PresenceService:
         self._now_playing: str | None = None
         self._shown: str | None = None  # что реально стоит сейчас (дедуп)
         self._task: asyncio.Task | None = None
+        # строки статуса персоны (PersonaService.presence_lines); пусто/None ->
+        # встроенный канон Попоси из _ACTIVITIES
+        self._lines_provider: Callable[[], list[str]] | None = None
+
+    def set_lines_provider(self, provider: Callable[[], list[str]]) -> None:
+        self._lines_provider = provider
+
+    async def refresh(self) -> None:
+        """Переустановка статуса (сменилась персона/её presence-строки). Пока
+        играет музыка — статус её, персона подождёт следующей тишины."""
+        if self._now_playing is None:
+            await self._apply(self._random_activity())
 
     async def set_now_playing(self, name: str | None) -> None:
         """Музыка зовёт при смене трека: name — играющий трек, None — замолчала.
@@ -97,15 +110,28 @@ class PresenceService:
             await asyncio.sleep(self._rotate * random.uniform(0.75, 1.25))
 
     def _random_activity(self) -> discord.BaseActivity:
+        pool = self._pool()
         # не повторять прошлый статус подряд — иначе смена незаметна
-        atype, text = random.choice(_ACTIVITIES)
+        atype, text = random.choice(pool)
         for _ in range(3):
             if text != self._shown:
                 break
-            atype, text = random.choice(_ACTIVITIES)
+            atype, text = random.choice(pool)
         if atype is None:
             return discord.CustomActivity(name=text)
         return discord.Activity(type=atype, name=text)
+
+    def _pool(self) -> list[tuple[discord.ActivityType | None, str]]:
+        """Занятия персоны (свободным текстом), иначе — встроенный канон."""
+        if self._lines_provider is not None:
+            try:
+                lines = self._lines_provider()
+            except Exception:
+                logger.debug("Провайдер presence-строк упал", exc_info=True)
+                lines = []
+            if lines:
+                return [(None, line) for line in lines]
+        return _ACTIVITIES
 
     async def _apply(self, activity: discord.BaseActivity) -> None:
         self._shown = activity.name

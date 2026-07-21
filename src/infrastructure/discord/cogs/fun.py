@@ -15,11 +15,11 @@ from src.application.ai_chat.service import ChatService
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 
 logger = logging.getLogger(__name__)
 
-_EMBED_COLOR = 0x9B59B6
 _REMINDER_CHECK_INTERVAL = 30
 
 _TOPICS = [
@@ -313,7 +313,7 @@ class FunCog(commands.Cog):
 
         embed = discord.Embed(
             description=f"**{self._OPENERS[info.level].format(name=target.display_name)}**",
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         embed.set_thumbnail(url=target.display_avatar.url)
 
@@ -395,7 +395,9 @@ class FunCog(commands.Cog):
     @app_commands.command(name="rules", description="Опубликовать правила сервера (разово)")
     @app_commands.default_permissions(administrator=True)
     async def rules(self, interaction: discord.Interaction) -> None:
-        embed = discord.Embed(title="📜 Правила", description=_RULES_TEXT, color=_EMBED_COLOR)
+        embed = discord.Embed(
+            title="📜 Правила", description=_RULES_TEXT, color=accent(interaction.guild_id)
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="serverstats", description="Статистика сервера")
@@ -404,7 +406,7 @@ class FunCog(commands.Cog):
         guild = interaction.guild
         humans = sum(1 for m in guild.members if not m.bot)
         bots = guild.member_count - humans
-        embed = discord.Embed(title=f"📊 {guild.name}", color=_EMBED_COLOR)
+        embed = discord.Embed(title=f"📊 {guild.name}", color=accent(guild.id))
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
         embed.add_field(name="Участников", value=f"{humans} людей + {bots} ботов")

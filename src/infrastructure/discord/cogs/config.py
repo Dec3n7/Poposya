@@ -14,6 +14,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.guild_settings import (
     FEATURE_FLAG_KEYS,
     SETTING_SPECS,
@@ -21,8 +22,6 @@ from src.infrastructure.guild_settings import (
 )
 
 logger = logging.getLogger(__name__)
-
-_EMBED_COLOR = 0x9B59B6
 
 
 def _fmt(spec, value) -> str:
@@ -191,7 +190,7 @@ class ConfigCog(commands.Cog):
         embed = discord.Embed(
             title="⚙️ Настройки сервера",
             description="\n".join(lines)[:4000],
-            color=_EMBED_COLOR,
+            color=accent(gid),
         )
         embed.set_footer(text="🔧 — переопределено на сервере · · — глобальный дефолт")
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -221,7 +220,7 @@ class ConfigCog(commands.Cog):
                 + (" 🔧 (переопределено)" if overridden else " (дефолт)")
                 + f"\n**Дефолт:** {_fmt(spec, default)}{rng}"
             ),
-            color=_EMBED_COLOR,
+            color=accent(gid),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

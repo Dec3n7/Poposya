@@ -85,6 +85,26 @@ class PromptUpdate(BaseModel):
     prompt: str  # пустая строка = сброс к встроенному дефолту
 
 
+class PersonaIdentityDTO(BaseModel):
+    """Мягкая личность персоны (эффективные значения) + дефолты из кода для
+    подсказки «сброс вернёт вот это»."""
+
+    display_name: str
+    signature: str
+    accent_color: int  # 0..0xFFFFFF
+    presence: list[str]  # строки Discord-статуса; пусто = встроенный канон
+    default_display_name: str
+    default_signature: str
+    default_accent_color: int
+
+
+class PersonaIdentityUpdate(BaseModel):
+    display_name: str
+    signature: str
+    accent_color: int
+    presence: list[str]
+
+
 class GuildPersonaDTO(BaseModel):
     guild_id: str
     persona_id: int  # что реально применяется (назначенная или дефолт)

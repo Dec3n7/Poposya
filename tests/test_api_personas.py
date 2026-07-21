@@ -166,3 +166,58 @@ async def test_get_guild_persona_defaults_to_default(client, container):
     assert resp.status_code == 200
     # без назначения возвращается дефолт-персона
     assert resp.json()["persona_id"] == container.persona.default_id()
+
+
+# --- P3: мягкая личность -----------------------------------------------------
+
+
+async def test_identity_defaults(client):
+    created = (await client.post("/api/personas", json={"name": "Identity"})).json()
+    resp = await client.get(f"/api/personas/{created['id']}/identity")
+    assert resp.status_code == 200
+    identity = resp.json()
+    assert identity["display_name"] == "Попося"
+    assert identity["accent_color"] == 0x9B59B6
+    assert identity["presence"] == []
+    assert identity["default_display_name"] == "Попося"
+
+
+async def test_identity_update_and_runtime_resolve(client, container):
+    created = (await client.post("/api/personas", json={"name": "Identity"})).json()
+    pid = created["id"]
+    resp = await client.put(
+        f"/api/personas/{pid}/identity",
+        json={
+            "display_name": "Попыч",
+            "signature": "🔥",
+            "accent_color": 0x112233,
+            "presence": ["гуляет по крышам"],
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "Попыч"
+
+    # рантайм: назначаем серверу и проверяем резолв accent/presence
+    await client.put(f"/api/guilds/{GUILD}/persona", json={"persona_id": pid})
+    assert container.persona.accent_color(GUILD) == 0x112233
+    assert container.persona.presence_lines() == ["гуляет по крышам"]
+
+
+async def test_identity_validation_422(client):
+    created = (await client.post("/api/personas", json={"name": "Identity"})).json()
+    bad = {
+        "display_name": "x",
+        "signature": "",
+        "accent_color": -1,
+        "presence": [],
+    }
+    resp = await client.put(f"/api/personas/{created['id']}/identity", json=bad)
+    assert resp.status_code == 422
+
+
+async def test_identity_requires_operator(stranger):
+    assert (await stranger.get("/api/personas/1/identity")).status_code == 403
+
+
+async def test_identity_unknown_persona_404(client):
+    assert (await client.get("/api/personas/999999/identity")).status_code == 404

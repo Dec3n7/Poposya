@@ -15,9 +15,10 @@ from src.application.ai_chat.mood import MoodTracker
 from src.application.ai_chat.service import ChatService
 from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry, MovieNight
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.scheduler import DeferredScheduler
 
-from .formatting import _EMBED_COLOR, _SCORE_RE, _title_of, _trim, _ts
+from .formatting import _SCORE_RE, _title_of, _trim, _ts
 from .forum import CinemaForum
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ class CinemaService:
                 + f"**Сеанс:** {_ts(night.scheduled_at, 'F')} ({_ts(night.scheduled_at)})\n"
                 + f"-# Голосов: {votes_total}. После просмотра жмите кнопку ниже."
             )[:4000],
-            color=_EMBED_COLOR,
+            color=accent(night.guild_id),
         )
         if winner.poster_url:
             embed.set_thumbnail(url=winner.poster_url)
@@ -150,7 +151,7 @@ class CinemaService:
                 "✍️ **Отзыв** — пара слов рецензии.\n"
                 f"Итоги {_ts(entry.rating_ends_at)}."
             ),
-            color=_EMBED_COLOR,
+            color=accent(entry.guild_id),
         )
         if entry.poster_url:
             embed.set_thumbnail(url=entry.poster_url)

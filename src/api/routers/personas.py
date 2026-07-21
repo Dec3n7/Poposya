@@ -14,11 +14,14 @@ from src.api.schemas import (
     GuildPersonaDTO,
     PersonaCreate,
     PersonaDetailDTO,
+    PersonaIdentityDTO,
+    PersonaIdentityUpdate,
     PersonaRename,
     PersonaSummaryDTO,
     PromptUpdate,
 )
 from src.api.security import Session
+from src.application.persona.registry import DEFAULT_ATTRIBUTES
 from src.domain.persona.entities import Persona
 from src.infrastructure.persona_service import PersonaService
 
@@ -197,6 +200,55 @@ async def set_chime_prompt(
         details={"reset": body.prompt == ""},
     )
     return _detail(service, _require(service, persona_id))
+
+
+def _as_int(value: object) -> int:
+    return value if isinstance(value, int) else 0
+
+
+def _identity_dto(service: PersonaService, persona_id: int) -> PersonaIdentityDTO:
+    identity = service.identity_of(persona_id)
+    presence = identity.get("presence")
+    return PersonaIdentityDTO(
+        display_name=str(identity.get("display_name", "")),
+        signature=str(identity.get("signature", "")),
+        accent_color=_as_int(identity.get("accent_color")),
+        presence=[str(line) for line in presence] if isinstance(presence, list) else [],
+        default_display_name=str(DEFAULT_ATTRIBUTES["display_name"]),
+        default_signature=str(DEFAULT_ATTRIBUTES["signature"]),
+        default_accent_color=_as_int(DEFAULT_ATTRIBUTES["accent_color"]),
+    )
+
+
+@router.get("/personas/{persona_id}/identity", response_model=PersonaIdentityDTO)
+async def get_identity(
+    persona_id: int,
+    _op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> PersonaIdentityDTO:
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    return _identity_dto(service, persona_id)
+
+
+@router.put("/personas/{persona_id}/identity", response_model=PersonaIdentityDTO)
+async def set_identity(
+    persona_id: int,
+    body: PersonaIdentityUpdate,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> PersonaIdentityDTO:
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    try:
+        await service.set_identity(persona_id, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    await record_audit(
+        container, _GLOBAL, op.user_id, "persona.identity", target=persona_id,
+        details={"presence_lines": len(body.presence)},
+    )
+    return _identity_dto(service, persona_id)
 
 
 @router.get("/personas/{persona_id}/export")

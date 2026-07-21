@@ -19,9 +19,14 @@ DEFAULT_PERSONA_NAME = "Попося"
 DEFAULT_ATTRIBUTES: dict[str, object] = {
     "display_name": "Попося",  # имя-в-тексте
     "signature": "✂️👁🖤",  # подпись-эмодзи
-    "accent_color": 0x9B59B6,  # accent эмбедов (_EMBED_COLOR)
-    "presence": [],  # строки Discord-присутствия (применяются в P3)
+    "accent_color": 0x9B59B6,  # accent эмбедов (см. infrastructure/discord/accent.py)
+    "presence": [],  # строки Discord-присутствия; пусто = встроенный канон Попоси
 }
+
+# лимиты атрибутов (валидация set_identity; панель ограничивает те же значения)
+IDENTITY_TEXT_MAX = 64  # display_name / signature
+PRESENCE_LINE_MAX = 128  # одна строка статуса (лимит Discord)
+PRESENCE_LINES_MAX = 20
 
 # --- режимы блока (mode персона-фразы); вступают в силу в когах в P4 ---
 ALL_MODES: tuple[str, ...] = ("ai_then_static", "static", "silent")

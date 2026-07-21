@@ -10,6 +10,7 @@ NOTIFY (PersonaChangeListener). Резолв двухуровневый: overrid
 одной гильдии — проще и без гонок частичного кэша."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from sqlalchemy import text
@@ -19,7 +20,10 @@ from src.application.persona.registry import (
     DEFAULT_ATTRIBUTES,
     DEFAULT_MODE,
     DEFAULT_PERSONA_NAME,
+    IDENTITY_TEXT_MAX,
     PHRASE_SPECS,
+    PRESENCE_LINE_MAX,
+    PRESENCE_LINES_MAX,
 )
 from src.config import Settings
 from src.domain.ai_chat.prompt import PromptTemplate
@@ -34,6 +38,31 @@ logger = logging.getLogger(__name__)
 PERSONAS_NOTIFY_CHANNEL = "poposya_personas"
 
 
+def _clean_identity_value(key: str, value: object) -> object:
+    """Нормализация и валидация одного атрибута личности. ValueError — наружу
+    (роутер отдаст 422). Пустой текст = «вернуть дефолт»."""
+    if key in ("display_name", "signature"):
+        text_value = str(value or "").strip()
+        if len(text_value) > IDENTITY_TEXT_MAX:
+            raise ValueError(f"{key}: не длиннее {IDENTITY_TEXT_MAX} символов")
+        return text_value or DEFAULT_ATTRIBUTES[key]
+    if key == "accent_color":
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFFFF:
+            raise ValueError("accent_color: целое 0..0xFFFFFF")
+        return value
+    if key == "presence":
+        if not isinstance(value, list):
+            raise ValueError("presence: список строк")
+        lines = [str(item).strip() for item in value]
+        lines = [line for line in lines if line]
+        if len(lines) > PRESENCE_LINES_MAX:
+            raise ValueError(f"presence: не больше {PRESENCE_LINES_MAX} строк")
+        if any(len(line) > PRESENCE_LINE_MAX for line in lines):
+            raise ValueError(f"presence: строка не длиннее {PRESENCE_LINE_MAX} символов")
+        return lines
+    return value
+
+
 class PersonaService:
     def __init__(self, settings: Settings, session_factory: async_sessionmaker[AsyncSession]):
         self._settings = settings
@@ -45,6 +74,8 @@ class PersonaService:
         # дефолт промпта из файла — fallback, когда Persona.prompt пуст
         self._file_prompt = ""
         self._file_chime_prompt = ""
+        # хуки после reload (бот вешает переустановку presence); в API-процессе пусто
+        self._reload_hooks: list[Callable[[], Awaitable[None]]] = []
 
     # --- загрузка / перечитывание ---
 
@@ -68,8 +99,17 @@ class PersonaService:
         )
 
     async def reload(self) -> None:
-        """Полное перечитывание по NOTIFY (панель изменила персону)."""
+        """Полное перечитывание по NOTIFY (панель изменила персону). После —
+        хуки (напр. переустановка presence); их сбой не роняет reload."""
         await self.load_all()
+        for hook in self._reload_hooks:
+            try:
+                await hook()
+            except Exception:
+                logger.warning("Хук после reload персон упал", exc_info=True)
+
+    def add_reload_hook(self, hook: Callable[[], Awaitable[None]]) -> None:
+        self._reload_hooks.append(hook)
 
     def _load_file_defaults(self) -> None:
         for attr, path_str in (
@@ -113,14 +153,28 @@ class PersonaService:
     def render_prompt(self, guild_id: int, variables: dict[str, object] | None = None) -> str:
         persona = self._persona_for(guild_id)
         template = persona.prompt if persona and persona.prompt else self._file_prompt
-        return PromptTemplate(template).render(variables or {})
+        return PromptTemplate(template).render(self._with_identity(guild_id, variables))
 
     def render_chime_prompt(
         self, guild_id: int, variables: dict[str, object] | None = None
     ) -> str:
         persona = self._persona_for(guild_id)
         template = persona.chime_prompt if persona and persona.chime_prompt else self._file_chime_prompt
-        return PromptTemplate(template).render(variables or {})
+        return PromptTemplate(template).render(self._with_identity(guild_id, variables))
+
+    def _with_identity(
+        self, guild_id: int, variables: dict[str, object] | None
+    ) -> dict[str, object]:
+        """{{display_name}}/{{signature}} доступны в любом промпте персоны;
+        явные переменные вызова важнее."""
+        attrs = self.attributes(guild_id)
+        merged: dict[str, object] = {
+            "display_name": attrs["display_name"],
+            "signature": attrs["signature"],
+        }
+        if variables:
+            merged.update(variables)
+        return merged
 
     def attributes(self, guild_id: int) -> dict[str, object]:
         """Мягкая личность: дефолты из кода, поверх — override персоны."""
@@ -129,6 +183,33 @@ class PersonaService:
         if persona:
             merged.update(persona.attributes)
         return merged
+
+    def accent_color(self, guild_id: int) -> int:
+        """Accent эмбедов для сервера; кривой override не роняет ког."""
+        value = self.attributes(guild_id).get("accent_color")
+        default = DEFAULT_ATTRIBUTES["accent_color"]
+        assert isinstance(default, int)
+        return value if isinstance(value, int) else default
+
+    def presence_lines(self) -> list[str]:
+        """Строки Discord-статуса всех действующих персон (дефолт + назначенные
+        серверам), без дублей. Presence у Discord глобальный на бота, поэтому
+        собираем общий пул; пусто = встроенный канон PresenceService."""
+        ids: list[int] = [] if self._default_id is None else [self._default_id]
+        for pid in self._assignments.values():
+            if pid not in ids:
+                ids.append(pid)
+        lines: list[str] = []
+        for pid in ids:
+            persona = self._personas.get(pid)
+            raw = persona.attributes.get("presence") if persona else None
+            if not isinstance(raw, list):
+                continue
+            for item in raw:
+                line = str(item).strip()
+                if line and line not in lines:
+                    lines.append(line)
+        return lines
 
     # --- чтение для API (синхронно, из кэша) ---
 
@@ -153,6 +234,12 @@ class PersonaService:
         """Встроенные дефолты промптов из файлов — для показа в редакторе как
         базовой строки («пусто = вот это»)."""
         return self._file_prompt, self._file_chime_prompt
+
+    def identity_of(self, persona_id: int) -> dict[str, object]:
+        """Эффективная личность КОНКРЕТНОЙ персоны (для редактора панели):
+        дефолты из кода + override этой персоны (не резолв по гильдии)."""
+        persona = self._personas[persona_id]
+        return {**DEFAULT_ATTRIBUTES, **persona.attributes}
 
     def phrase(self, guild_id: int, key: str, **variables: object) -> object:
         """Разрешённое значение фразы: override персоны → дефолт PHRASE_SPECS.
@@ -216,6 +303,22 @@ class PersonaService:
             await self._notify(session)
             await session.commit()
         await self.reload()
+
+    async def set_identity(self, persona_id: int, identity: dict[str, object]) -> None:
+        """Сохранить мягкую личность персоны. В БД остаются только отличия от
+        дефолтов (значение, равное дефолту, снимает override) — принцип тот же,
+        что у промптов и фраз."""
+        persona = self._personas.get(persona_id)
+        attrs = dict(persona.attributes) if persona else {}
+        for key, value in identity.items():
+            if key not in DEFAULT_ATTRIBUTES:
+                raise ValueError(f"неизвестный атрибут личности: {key}")
+            cleaned = _clean_identity_value(key, value)
+            if cleaned == DEFAULT_ATTRIBUTES[key]:
+                attrs.pop(key, None)
+            else:
+                attrs[key] = cleaned
+        await self.update_persona(persona_id, attributes=attrs)
 
     async def delete_persona(self, persona_id: int) -> None:
         persona = self._personas.get(persona_id)

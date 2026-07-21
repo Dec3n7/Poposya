@@ -120,3 +120,83 @@ async def test_attributes_override_merges(svc):
     attrs = svc.attributes(88)
     assert attrs["display_name"] == "Попыч"  # override
     assert attrs["accent_color"] == 0x9B59B6  # дефолт остался
+
+
+# --- P3: мягкая личность ---
+
+
+async def test_set_identity_roundtrip(svc):
+    persona = await svc.create_persona("Identity")
+    await svc.assign(11, persona.id)
+    await svc.set_identity(
+        persona.id,
+        {
+            "display_name": "Попыч",
+            "signature": "🔥",
+            "accent_color": 0x112233,
+            "presence": ["читает Мураками", " пьёт кофе "],
+        },
+    )
+    attrs = svc.attributes(11)
+    assert attrs["display_name"] == "Попыч"
+    assert attrs["accent_color"] == 0x112233
+    assert svc.accent_color(11) == 0x112233
+    assert attrs["presence"] == ["читает Мураками", "пьёт кофе"]  # строки чистятся
+
+
+async def test_set_identity_default_value_removes_override(svc):
+    persona = await svc.create_persona("Identity")
+    await svc.set_identity(persona.id, {"display_name": "Попыч"})
+    # возврат к дефолтному значению снимает override, а не хранит копию дефолта
+    await svc.set_identity(persona.id, {"display_name": "Попося"})
+    assert svc.get(persona.id).attributes == {}
+
+
+async def test_set_identity_validates(svc):
+    persona = await svc.create_persona("Identity")
+    with pytest.raises(ValueError):
+        await svc.set_identity(persona.id, {"accent_color": -5})
+    with pytest.raises(ValueError):
+        await svc.set_identity(persona.id, {"accent_color": 0x1000000})
+    with pytest.raises(ValueError):
+        await svc.set_identity(persona.id, {"presence": "не список"})
+    with pytest.raises(ValueError):
+        await svc.set_identity(persona.id, {"nope": 1})
+
+
+async def test_presence_lines_collects_default_and_assigned(svc):
+    # дефолт без presence + назначенная персона со строками -> только её строки
+    persona = await svc.create_persona("Ночная")
+    await svc.set_identity(persona.id, {"presence": ["гуляет", "спит"]})
+    await svc.assign(500, persona.id)
+    assert svc.presence_lines() == ["гуляет", "спит"]
+    # вторая назначенная персона добавляет свои строки без дублей
+    other = await svc.create_persona("Дневная")
+    await svc.set_identity(other.id, {"presence": ["спит", "работает"]})
+    await svc.assign(501, other.id)
+    assert svc.presence_lines() == ["гуляет", "спит", "работает"]
+
+
+async def test_presence_lines_empty_without_overrides(svc):
+    assert svc.presence_lines() == []
+
+
+async def test_render_prompt_injects_identity_vars(svc):
+    persona = await svc.create_persona("Шаблонная")
+    await svc.update_persona(persona.id, prompt="Ты — {{display_name}} {{signature}}.")
+    await svc.set_identity(persona.id, {"display_name": "Попыч", "signature": "🔥"})
+    await svc.assign(66, persona.id)
+    assert svc.render_prompt(66) == "Ты — Попыч 🔥."
+    # явные переменные вызова важнее identity
+    assert svc.render_prompt(66, {"display_name": "Кто-то"}) == "Ты — Кто-то 🔥."
+
+
+async def test_reload_hook_fires(svc):
+    calls = []
+
+    async def hook():
+        calls.append(1)
+
+    svc.add_reload_hook(hook)
+    await svc.reload()
+    assert calls == [1]

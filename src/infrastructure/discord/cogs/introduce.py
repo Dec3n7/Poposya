@@ -8,12 +8,11 @@ from discord.ext import commands
 
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
 
 logger = logging.getLogger(__name__)
-
-_EMBED_COLOR = 0x9B59B6
 
 INTRO_TEXT = """Добро пожаловать. Раз ты здесь — значит, я тебя впустила. Это первое, что стоит понять: сюда не приходят — сюда **пускают**.
 
@@ -197,22 +196,22 @@ class IntroduceCog(commands.Cog):
         # регистрация персистентной view: кнопки работают после рестарта
         self.bot.add_view(SurveyView(self.container, self.settings))
 
-    def _intro_embed(self) -> discord.Embed:
+    def _intro_embed(self, guild_id: int | None) -> discord.Embed:
         embed = discord.Embed(
             title="Попося.",
             description=INTRO_TEXT,
-            color=_EMBED_COLOR,
+            color=accent(guild_id),
         )
         if self.bot.user is not None:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         embed.set_footer(text="Аояма, Токио · ✂️👁🖤")
         return embed
 
-    def _survey_embed(self) -> discord.Embed:
+    def _survey_embed(self, guild_id: int | None) -> discord.Embed:
         embed = discord.Embed(
             title="…расскажи о себе.",
             description=SURVEY_INTRO,
-            color=_EMBED_COLOR,
+            color=accent(guild_id),
         )
         embed.add_field(
             name="👤 Кто ты?",
@@ -245,9 +244,9 @@ class IntroduceCog(commands.Cog):
     async def introduce(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
-        await channel.send(embed=self._intro_embed())
+        await channel.send(embed=self._intro_embed(interaction.guild_id))
         await channel.send(
-            embed=self._survey_embed(),
+            embed=self._survey_embed(interaction.guild_id),
             view=SurveyView(self.container, self.settings),
         )
         await interaction.followup.send("Опубликовано.", ephemeral=True)

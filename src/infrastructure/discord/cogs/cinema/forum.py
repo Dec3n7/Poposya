@@ -9,8 +9,9 @@ import discord
 
 from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry
+from src.infrastructure.discord.accent import accent
 
-from .formatting import _EMBED_COLOR, _title_of, _trim
+from .formatting import _title_of, _trim
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class CinemaForum:
         embed = discord.Embed(
             title=f"🎬 {_trim(_title_of(final), 200)}",
             description=_trim(final.overview, 400) if final.overview else None,
-            color=_EMBED_COLOR,
+            color=accent(final.guild_id),
             timestamp=final.watched_at,
         )
         embed.add_field(

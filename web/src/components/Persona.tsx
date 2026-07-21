@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { Guild, PersonaDetail, PersonaSummary } from "../types";
+import type { Guild, PersonaDetail, PersonaIdentity, PersonaSummary } from "../types";
 import { Dropdown } from "./Dropdown";
+
+// int-цвет ↔ hex для <input type="color">
+const toHex = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
+const fromHex = (hex: string) => parseInt(hex.replace("#", ""), 16) || 0;
 
 // Вкладка «Персона» (только оператор бота): назначение персоны этому серверу +
 // глобальная библиотека (создать/дублировать/импорт/экспорт) и редактор промптов.
@@ -20,6 +24,12 @@ export function Persona({ guild }: { guild: Guild }) {
   const [busy, setBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
+  // мягкая личность выбранной персоны (имя/подпись/цвет/presence)
+  const [identity, setIdentity] = useState<PersonaIdentity | null>(null);
+  const [idName, setIdName] = useState("");
+  const [idSignature, setIdSignature] = useState("");
+  const [idAccent, setIdAccent] = useState(0);
+  const [idPresence, setIdPresence] = useState("");
 
   const loadList = useCallback(async () => {
     const [personas, assigned] = await Promise.all([api.personas(), api.guildPersona(guild.id)]);
@@ -52,10 +62,56 @@ export function Persona({ guild }: { guild: Guild }) {
         setName(d.name);
       })
       .catch(() => alive && setDetail(null));
+    api
+      .personaIdentity(selectedId)
+      .then((i) => alive && applyIdentity(i))
+      .catch(() => alive && setIdentity(null));
     return () => {
       alive = false;
     };
   }, [selectedId]);
+
+  function applyIdentity(i: PersonaIdentity) {
+    setIdentity(i);
+    setIdName(i.display_name);
+    setIdSignature(i.signature);
+    setIdAccent(i.accent_color);
+    setIdPresence(i.presence.join("\n"));
+  }
+
+  const identityDirty =
+    identity != null &&
+    (idName !== identity.display_name ||
+      idSignature !== identity.signature ||
+      idAccent !== identity.accent_color ||
+      idPresence !== identity.presence.join("\n"));
+
+  const saveIdentity = () =>
+    run(async () => {
+      if (selectedId == null) return;
+      const saved = await api.setPersonaIdentity(selectedId, {
+        display_name: idName.trim(),
+        signature: idSignature.trim(),
+        accent_color: idAccent,
+        presence: idPresence
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      });
+      applyIdentity(saved);
+    }, "Личность сохранена");
+
+  const resetIdentity = () =>
+    run(async () => {
+      if (selectedId == null || identity == null) return;
+      const saved = await api.setPersonaIdentity(selectedId, {
+        display_name: identity.default_display_name,
+        signature: identity.default_signature,
+        accent_color: identity.default_accent_color,
+        presence: [],
+      });
+      applyIdentity(saved);
+    }, "Сброшено к дефолту");
 
   async function run(fn: () => Promise<void>, ok?: string) {
     setBusy(true);
@@ -308,6 +364,69 @@ export function Persona({ guild }: { guild: Guild }) {
               Сбросить к дефолту
             </button>
           </div>
+
+          {identity && (
+            <>
+              <div className="field-label">Мягкая личность</div>
+              <div className="identity-grid">
+                <label className="identity-field">
+                  <span className="muted small">Имя в тексте</span>
+                  <input
+                    className="input"
+                    value={idName}
+                    disabled={busy}
+                    placeholder={identity.default_display_name}
+                    onChange={(e) => setIdName(e.target.value)}
+                  />
+                </label>
+                <label className="identity-field">
+                  <span className="muted small">Подпись-эмодзи</span>
+                  <input
+                    className="input"
+                    value={idSignature}
+                    disabled={busy}
+                    placeholder={identity.default_signature}
+                    onChange={(e) => setIdSignature(e.target.value)}
+                  />
+                </label>
+                <label className="identity-field">
+                  <span className="muted small">Цвет эмбедов</span>
+                  <span className="identity-color">
+                    <input
+                      type="color"
+                      value={toHex(idAccent)}
+                      disabled={busy}
+                      onChange={(e) => setIdAccent(fromHex(e.target.value))}
+                    />
+                    <code className="muted small">{toHex(idAccent)}</code>
+                  </span>
+                </label>
+              </div>
+              <div className="field-label" style={{ marginTop: 12 }}>
+                Discord-статусы (по строке на статус)
+              </div>
+              <textarea
+                className="input mono"
+                rows={5}
+                value={idPresence}
+                disabled={busy}
+                placeholder={"пусто = встроенные занятия Попоси\nнапр.: читает Мураками"}
+                onChange={(e) => setIdPresence(e.target.value)}
+              />
+              <div className="btn-row" style={{ margin: "8px 0 20px" }}>
+                <button
+                  className="btn primary small"
+                  disabled={busy || !identityDirty}
+                  onClick={saveIdentity}
+                >
+                  Сохранить
+                </button>
+                <button className="btn ghost small" disabled={busy} onClick={resetIdentity}>
+                  Сбросить к дефолту
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="row-between persona-footer">
             <div className="btn-row">

@@ -12,12 +12,12 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.scheduler import DeferredScheduler
 
 from .formatting import (
     _DATE_RE,
-    _EMBED_COLOR,
     _TIME_RE,
     _title_of,
     _trim,
@@ -205,7 +205,7 @@ class CinemaCog(commands.Cog):
             title=f"🎬 {_trim(_title_of(saved), 200)}",
             description=(f"{_trim(saved.overview, 350)}\n\n" if saved.overview else "")
             + f"-# Предложил <@{saved.added_by}> · голосуйте кнопками",
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         if saved.poster_url:
             embed.set_thumbnail(url=saved.poster_url)
@@ -263,7 +263,7 @@ class CinemaCog(commands.Cog):
         embed = discord.Embed(
             title=f"🎬 Вотчлист ({len(ranked)})",
             description="\n".join(lines)[:4000],
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         embed.set_footer(text="/movienight start — устроить киновечер")
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -342,7 +342,7 @@ class CinemaCog(commands.Cog):
         embed = discord.Embed(
             title=f"🏆 Золотой фонд ({len(watched)})",
             description="\n".join(lines)[:4000],
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -419,7 +419,7 @@ class CinemaCog(commands.Cog):
                 + f"\n\n**Сеанс:** {_ts(night.scheduled_at, 'F')} ({_ts(night.scheduled_at)})"
                 + f"\n**Голосование до** {_ts(night.poll_ends_at, 't')} ({_ts(night.poll_ends_at)})"
             )[:4000],
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         embed.set_footer(text="Один голос на человека; можно передумать.")
         try:

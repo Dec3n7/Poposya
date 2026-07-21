@@ -1,12 +1,12 @@
 """Чистые хелперы киноклуба: обрезка текста, заголовки, Discord-таймстампы,
-регэкспы разбора времени/оценки и цвет эмбедов. Без обращений к Discord API."""
+регэкспы разбора времени/оценки. Без обращений к Discord API. Цвет эмбедов —
+из персоны сервера (src.infrastructure.discord.accent)."""
 
 import re
 from datetime import datetime
 
 from src.domain.cinema.entities import MovieEntry
 
-_EMBED_COLOR = 0x9B59B6
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 _DATE_RE = re.compile(r"^(\d{1,2})[.\-/](\d{1,2})$")
 _SCORE_RE = re.compile(r"\b(\d{1,2})\s*/\s*10")

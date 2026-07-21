@@ -342,6 +342,37 @@ a {
   padding-top: var(--sp-4);
   border-top: 1px solid var(--border-soft);
 }
+/* мягкая личность: имя/подпись/цвет в ряд, на узких — колонкой */
+.identity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.identity-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.identity-color {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.identity-color input[type="color"] {
+  width: 44px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .identity-grid {
+    grid-template-columns: 1fr;
+  }
+}
 /* редактор персоны: широкие поля (базовый .input рассчитан на число, 110px) */
 .persona input.input {
   width: 100%;

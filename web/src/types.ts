@@ -37,6 +37,16 @@ export interface GuildPersona {
   persona_id: number; // что реально применяется (назначенная или дефолт)
 }
 
+export interface PersonaIdentity {
+  display_name: string;
+  signature: string;
+  accent_color: number; // 0..0xFFFFFF
+  presence: string[]; // строки Discord-статуса; пусто = встроенный канон
+  default_display_name: string;
+  default_signature: string;
+  default_accent_color: number;
+}
+
 export type SettingKind = "bool" | "channel" | "float" | "int";
 
 export interface SettingField {

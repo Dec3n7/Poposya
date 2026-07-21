@@ -11,11 +11,11 @@ from discord.ext import commands
 
 from src.application.moderation.di import ModerationContainer
 from src.config import Settings
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 
 logger = logging.getLogger(__name__)
 
-_EMBED_COLOR = 0x9B59B6
 _SPAM_WARNING_TTL = 3600  # сколько секунд «первое предупреждение» остаётся в силе
 _UNBAN_CHECK_INTERVAL = 30
 
@@ -241,7 +241,7 @@ class ModerationCog(commands.Cog):
             title=f"⚠️ Предупреждения: {user.display_name} "
             f"({len(items)}/{self.settings.warn_threshold})",
             description="\n".join(lines),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -384,7 +384,7 @@ class ModerationCog(commands.Cog):
         embed = discord.Embed(
             title=f"🔨 Временные баны ({len(active)})",
             description="\n".join(lines)[:4000],
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

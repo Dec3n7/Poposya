@@ -110,14 +110,14 @@ def make_cog(container=None):
 
 def test_intro_embed_has_avatar():
     cog = make_cog()
-    embed = cog._intro_embed()
+    embed = cog._intro_embed(1)
     assert embed.title == "Попося."
     assert embed.thumbnail.url == "http://avatar"
 
 
 def test_survey_embed_lists_interests():
     cog = make_cog()
-    embed = cog._survey_embed()
+    embed = cog._survey_embed(1)
     fields = "\n".join(f.value for f in embed.fields)
     assert "Игры" in fields and "Кино" in fields
 

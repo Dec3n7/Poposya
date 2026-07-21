@@ -14,11 +14,10 @@ from src.application.finds.use_cases import ClaimResult
 from src.config import Settings
 from src.domain.finds.catalog import RARITY_EMOJI, RARITY_LABELS, season_for_month
 from src.domain.finds.entities import NightFind, Rarity
+from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 
 logger = logging.getLogger(__name__)
-
-_EMBED_COLOR = 0x9B59B6
 # «только если в основном канале была активность» — окно, в котором сервер
 # считается живым для спавна находки
 _ACTIVITY_WINDOW_SECONDS = 12 * 3600
@@ -235,7 +234,7 @@ class FindsCog(commands.Cog):
                 f"**Место:** {location.name}\n"
                 f"-# {location.flavor}"
             ),
-            color=_EMBED_COLOR,
+            color=accent(guild.id),
         )
         embed.set_footer(text="Одна попытка на находку. Заберёт первый, кому повезёт.")
         try:
@@ -363,7 +362,7 @@ class FindsCog(commands.Cog):
                 f"{user.mention} получает **+{result.points_delta}** очков "
                 f"({RARITY_EMOJI[item.rarity]} {RARITY_LABELS[item.rarity]} находка)."
             ),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         try:
             await interaction.channel.send(
@@ -431,7 +430,7 @@ class FindsCog(commands.Cog):
                 f"-# {view.location.flavor}\n\n"
                 f"Пропадёт {_ts(view.find.expires_at)}.{jump}"
             ),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -460,7 +459,7 @@ class FindsCog(commands.Cog):
         embed = discord.Embed(
             title=f"🗃️ Коллекция ({len(entries)})",
             description="\n".join(lines).strip()[:4000],
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -485,7 +484,7 @@ class FindsCog(commands.Cog):
                 f"{_GIFT_LINES[gifted.rarity]}\n\n"
                 f"{interaction.user.mention} получает **+{result.bonus}** очков."
             ),
-            color=_EMBED_COLOR,
+            color=accent(interaction.guild_id),
         )
         await interaction.followup.send(
             embed=embed, allowed_mentions=discord.AllowedMentions(users=True)
