@@ -49,6 +49,7 @@ def make_container():
     c.save_voice_progress = SimpleNamespace(execute=AsyncMock())
     c.record_snapshot = SimpleNamespace(execute=AsyncMock())
     c.record_message_activity = SimpleNamespace(execute=AsyncMock())
+    c.record_voice_activity = SimpleNamespace(execute=AsyncMock())
     return c
 
 
@@ -433,11 +434,18 @@ async def _drive_loop(monkeypatch, loop_coro, iterations):
 # --- cog_unload / _send -----------------------------------------------------
 
 
-def test_cog_unload_cancels_tasks():
-    cog = make_cog()
+async def test_cog_unload_flushes_then_cancels_tasks():
+    container = make_container()
+    cog = make_cog(container)
     task = MagicMock()
     cog._tasks = [task]
-    cog.cog_unload()
+    today = datetime.now(UTC).date()
+    cog._msg_counts = {(10, today, 12): 2}
+    cog._voice_seconds = {(10, today, 12): 300}
+    await cog.cog_unload()
+    # буферы слиты до отмены циклов, затем задачи отменены
+    container.record_message_activity.execute.assert_awaited_once()
+    container.record_voice_activity.execute.assert_awaited_once()
     task.cancel.assert_called_once()
 
 
@@ -1245,6 +1253,66 @@ async def test_flush_message_counts_returns_buckets_on_failure():
     await cog._flush_message_counts()
     # несохранённое вернулось обратно в счётчик
     assert cog._msg_counts.get((10, today, 12)) == 3
+
+
+# --- войс-присутствие (второй хитмап) ---------------------------------------
+
+
+async def test_voice_presence_accumulates_person_seconds():
+    cog = make_cog()
+    live = SimpleNamespace(id=1, bot=False, voice=SimpleNamespace(deaf=False, self_deaf=False))
+    deafened = SimpleNamespace(id=2, bot=False, voice=SimpleNamespace(deaf=True, self_deaf=False))
+    a_bot = SimpleNamespace(id=3, bot=True, voice=SimpleNamespace(deaf=False, self_deaf=False))
+    channel = SimpleNamespace(id=50, members=[live, deafened, a_bot])
+    guild = SimpleNamespace(id=10, voice_channels=[channel], stage_channels=[], afk_channel=None)
+    cog.bot.guilds = [guild]
+    now = datetime(2026, 7, 21, 15, 0, tzinfo=UTC)
+    cog._accumulate_voice_presence(now)
+    # 2 живых участника (в наушниках тоже присутствует; бот не в счёт) × тик
+    assert cog._voice_seconds[(10, now.date(), 15)] == 2 * cog._VOICE_TICK_SECONDS
+
+
+async def test_voice_presence_skips_afk_channel():
+    cog = make_cog()
+    member = SimpleNamespace(id=1, bot=False, voice=SimpleNamespace(deaf=False, self_deaf=False))
+    afk = SimpleNamespace(id=99, members=[member])
+    guild = SimpleNamespace(
+        id=10, voice_channels=[afk], stage_channels=[], afk_channel=SimpleNamespace(id=99)
+    )
+    cog.bot.guilds = [guild]
+    cog._accumulate_voice_presence(datetime(2026, 7, 21, 15, 0, tzinfo=UTC))
+    assert cog._voice_seconds == {}
+
+
+async def test_flush_voice_seconds_writes_per_guild_and_clears():
+    container = make_container()
+    cog = make_cog(container)
+    today = date.today()
+    cog._voice_seconds = {(10, today, 12): 600, (20, today, 13): 300}
+    await cog._flush_voice_seconds()
+    assert container.record_voice_activity.execute.await_count == 2
+    assert cog._voice_seconds == {}  # снято атомарно
+
+
+async def test_flush_voice_seconds_returns_buckets_on_failure():
+    container = make_container()
+    container.record_voice_activity.execute.side_effect = RuntimeError("db")
+    cog = make_cog(container)
+    today = date.today()
+    cog._voice_seconds = {(10, today, 12): 600}
+    await cog._flush_voice_seconds()
+    assert cog._voice_seconds.get((10, today, 12)) == 600  # вернулось обратно
+
+
+async def test_flush_activity_flushes_both_buffers():
+    container = make_container()
+    cog = make_cog(container)
+    today = date.today()
+    cog._msg_counts = {(10, today, 12): 1}
+    cog._voice_seconds = {(10, today, 12): 300}
+    await cog.flush_activity()
+    container.record_message_activity.execute.assert_awaited_once()
+    container.record_voice_activity.execute.assert_awaited_once()
 
 
 # --- _voice_points_tick: доп. ветки -----------------------------------------

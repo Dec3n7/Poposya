@@ -6,7 +6,10 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.message_activity.repository import IMessageActivityRepository
-from src.infrastructure.db.models.message_activity import MessageActivityModel
+from src.infrastructure.db.models.message_activity import (
+    MessageActivityModel,
+    VoiceActivityModel,
+)
 
 
 def _upsert(session: AsyncSession):
@@ -68,4 +71,39 @@ class SqlAlchemyMessageActivityRepository(IMessageActivityRepository):
         return [
             (day, int(hour), int(count))
             for day, hour, count in (await self._session.execute(stmt)).all()
+        ]
+
+    async def add_voice(self, guild_id: int, buckets: dict[tuple[date, int], int]) -> None:
+        insert = _upsert(self._session)
+        for (bucket_date, bucket_hour), delta in buckets.items():
+            if delta <= 0:
+                continue
+            stmt = insert(VoiceActivityModel).values(
+                guild_id=guild_id,
+                bucket_date=bucket_date,
+                bucket_hour=bucket_hour,
+                seconds=int(delta),
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["guild_id", "bucket_date", "bucket_hour"],
+                set_={"seconds": VoiceActivityModel.seconds + stmt.excluded.seconds},
+            )
+            await self._session.execute(stmt)
+
+    async def voice_hourly(self, guild_id: int, since: date) -> list[tuple[date, int, int]]:
+        stmt = (
+            select(
+                VoiceActivityModel.bucket_date,
+                VoiceActivityModel.bucket_hour,
+                VoiceActivityModel.seconds,
+            )
+            .where(
+                VoiceActivityModel.guild_id == guild_id,
+                VoiceActivityModel.bucket_date >= since,
+            )
+            .order_by(VoiceActivityModel.bucket_date, VoiceActivityModel.bucket_hour)
+        )
+        return [
+            (day, int(hour), int(seconds))
+            for day, hour, seconds in (await self._session.execute(stmt)).all()
         ]

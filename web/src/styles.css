@@ -241,6 +241,14 @@ a {
   color: var(--fg-faint);
   margin: var(--sp-5) 0 var(--sp-2);
 }
+/* заголовок секции с переключателем справа (напр. хитмап: Сообщения/Войс) */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
 .spinner {
   width: 22px;
   height: 22px;

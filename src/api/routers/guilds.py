@@ -45,9 +45,7 @@ async def overview(
 
     # один поход в Discord за именами/аватарами для всех витрин сразу
     ids = (
-        {e.user_id for e in board}
-        | {uid for uid, _ in voice}
-        | {uid for uid, _, _, _ in birthdays}
+        {e.user_id for e in board} | {uid for uid, _ in voice} | {uid for uid, _, _, _ in birthdays}
     )
     users = await fetch_users(container.settings.discord_token, list(ids))
     role_names = container.guild_settings.resolved(guild_id).relationship_role_names
@@ -81,8 +79,7 @@ async def overview(
             for e in board
         ],
         "distribution": [
-            {"index": idx, "name": role_name(idx), "count": dist[idx]}
-            for idx in sorted(dist)
+            {"index": idx, "name": role_name(idx), "count": dist[idx]} for idx in sorted(dist)
         ],
         "counts": {
             "watchlist": len(watchlist),
@@ -138,13 +135,15 @@ async def activity(
     guild_id: int = Depends(require_guild_manager),
     container=Depends(get_container),
 ) -> dict[str, object]:
-    """Активность сервера за `days` дней: сообщения/день (для спарклайна) и хитмап
-    день-недели×час (7×24, время в UTC). Пусто, пока бот не накопил счётчики."""
+    """Активность сервера за `days` дней: сообщения/день (для спарклайна) и два
+    хитмапа день-недели×час (7×24, UTC) — сообщения и минуты в войсе. Пусто, пока
+    бот не накопил счётчики."""
     since = (datetime.now(UTC).date()) - timedelta(days=days - 1)
     stats = await container.activity_stats.execute(guild_id, since)
     return {
         "daily": [[day.isoformat(), count] for day, count in stats.daily],
         "heatmap": stats.heatmap,
+        "voice": stats.voice_heatmap,
     }
 
 
@@ -162,8 +161,12 @@ async def remove_movie(
     if status_str == "not_found":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Фильм не найден в вотчлисте")
     await record_audit(
-        container, guild_id, session.user_id, "movie.remove",
-        target=entry.title if entry else str(entry_id), result=status_str,
+        container,
+        guild_id,
+        session.user_id,
+        "movie.remove",
+        target=entry.title if entry else str(entry_id),
+        result=status_str,
     )
     return {"status": status_str}
 

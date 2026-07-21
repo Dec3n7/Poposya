@@ -61,6 +61,9 @@ class ActivityCog(commands.Cog):
         # почасовой счётчик сообщений (guild_id, UTC-дата, час) -> кол-во; копится
         # в памяти и доливается в БД пачкой — хитмап/сообщения-в-день на панели
         self._msg_counts: dict[tuple[int, date, int], int] = {}
+        # человеко-секунды присутствия в войсе по (guild, дата, час UTC) — второй
+        # хитмап; копится в voice-тике, доливается тем же flush-циклом
+        self._voice_seconds: dict[tuple[int, date, int], int] = {}
         self._loops_started = False
         self._tasks: list[asyncio.Task] = []
 
@@ -80,7 +83,10 @@ class ActivityCog(commands.Cog):
 
         return on("activity_enabled") and on(sub)
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
+        # доливаем накопленные буферы ДО отмены циклов — иначе при hot-reload/
+        # выгрузке кога теряется последний неслитый интервал
+        await self.flush_activity()
         for task in self._tasks:
             task.cancel()
 
@@ -468,9 +474,15 @@ class ActivityCog(commands.Cog):
         while True:
             await asyncio.sleep(120)
             try:
-                await self._flush_message_counts()
+                await self.flush_activity()
             except Exception:
-                logger.exception("Ошибка доливки счётчиков сообщений")
+                logger.exception("Ошибка доливки счётчиков активности")
+
+    async def flush_activity(self) -> None:
+        """Слить оба буфера (сообщения + войс) в БД. Вызывается циклом, при
+        выгрузке кога и при остановке бота — чтобы не терять последний интервал."""
+        await self._flush_message_counts()
+        await self._flush_voice_seconds()
 
     async def _flush_message_counts(self) -> None:
         if not self._msg_counts:
@@ -490,6 +502,22 @@ class ActivityCog(commands.Cog):
                     key = (guild_id, bucket_date, hour)
                     self._msg_counts[key] = self._msg_counts.get(key, 0) + count
 
+    async def _flush_voice_seconds(self) -> None:
+        if not self._voice_seconds:
+            return
+        pending, self._voice_seconds = self._voice_seconds, {}
+        by_guild: dict[int, dict[tuple[date, int], int]] = {}
+        for (guild_id, bucket_date, hour), secs in pending.items():
+            by_guild.setdefault(guild_id, {})[(bucket_date, hour)] = secs
+        for guild_id, buckets in by_guild.items():
+            try:
+                await self.container.record_voice_activity.execute(guild_id, buckets)
+            except Exception:
+                logger.exception("Войс-присутствие гильдии %s не записано", guild_id)
+                for (bucket_date, hour), secs in buckets.items():
+                    key = (guild_id, bucket_date, hour)
+                    self._voice_seconds[key] = self._voice_seconds.get(key, 0) + secs
+
     # --- очки за голосовые каналы ---
 
     _VOICE_TICK_SECONDS = 300  # шаг учёта присутствия
@@ -506,8 +534,25 @@ class ActivityCog(commands.Cog):
             except Exception:
                 logger.exception("Ошибка начисления очков за войс")
 
+    def _accumulate_voice_presence(self, now: datetime) -> None:
+        """Копит человеко-секунды присутствия в войсе для хитмапа. Считается
+        независимо от войс-очков (это «время на сервере», а не награда): все живые
+        участники в не-AFK голосовых/stage-каналах, за минувший тик."""
+        bucket = (now.date(), now.hour)
+        for guild in self.bot.guilds:
+            for channel in [*guild.voice_channels, *guild.stage_channels]:
+                if guild.afk_channel is not None and channel.id == guild.afk_channel.id:
+                    continue
+                present = sum(1 for m in channel.members if not m.bot and m.voice is not None)
+                if present:
+                    key = (guild.id, *bucket)
+                    self._voice_seconds[key] = (
+                        self._voice_seconds.get(key, 0) + present * self._VOICE_TICK_SECONDS
+                    )
+
     async def _voice_points_tick(self) -> None:
         now = datetime.now(UTC)
+        self._accumulate_voice_presence(now)  # присутствие для хитмапа — до гейтов очков
         changed: dict[tuple[int, int], float] = {}
         for guild in self.bot.guilds:
             if not self._feature(guild.id, "activity_voice_points"):

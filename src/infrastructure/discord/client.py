@@ -21,6 +21,19 @@ class PoposyaBot(commands.Bot):
         self.container = container
         self._was_connected = False  # для дедупликации логов разрыва связи
 
+    async def close(self) -> None:
+        # перед остановкой сливаем накопленные буферы активности (сообщения/войс):
+        # close() НЕ вызывает cog_unload, поэтому доливаем здесь, пока БД жива —
+        # иначе редеплой/остановка теряют последний неслитый интервал хитмапа
+        cog = self.get_cog("ActivityCog")
+        flush = getattr(cog, "flush_activity", None)
+        if flush is not None:
+            try:
+                await flush()
+            except Exception:
+                logger.exception("Не удалось слить буферы активности при остановке")
+        await super().close()
+
     async def setup_hook(self) -> None:
         from src.application.ai_chat.mood import MoodTracker
         from src.infrastructure.cinema.kinopoisk import KinopoiskClient

@@ -53,7 +53,10 @@ def build_root_container(settings: Settings) -> RootContainer:
         TryMarkAlbumPostUseCase,
     )
     from src.application.ai_chat.service import AIQueue, ChatService
-    from src.application.message_activity.use_cases import RecordMessageActivityUseCase
+    from src.application.message_activity.use_cases import (
+        RecordMessageActivityUseCase,
+        RecordVoiceActivityUseCase,
+    )
     from src.application.metrics.use_cases import RecordDailySnapshotUseCase
     from src.application.moderation.use_cases import (
         ClearWarnsUseCase,
@@ -327,6 +330,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         get_voice_hours=GetVoiceHoursUseCase(uow_factory),
         record_snapshot=RecordDailySnapshotUseCase(uow_factory),
         record_message_activity=RecordMessageActivityUseCase(uow_factory),
+        record_voice_activity=RecordVoiceActivityUseCase(uow_factory),
     )
 
     from src.application.finds.use_cases import (

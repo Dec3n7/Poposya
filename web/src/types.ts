@@ -113,10 +113,12 @@ export interface Overview {
 export type TrendPoint = [string, number];
 export type Trends = Record<string, TrendPoint[]>;
 
-// активность сервера: сообщения/день + хитмап день-недели×час (7×24, UTC)
+// активность сервера: сообщения/день + два хитмапа день-недели×час (7×24, UTC):
+// сообщения и минуты присутствия в войсе
 export interface ActivityStats {
   daily: TrendPoint[];
   heatmap: number[][];
+  voice: number[][];
 }
 
 export interface WatchlistItem {

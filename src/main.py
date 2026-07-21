@@ -99,6 +99,20 @@ async def run() -> None:
         started.append("command-listener")
     boot.info("Фоновые задачи запущены: %s", ", ".join(started))
 
+    # docker stop / kill шлёт SIGTERM — по умолчанию Python не переводит его в
+    # чистую остановку, поэтому вешаем graceful bot.close() (он сольёт буферы
+    # активности). На Windows-деве add_signal_handler недоступен — молча пропускаем.
+    import signal
+
+    def _graceful_stop() -> None:
+        boot.info("Получен SIGTERM — плавно останавливаюсь")
+        asyncio.create_task(bot.close())
+
+    try:
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, _graceful_stop)
+    except (NotImplementedError, AttributeError):
+        pass  # Windows / платформа без сигналов
+
     try:
         # async with гарантирует bot.close() (и отключение голосовых клиентов)
         # при любом завершении, включая Ctrl+C

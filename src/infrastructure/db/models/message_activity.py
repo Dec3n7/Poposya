@@ -16,3 +16,16 @@ class MessageActivityModel(Base):
     bucket_date: Mapped[date] = mapped_column(Date, primary_key=True)
     bucket_hour: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class VoiceActivityModel(Base):
+    """Почасовое время присутствия в голосовых каналах: суммарные человеко-секунды
+    (сколько живых участников × сколько секунд сидели) на (guild_id, дата, час UTC).
+    Та же приватная агрегат-схема, что и у сообщений — без пользователя."""
+
+    __tablename__ = "voice_activity"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bucket_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    bucket_hour: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    seconds: Mapped[int] = mapped_column(Integer, nullable=False)

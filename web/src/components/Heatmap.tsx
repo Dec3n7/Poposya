@@ -6,7 +6,8 @@ import type { CSSProperties } from "react";
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const HOUR_TICKS = [0, 6, 12, 18];
 
-export function Heatmap({ grid }: { grid: number[][] }) {
+// unit — короткая подпись значения ячейки (для тултипа/сноски): «сообщ.» или «мин».
+export function Heatmap({ grid, unit = "сообщ." }: { grid: number[][]; unit?: string }) {
   const max = Math.max(0, ...grid.flat());
   if (max === 0) return null;
 
@@ -31,14 +32,16 @@ export function Heatmap({ grid }: { grid: number[][] }) {
                   key={`c${d}-${h}`}
                   className={`heatmap-cell${count > 0 ? " on" : ""}`}
                   style={style}
-                  title={`${DOW[d]} ${String(h).padStart(2, "0")}:00 — ${count} сообщ.`}
+                  title={`${DOW[d]} ${String(h).padStart(2, "0")}:00 — ${count} ${unit}`}
                 />
               );
             })}
           </div>
         ))}
       </div>
-      <div className="faint small heatmap-note">Сообщения по дню недели и часу · время UTC</div>
+      <div className="faint small heatmap-note">
+        {unit === "мин" ? "Минуты в войсе" : "Сообщения"} по дню недели и часу · время UTC
+      </div>
     </div>
   );
 }

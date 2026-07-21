@@ -9,7 +9,10 @@ from src.application.activity.use_cases import (
     TouchMemberActivityUseCase,
     TryMarkAlbumPostUseCase,
 )
-from src.application.message_activity.use_cases import RecordMessageActivityUseCase
+from src.application.message_activity.use_cases import (
+    RecordMessageActivityUseCase,
+    RecordVoiceActivityUseCase,
+)
 from src.application.metrics.use_cases import RecordDailySnapshotUseCase
 
 
@@ -26,3 +29,5 @@ class ActivityContainer:
     record_snapshot: RecordDailySnapshotUseCase
     # почасовой учёт сообщений — хитмап и «сообщения/день» на панели
     record_message_activity: RecordMessageActivityUseCase
+    # почасовой учёт присутствия в войсе — второй хитмап на панели
+    record_voice_activity: RecordVoiceActivityUseCase

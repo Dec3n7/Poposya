@@ -26,3 +26,15 @@ class IMessageActivityRepository(ABC):
         """Строки (день, час, счётчик) с `since` — для агрегации в сетку день×час
         недели на стороне приложения (weekday считается из даты)."""
         ...
+
+    # --- почасовое присутствие в войсе (человеко-секунды) ---
+
+    @abstractmethod
+    async def add_voice(self, guild_id: int, buckets: dict[tuple[date, int], int]) -> None:
+        """Прибавить человеко-секунды к корзинам (день, час) присутствия в войсе."""
+        ...
+
+    @abstractmethod
+    async def voice_hourly(self, guild_id: int, since: date) -> list[tuple[date, int, int]]:
+        """Строки (день, час, секунды) присутствия в войсе с `since`."""
+        ...

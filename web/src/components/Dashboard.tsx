@@ -106,6 +106,7 @@ export function Dashboard({ guild }: { guild: Guild }) {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<number>(30);
   const [board, setBoard] = useState<BoardTab>("points");
+  const [heatMode, setHeatMode] = useState<"messages" | "voice">("messages");
 
   useEffect(() => {
     setData(null);
@@ -283,14 +284,44 @@ export function Dashboard({ guild }: { guild: Guild }) {
         </>
       )}
 
-      {activity && activity.heatmap.some((row) => row.some((v) => v > 0)) && (
-        <>
-          <h2 className="section-title">Активность по часам</h2>
-          <div className="card pad">
-            <Heatmap grid={activity.heatmap} />
-          </div>
-        </>
-      )}
+      {activity &&
+        (activity.heatmap.some((row) => row.some((v) => v > 0)) ||
+          activity.voice.some((row) => row.some((v) => v > 0))) && (
+          <>
+            <div className="section-head">
+              <h2 className="section-title">Активность по часам</h2>
+              <div className="seg" role="group" aria-label="Тип активности">
+                <button
+                  className={`seg-item${heatMode === "messages" ? " active" : ""}`}
+                  onClick={() => setHeatMode("messages")}
+                >
+                  Сообщения
+                </button>
+                <button
+                  className={`seg-item${heatMode === "voice" ? " active" : ""}`}
+                  onClick={() => setHeatMode("voice")}
+                >
+                  Войс
+                </button>
+              </div>
+            </div>
+            <div className="card pad">
+              {heatMode === "messages" ? (
+                <Heatmap grid={activity.heatmap} unit="сообщ." />
+              ) : (
+                <Heatmap grid={activity.voice} unit="мин" />
+              )}
+              {heatMode === "messages" &&
+                !activity.heatmap.some((row) => row.some((v) => v > 0)) && (
+                  <div className="muted small">Пока нет сообщений за период.</div>
+                )}
+              {heatMode === "voice" &&
+                !activity.voice.some((row) => row.some((v) => v > 0)) && (
+                  <div className="muted small">Пока нет времени в войсе за период.</div>
+                )}
+            </div>
+          </>
+        )}
     </div>
   );
 }
