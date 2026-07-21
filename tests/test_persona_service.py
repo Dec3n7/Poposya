@@ -200,3 +200,89 @@ async def test_reload_hook_fires(svc):
     svc.add_reload_hook(hook)
     await svc.reload()
     assert calls == [1]
+
+
+# --- P4: render_block и find-replace ---
+
+
+async def test_render_block_static_by_default(svc):
+    # без AI-функции блок отдаёт статику с подстановкой
+    text = await svc.render_block(1, "activity.welcome", None, name="Кот")
+    assert text == "Добро пожаловать, Кот. Осмотрись, правила почитай. ✂️👁🖤"
+
+
+async def test_render_block_uses_ai_instruction(svc):
+    seen: list[str] = []
+
+    async def ai(instruction: str) -> str:
+        seen.append(instruction)
+        return "AI-ответ"
+
+    text = await svc.render_block(1, "activity.welcome", ai, name="Кот")
+    assert text == "AI-ответ"
+    assert seen and "Кот" in seen[0]  # инструкция отрендерена с переменными
+
+
+async def test_render_block_falls_back_when_ai_fails(svc):
+    async def ai(_instruction: str) -> str:
+        raise RuntimeError("провайдер лёг")
+
+    text = await svc.render_block(1, "activity.farewell", ai, name="Игорь")
+    assert text == "Игорь ушёл. Бывает."
+
+
+async def test_render_block_static_mode_skips_ai(svc):
+    persona = await svc.create_persona("Статичная")
+    await svc.assign(700, persona.id)
+    await svc.set_phrase(persona.id, "activity.welcome", "Привет, {name}.", mode="static")
+
+    async def ai(_instruction: str) -> str:
+        raise AssertionError("AI не должен вызываться в режиме static")
+
+    assert await svc.render_block(700, "activity.welcome", ai, name="Ия") == "Привет, Ия."
+
+
+async def test_render_block_silent_returns_none(svc):
+    persona = await svc.create_persona("Молчунья")
+    await svc.assign(701, persona.id)
+    await svc.set_phrase(
+        persona.id, "activity.welcome", "не важно {name}", mode="silent"
+    )
+    assert await svc.render_block(701, "activity.welcome", None, name="X") is None
+
+
+async def test_render_block_empty_static_is_silent(svc):
+    # AI-only блок (пустая статика): без AI — молчим
+    assert await svc.render_block(1, "activity.return", None, name="X", days=9) is None
+
+
+async def test_render_block_list_picks_random_item(svc):
+    text = await svc.render_block(1, "activity.album", None)
+    from src.application.persona.registry import PHRASE_SPECS
+
+    assert text in PHRASE_SPECS["activity.album"].default
+
+
+async def test_set_phrase_validates_placeholders(svc):
+    persona = await svc.create_persona("X")
+    with pytest.raises(ValueError):
+        await svc.set_phrase(persona.id, "activity.welcome", "Привет, {nmae}!")  # опечатка
+    with pytest.raises(ValueError):
+        await svc.set_phrase(persona.id, "activity.welcome", 42)  # не строка
+
+
+async def test_replace_phrases_dry_run_and_apply(svc):
+    persona = await svc.create_persona("Замены")
+    await svc.assign(702, persona.id)
+    # dry_run: изменения видны, но ничего не записано
+    preview = await svc.replace_phrases(persona.id, "ушёл", "свалил", dry_run=True)
+    assert any(c["key"] == "activity.farewell" for c in preview)
+    assert svc.phrase(702, "activity.farewell", name="X") == "X ушёл. Бывает."
+    # apply: совпадение в дефолте становится override
+    await svc.replace_phrases(persona.id, "ушёл", "свалил")
+    assert svc.phrase(702, "activity.farewell", name="X") == "X свалил. Бывает."
+
+
+async def test_replace_phrases_rejects_empty_find(svc):
+    with pytest.raises(ValueError):
+        await svc.replace_phrases(1, "", "x")

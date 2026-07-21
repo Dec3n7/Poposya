@@ -85,6 +85,40 @@ class PromptUpdate(BaseModel):
     prompt: str  # пустая строка = сброс к встроенному дефолту
 
 
+class PersonaPhraseDTO(BaseModel):
+    """Одна строка каталога фраз в редакторе: дефолт из кода + override."""
+
+    key: str
+    label: str
+    category: str
+    kind: str  # str | template | list | dict
+    default: object
+    value: object | None = None  # None = override нет (действует дефолт)
+    mode: str
+    is_override: bool
+    placeholders: list[str]
+    allowed_modes: list[str]
+
+
+class PhraseUpdate(BaseModel):
+    value: object
+    mode: str | None = None  # None = оставить/взять дефолтный режим ключа
+
+
+class PhraseReplace(BaseModel):
+    """Глобальный find-and-replace по фразам персоны."""
+
+    find: str
+    replace: str
+    dry_run: bool = False
+
+
+class PhraseChangeDTO(BaseModel):
+    key: str
+    before: object
+    after: object
+
+
 class PersonaIdentityDTO(BaseModel):
     """Мягкая личность персоны (эффективные значения) + дефолты из кода для
     подсказки «сброс вернёт вот это»."""

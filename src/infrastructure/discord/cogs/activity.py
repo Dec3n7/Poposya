@@ -13,17 +13,10 @@ from src.application.ai_chat.service import ChatService
 from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.shared.holidays import HolidayCalendar
+from src.infrastructure.discord.accent import accent
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
-
-_FALLBACK_WELCOME = "Добро пожаловать, {name}. Осмотрись, правила почитай. ✂️👁🖤"
-_FALLBACK_FAREWELL = "{name} ушёл. Бывает."
-_FALLBACK_ALBUM_CAPTIONS = [
-    "В коллекцию. ✂️👁🖤",
-    "Это стоило сохранить.",
-    "Экспонат. Не благодарите.",
-    "Редкий момент, когда вы меня не разочаровали.",
-]
 
 # чаще раза в 15 минут активность одного участника в БД не пишем
 _TOUCH_THROTTLE_SECONDS = 900
@@ -42,6 +35,7 @@ class ActivityCog(commands.Cog):
         settings: Settings,
         mood: MoodTracker,
         guild_settings=None,
+        persona=None,
     ):
         self.bot = bot
         self.container = container
@@ -50,6 +44,9 @@ class ActivityCog(commands.Cog):
         self.settings = settings
         self.mood = mood
         self.gs = guild_settings
+        # голос кога — из каталога фраз персоны; без PersonaService (тесты) —
+        # дефолты реестра (RegistryPersona)
+        self.persona = persona if persona is not None else RegistryPersona()
         self.calendar = HolidayCalendar(settings.holidays)
         self._holiday_announced: set[tuple[int, str]] = set()
         self._snapshot_taken: set[tuple[int, str]] = set()  # (guild_id, UTC-дата)
@@ -98,13 +95,26 @@ class ActivityCog(commands.Cog):
     def _main_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         return discord.utils.get(guild.text_channels, name=self.settings.main_channel)
 
-    async def _send(self, channel: discord.TextChannel | None, text: str) -> None:
+    async def _send(self, channel: discord.TextChannel | None, text: str | None) -> None:
         if channel is None or not text:
             return
         try:
             await channel.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
             logger.warning("Не удалось отправить сообщение активности", exc_info=True)
+
+    def _ai_fn(self, guild_id: int):
+        """AI-генератор для render_block: инструкция из каталога -> реплика в
+        голосе персоны сервера. None, если AI выключен."""
+        if self.chat is None:
+            return None
+
+        async def generate(instruction: str) -> str:
+            return await self.chat.freeform_remark(
+                guild_id, instruction, datetime.now(UTC), mood=self.mood.get(guild_id)
+            )
+
+        return generate
 
     # --- приветствия и прощания ---
 
@@ -128,18 +138,12 @@ class ActivityCog(commands.Cog):
         if not self._feature(member.guild.id, "activity_greetings"):
             return  # приветствия выключены на сервере (авто-роль выше — оставляем)
         channel = self._welcome_channel(member.guild)
-        text = _FALLBACK_WELCOME.format(name=member.display_name)
-        if self.chat is not None:
-            try:
-                text = await self.chat.freeform_remark(
-                    member.guild.id,
-                    f"На сервер пришёл новый участник — {member.display_name}. "
-                    "Поприветствуй его в своём стиле: сдержанно, с лёгкой иронией, без сюсюканья.",
-                    datetime.now(UTC),
-                    mood=self.mood.get(member.guild.id),
-                )
-            except Exception:
-                logger.warning("AI-приветствие не сгенерировалось", exc_info=True)
+        text = await self.persona.render_block(
+            member.guild.id,
+            "activity.welcome",
+            self._ai_fn(member.guild.id),
+            name=member.display_name,
+        )
         await self._send(channel, text)
 
     @commands.Cog.listener()
@@ -149,18 +153,12 @@ class ActivityCog(commands.Cog):
         if not self._feature(member.guild.id, "activity_greetings"):
             return
         channel = self._welcome_channel(member.guild)
-        text = _FALLBACK_FAREWELL.format(name=member.display_name)
-        if self.chat is not None:
-            try:
-                text = await self.chat.freeform_remark(
-                    member.guild.id,
-                    f"Участник {member.display_name} покинул сервер. "
-                    "Попрощайся одной фразой в своём стиле — сухо, без драмы.",
-                    datetime.now(UTC),
-                    mood=self.mood.get(member.guild.id),
-                )
-            except Exception:
-                logger.warning("AI-прощание не сгенерировалось", exc_info=True)
+        text = await self.persona.render_block(
+            member.guild.id,
+            "activity.farewell",
+            self._ai_fn(member.guild.id),
+            name=member.display_name,
+        )
         await self._send(channel, text)
 
     # --- активность участников и главного канала ---
@@ -210,20 +208,20 @@ class ActivityCog(commands.Cog):
             rank = await self.chat.get_rank(message.author.id, message.guild.id)
             if rank.survey.contact == "quiet":
                 return
-            try:
-                text = await self.chat.freeform_remark(
-                    message.guild.id,
-                    f"Участник {message.author.display_name} впервые написал после "
-                    f"{touch.days_absent} дней отсутствия. Отметь его возвращение одной "
-                    "фразой в своём стиле: заметила, но без сцен.",
-                    datetime.now(UTC),
-                    mood=self.mood.get(message.guild.id),
-                )
-                await message.channel.send(
-                    text[:2000], allowed_mentions=discord.AllowedMentions.none()
-                )
-            except Exception:
-                logger.warning("Реплика о возвращении не сгенерировалась", exc_info=True)
+            text = await self.persona.render_block(
+                message.guild.id,
+                "activity.return",
+                self._ai_fn(message.guild.id),
+                name=message.author.display_name,
+                days=touch.days_absent,
+            )
+            if text:
+                try:
+                    await message.channel.send(
+                        text[:2000], allowed_mentions=discord.AllowedMentions.none()
+                    )
+                except discord.HTTPException:
+                    logger.warning("Реплика о возвращении не отправилась", exc_info=True)
 
     # --- «Альбом Попоси»: сообщения с реакциями попадают в канал-альбом ---
 
@@ -271,24 +269,19 @@ class ActivityCog(commands.Cog):
         if not await self.container.try_mark_album.execute(guild.id, message.id, datetime.now(UTC)):
             return
 
-        caption = random.choice(_FALLBACK_ALBUM_CAPTIONS)
-        if self.chat is not None:
-            try:
-                caption = await self.chat.freeform_remark(
-                    guild.id,
-                    f"Сообщение участника {message.author.display_name} набрало "
-                    f"{max(counts)} реакций и попадает в твой «Альбом» — коллекцию лучших "
-                    f"моментов сервера. Текст сообщения: «{message.content[:300]}». "
-                    "Подпиши экспонат одной фразой в своём кураторском стиле.",
-                    datetime.now(UTC),
-                    mood=self.mood.get(guild.id),
-                )
-            except Exception:
-                logger.warning("Подпись для альбома не сгенерировалась", exc_info=True)
+        caption = await self.persona.render_block(
+            guild.id,
+            "activity.album",
+            self._ai_fn(guild.id),
+            name=message.author.display_name,
+            reactions=max(counts),
+            content=message.content[:300],
+        )
 
         embed = discord.Embed(
-            description=message.content[:3900] or "*(без текста)*",
-            color=0x9B59B6,
+            description=message.content[:3900]
+            or str(self.persona.phrase(guild.id, "activity.album_empty")),
+            color=accent(guild.id),
             timestamp=message.created_at,
         )
         embed.set_author(
@@ -300,11 +293,21 @@ class ActivityCog(commands.Cog):
             if not image_set and (attachment.content_type or "").startswith("image/"):
                 embed.set_image(url=attachment.url)
                 image_set = True
-        embed.add_field(name="​", value=f"[Перейти к сообщению]({message.jump_url})", inline=False)
-        embed.set_footer(text=f"{max(counts)} реакций • #{channel.name}")
+        embed.add_field(
+            name="​",
+            value=str(self.persona.phrase(guild.id, "activity.album_link", url=message.jump_url)),
+            inline=False,
+        )
+        embed.set_footer(
+            text=str(
+                self.persona.phrase(
+                    guild.id, "activity.album_footer", reactions=max(counts), channel=channel.name
+                )
+            )
+        )
         try:
             await album.send(
-                content=caption[:1900],
+                content=(caption or "")[:1900] or None,
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -368,20 +371,20 @@ class ActivityCog(commands.Cog):
                     continue
                 self._holiday_announced.add(key)
                 self.mood.bump(guild.id, +15)
-                text = f"Сегодня {holiday}. Так и быть — сегодня я добрее обычного. ✂️👁🖤"
-                if self.chat is not None:
-                    try:
-                        text = await self.chat.freeform_remark(
+                text = await self.persona.render_block(
+                    guild.id, "activity.holiday", self._ai_fn(guild.id), holiday=holiday
+                )
+                if text:
+                    bonus = str(
+                        self.persona.phrase(
                             guild.id,
-                            f"Сегодня {holiday}. Объяви об этом серверу в своём стиле — "
-                            "празднично, но без сюсюканья.",
-                            now,
-                            mood=self.mood.get(guild.id),
+                            "activity.holiday_bonus",
+                            multiplier=self.settings.holiday_points_multiplier,
                         )
-                    except Exception:
-                        logger.warning("Праздничное объявление не сгенерировалось", exc_info=True)
-                text += f"\n-# 🎉 Весь день очки идут ×{self.settings.holiday_points_multiplier}"
-                await self._send(self._main_channel(guild), text)
+                    )
+                    if bonus:
+                        text += f"\n{bonus}"
+                    await self._send(self._main_channel(guild), text)
 
         # мягкое угасание очков при долгой неактивности
         decay = await self.relationship.decay_points.execute(now)
@@ -403,10 +406,19 @@ class ActivityCog(commands.Cog):
             channel = self._main_channel(guild)
             if channel is None:
                 continue
+            remind_text = str(
+                self.persona.phrase(
+                    guild_id,
+                    "activity.birthday_remind",
+                    days=self.settings.birthday_remind_days,
+                    user_mention=f"<@{user_id}>",
+                )
+            )
+            if not remind_text:
+                continue
             try:
                 await channel.send(
-                    f"🎂 Через {self.settings.birthday_remind_days} дня — день рождения "
-                    f"<@{user_id}>. Готовьтесь. Я — уже.",
+                    remind_text[:2000],
                     allowed_mentions=discord.AllowedMentions(users=True),
                 )
             except discord.HTTPException:
@@ -422,21 +434,13 @@ class ActivityCog(commands.Cog):
                 continue
             member = guild.get_member(user_id)
             name = member.display_name if member else "именинник"
-            text = (
-                f"🎂 <@{user_id}> — с днём рождения. Сегодня можешь даже немного поныть. Один раз."
+            greeting = await self.persona.render_block(
+                guild_id, "activity.birthday", self._ai_fn(guild_id), name=name
             )
-            if self.chat is not None:
-                try:
-                    generated = await self.chat.freeform_remark(
-                        guild_id,
-                        f"Сегодня день рождения у участника {name}. Поздравь его в своём "
-                        "стиле — тепло, но без пафоса и открыточных штампов.",
-                        datetime.now(UTC),
-                        mood=self.mood.get(guild_id),
-                    )
-                    text = f"🎂 <@{user_id}> — {generated}"
-                except Exception:
-                    logger.warning("Поздравление не сгенерировалось", exc_info=True)
+            if not greeting:
+                continue
+            # пинг именинника — каркас, не голос: добавляется всегда
+            text = f"🎂 <@{user_id}> — {greeting}"
             try:
                 await channel.send(
                     text[:2000], allowed_mentions=discord.AllowedMentions(users=True)
@@ -620,18 +624,10 @@ class ActivityCog(commands.Cog):
                 if now - last < lonely_hours * 3600:
                     continue
                 self._lonely_notified.add(guild.id)
-                try:
-                    text = await self.chat.freeform_remark(
-                        guild.id,
-                        f"В канале уже больше {lonely_hours} часов никто не пишет. "
-                        "Напиши одну реплику в пустоту в своём стиле — тебе слегка не хватает "
-                        "этих людей, но признаваться в этом прямо ты не станешь.",
-                        datetime.now(UTC),
-                        mood=self.mood.get(guild.id),
-                    )
-                    await self._send(self._main_channel(guild), text)
-                except Exception:
-                    logger.warning("Реплика одиночества не сгенерировалась", exc_info=True)
+                text = await self.persona.render_block(
+                    guild.id, "activity.lonely", self._ai_fn(guild.id), hours=lonely_hours
+                )
+                await self._send(self._main_channel(guild), text)
 
     async def _random_thought_loop(self) -> None:
         while True:
@@ -647,15 +643,7 @@ class ActivityCog(commands.Cog):
                     continue
                 if not self._feature(guild.id, "activity_random_thoughts"):
                     continue
-                try:
-                    text = await self.chat.freeform_remark(
-                        guild.id,
-                        "Напиши одну случайную мысль или наблюдение в своём характере — "
-                        "про дождь, кофе, работу над артом, игры, Токио. Как будто просто "
-                        "захотелось сказать вслух. Без обращения к кому-то конкретному.",
-                        datetime.now(UTC),
-                        mood=self.mood.get(guild.id),
-                    )
-                    await self._send(self._main_channel(guild), text)
-                except Exception:
-                    logger.warning("Случайная мысль не сгенерировалась", exc_info=True)
+                text = await self.persona.render_block(
+                    guild.id, "activity.random_thought", self._ai_fn(guild.id)
+                )
+                await self._send(self._main_channel(guild), text)

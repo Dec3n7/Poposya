@@ -37,6 +37,25 @@ export interface GuildPersona {
   persona_id: number; // что реально применяется (назначенная или дефолт)
 }
 
+export interface PersonaPhrase {
+  key: string;
+  label: string;
+  category: string;
+  kind: "str" | "template" | "list" | "dict";
+  default: unknown;
+  value: unknown | null; // null = override нет, действует дефолт
+  mode: string;
+  is_override: boolean;
+  placeholders: string[];
+  allowed_modes: string[];
+}
+
+export interface PhraseChange {
+  key: string;
+  before: unknown;
+  after: unknown;
+}
+
 export interface PersonaIdentity {
   display_name: string;
   signature: string;

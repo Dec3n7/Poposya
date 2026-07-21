@@ -10,6 +10,8 @@ NOTIFY (PersonaChangeListener). Резолв двухуровневый: overrid
 одной гильдии — проще и без гонок частичного кэша."""
 
 import logging
+import random
+import string
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -18,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.persona.registry import (
     DEFAULT_ATTRIBUTES,
-    DEFAULT_MODE,
     DEFAULT_PERSONA_NAME,
     IDENTITY_TEXT_MAX,
     PHRASE_SPECS,
@@ -36,6 +37,130 @@ logger = logging.getLogger(__name__)
 # бот перечитывает персоны целиком (PersonaChangeListener). Payload не нужен —
 # reload перечитывает всё.
 PERSONAS_NOTIFY_CHANNEL = "poposya_personas"
+
+
+def _template_placeholders(text: str) -> set[str]:
+    """Имена {плейсхолдеров} в строке (string.Formatter, без позиционных)."""
+    try:
+        return {field for _, field, _, _ in string.Formatter().parse(text) if field}
+    except ValueError:
+        return set()
+
+
+def _format_safe(text: str, variables: dict[str, object]) -> str:
+    """format() с защитой: кривой плейсхолдер не роняет ког (текст как есть)."""
+    try:
+        return text.format(**variables)
+    except (KeyError, IndexError, ValueError):
+        return text
+
+
+def _validate_phrase_value(spec, value: object) -> None:
+    """Тип по kind + плейсхолдеры-подмножество spec.placeholders. ValueError
+    наружу (роутер отдаст 422). Пустые значения допустимы («молчать»)."""
+    if spec.kind in ("str", "template"):
+        if not isinstance(value, str):
+            raise ValueError(f"{spec.key}: ожидается строка")
+        texts = [value]
+    elif spec.kind == "list":
+        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            raise ValueError(f"{spec.key}: ожидается список строк")
+        texts = value
+    elif spec.kind == "dict":
+        if not isinstance(value, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+        ):
+            raise ValueError(f"{spec.key}: ожидается словарь строк")
+        texts = list(value.values())
+    else:
+        return
+    for item in texts:
+        unknown = _template_placeholders(item) - set(spec.placeholders)
+        if unknown:
+            allowed = ", ".join(sorted(spec.placeholders)) or "нет"
+            raise ValueError(
+                f"{spec.key}: неизвестные плейсхолдеры {{{', '.join(sorted(unknown))}}} "
+                f"(допустимые: {allowed})"
+            )
+
+
+def _replace_in_value(value: object, find: str, replace: str) -> object:
+    if isinstance(value, str):
+        return value.replace(find, replace)
+    if isinstance(value, list):
+        return [_replace_in_value(item, find, replace) for item in value]
+    if isinstance(value, dict):
+        return {k: _replace_in_value(v, find, replace) for k, v in value.items()}
+    return value
+
+
+class PhraseResolver:
+    """Резолв фраз каталога и AI-блоков: дефолты из PHRASE_SPECS, override —
+    у наследника (_phrase_override). RegistryPersona отдаёт чистые дефолты —
+    для когов, собранных без PersonaService (тест-заглушки)."""
+
+    def _phrase_override(self, guild_id: int, key: str) -> PersonaPhrase | None:
+        return None
+
+    def phrase(self, guild_id: int, key: str, **variables: object) -> object:
+        """Разрешённое значение фразы: override персоны → дефолт PHRASE_SPECS.
+
+        Для str/template с variables делает .format(**variables) (лишние
+        переменные игнорируются — статика и AI-инструкция блока получают общий
+        набор). Списки/словари возвращаются как есть. KeyError если ключ вне
+        реестра — это ошибка программиста."""
+        spec = PHRASE_SPECS[key]
+        value: object = spec.default
+        override = self._phrase_override(guild_id, key)
+        if override is not None:
+            value = override.value
+        if variables and isinstance(value, str):
+            return _format_safe(value, variables)
+        return value
+
+    def phrase_mode(self, guild_id: int, key: str) -> str:
+        override = self._phrase_override(guild_id, key)
+        if override is not None:
+            return override.mode
+        return PHRASE_SPECS[key].allowed_modes[0]  # дефолтный режим ключа
+
+    async def render_block(
+        self,
+        guild_id: int,
+        key: str,
+        ai_fn: "Callable[[str], Awaitable[str]] | None" = None,
+        **variables: object,
+    ) -> str | None:
+        """Блок «AI с фолбэком на статику» — общий путь голосовых мест когов.
+
+        mode ключа: ai_then_static — пробуем ai_fn с инструкцией из ключа
+        f\"{key}.ai\" (если инструкция или ai_fn отсутствуют/упали — статика);
+        static — сразу статика; silent — None (молчим). Статика-список →
+        случайный элемент; пустая статика → None (нечего говорить)."""
+        mode = self.phrase_mode(guild_id, key)
+        if mode == "silent":
+            return None
+        if mode != "static" and ai_fn is not None and f"{key}.ai" in PHRASE_SPECS:
+            instruction = str(self.phrase(guild_id, f"{key}.ai", **variables))
+            if instruction:
+                try:
+                    text = await ai_fn(instruction)
+                    if text and text.strip():
+                        return text
+                except Exception:
+                    logger.warning("AI-блок %s не сгенерировался", key, exc_info=True)
+        value = self.phrase(guild_id, key, **variables)
+        if isinstance(value, list):
+            value = random.choice(value) if value else ""
+            if variables and isinstance(value, str):
+                value = _format_safe(value, variables)
+        text = str(value)
+        return text or None
+
+
+class RegistryPersona(PhraseResolver):
+    """Только дефолты из кода, без БД и назначений — null-object для когов,
+    которым не проброшен PersonaService."""
 
 
 def _clean_identity_value(key: str, value: object) -> object:
@@ -63,7 +188,7 @@ def _clean_identity_value(key: str, value: object) -> object:
     return value
 
 
-class PersonaService:
+class PersonaService(PhraseResolver):
     def __init__(self, settings: Settings, session_factory: async_sessionmaker[AsyncSession]):
         self._settings = settings
         self._session_factory = session_factory
@@ -241,30 +366,17 @@ class PersonaService:
         persona = self._personas[persona_id]
         return {**DEFAULT_ATTRIBUTES, **persona.attributes}
 
-    def phrase(self, guild_id: int, key: str, **variables: object) -> object:
-        """Разрешённое значение фразы: override персоны → дефолт PHRASE_SPECS.
-
-        Для str/template с variables делает .format(**variables). Списки/словари
-        возвращаются как есть (выбор элемента/подстановка — на вызывающей стороне
-        в P4). KeyError если ключ вне реестра — это ошибка программиста."""
-        spec = PHRASE_SPECS[key]
-        value: object = spec.default
+    def _phrase_override(self, guild_id: int, key: str) -> PersonaPhrase | None:
+        """Override фразы персоны сервера (для phrase/phrase_mode/render_block
+        из PhraseResolver)."""
         persona = self._persona_for(guild_id)
-        if persona:
-            override = self._phrases.get(persona.id, {}).get(key)
-            if override is not None:
-                value = override.value
-        if variables and isinstance(value, str):
-            return value.format(**variables)
-        return value
+        if persona is None:
+            return None
+        return self._phrases.get(persona.id, {}).get(key)
 
-    def phrase_mode(self, guild_id: int, key: str) -> str:
-        persona = self._persona_for(guild_id)
-        if persona:
-            override = self._phrases.get(persona.id, {}).get(key)
-            if override is not None:
-                return override.mode
-        return DEFAULT_MODE
+    def phrase_override_of(self, persona_id: int, key: str) -> PersonaPhrase | None:
+        """Override КОНКРЕТНОЙ персоны (редактор панели, без резолва по гильдии)."""
+        return self._phrases.get(persona_id, {}).get(key)
 
     # --- запись (в БД + pg_notify + локальный reload) ---
 
@@ -332,19 +444,43 @@ class PersonaService:
         await self.reload()
 
     async def set_phrase(
-        self, persona_id: int, key: str, value: object, mode: str = DEFAULT_MODE
+        self, persona_id: int, key: str, value: object, mode: str | None = None
     ) -> None:
         spec = PHRASE_SPECS.get(key)
         if spec is None:
             raise ValueError(f"неизвестный ключ фразы: {key}")
+        if mode is None:
+            mode = spec.allowed_modes[0]
         if mode not in spec.allowed_modes:
             raise ValueError(f"режим «{mode}» недопустим для {key}")
+        _validate_phrase_value(spec, value)
         async with self._session_factory() as session:
             repo = SqlAlchemyPersonaRepository(session)
             await repo.set_phrase(PersonaPhrase(persona_id, key, value, mode))
             await self._notify(session)
             await session.commit()
         await self.reload()
+
+    async def replace_phrases(
+        self, persona_id: int, find: str, replace: str, *, dry_run: bool = False
+    ) -> list[dict[str, object]]:
+        """Find-and-replace по ЭФФЕКТИВНЫМ значениям всех фраз персоны (override
+        или дефолт): совпадение в дефолте создаёт override. Возвращает список
+        изменений [{key, before, after}]; dry_run — только предпросмотр."""
+        if not find:
+            raise ValueError("пустая строка поиска")
+        changes: list[dict[str, object]] = []
+        for key, spec in PHRASE_SPECS.items():
+            override = self.phrase_override_of(persona_id, key)
+            value = override.value if override is not None else spec.default
+            replaced = _replace_in_value(value, find, replace)
+            if replaced == value:
+                continue
+            changes.append({"key": key, "before": value, "after": replaced})
+            if not dry_run:
+                mode = override.mode if override is not None else None
+                await self.set_phrase(persona_id, key, replaced, mode)
+        return changes
 
     async def reset_phrase(self, persona_id: int, key: str) -> None:
         async with self._session_factory() as session:
@@ -404,9 +540,9 @@ class PersonaService:
                 spec = PHRASE_SPECS.get(key)
                 if spec is None:
                     continue
-                mode = raw.get("mode", DEFAULT_MODE)
+                mode = raw.get("mode", spec.allowed_modes[0])
                 if mode not in spec.allowed_modes:
-                    mode = DEFAULT_MODE
+                    mode = spec.allowed_modes[0]
                 await repo.set_phrase(PersonaPhrase(created.id, key, raw.get("value"), mode))
             await self._notify(session)
             await session.commit()

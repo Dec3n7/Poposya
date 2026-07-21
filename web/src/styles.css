@@ -342,6 +342,77 @@ a {
   padding-top: var(--sp-4);
   border-top: 1px solid var(--border-soft);
 }
+/* каталог фраз (P4) */
+.phrase-cat {
+  margin-top: var(--sp-4);
+}
+.phrase-row {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.phrase-row:last-child {
+  border-bottom: none;
+}
+.phrase-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.phrase-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.phrase-ph {
+  font-family: var(--mono, monospace);
+}
+.phrase-body {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+.phrase-input {
+  flex: 1;
+}
+.phrase-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 150px;
+}
+.phrase-replace {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.phrase-replace .input {
+  flex: 1;
+  min-width: 140px;
+}
+.phrase-preview {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  display: grid;
+  gap: 6px;
+}
+.phrase-preview-row s {
+  opacity: 0.55;
+}
+@media (max-width: 720px) {
+  .phrase-body {
+    flex-direction: column;
+  }
+  .phrase-controls {
+    flex-direction: row;
+    min-width: 0;
+  }
+}
+
 /* мягкая личность: имя/подпись/цвет в ряд, на узких — колонкой */
 .identity-grid {
   display: grid;

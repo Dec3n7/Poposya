@@ -20,7 +20,9 @@ import type {
   PermCatalog,
   PersonaDetail,
   PersonaIdentity,
+  PersonaPhrase,
   PersonaSummary,
+  PhraseChange,
   PersonDetail,
   PersonListItem,
   PlaylistDetail,
@@ -282,6 +284,32 @@ export const api = {
       body: JSON.stringify({ prompt }),
     }),
   exportPersona: (id: number): Promise<unknown> => req<unknown>(`/api/personas/${id}/export`),
+  personaPhrases: (id: number): Promise<PersonaPhrase[]> =>
+    req<PersonaPhrase[]>(`/api/personas/${id}/phrases`),
+  setPersonaPhrase: (
+    id: number,
+    key: string,
+    value: unknown,
+    mode: string,
+  ): Promise<PersonaPhrase> =>
+    req<PersonaPhrase>(`/api/personas/${id}/phrases/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value, mode }),
+    }),
+  resetPersonaPhrase: (id: number, key: string): Promise<PersonaPhrase> =>
+    req<PersonaPhrase>(`/api/personas/${id}/phrases/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    }),
+  replacePersonaPhrases: (
+    id: number,
+    find: string,
+    replace: string,
+    dryRun: boolean,
+  ): Promise<PhraseChange[]> =>
+    req<PhraseChange[]>(`/api/personas/${id}/phrases/replace`, {
+      method: "POST",
+      body: JSON.stringify({ find, replace, dry_run: dryRun }),
+    }),
   personaIdentity: (id: number): Promise<PersonaIdentity> =>
     req<PersonaIdentity>(`/api/personas/${id}/identity`),
   setPersonaIdentity: (

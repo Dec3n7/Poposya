@@ -34,13 +34,14 @@ def test_default_type_matches_kind():
 
 
 def test_template_placeholders_declared_and_renderable():
-    """Плейсхолдеры в дефолте template-фразы = задекларированным (без опечаток и
-    без неизвестных {переменных}); дефолт форматируется без KeyError."""
+    """Плейсхолдеры в дефолте template-фразы ⊆ задекларированных (без опечаток
+    и неизвестных {переменных}; дефолт может использовать не все — например,
+    пустая статика «молчать»); дефолт форматируется без KeyError."""
     for spec in PHRASE_SPECS.values():
         if spec.kind != "template":
             continue
         used = {name for _, name, _, _ in string.Formatter().parse(spec.default) if name}
-        assert used == set(spec.placeholders), spec.key
+        assert used <= set(spec.placeholders), spec.key
         # не должно бросить KeyError — значит других плейсхолдеров в тексте нет
         spec.default.format(**{name: "x" for name in spec.placeholders})
 

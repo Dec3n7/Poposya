@@ -84,6 +84,7 @@ class PoposyaBot(commands.Bot):
                 self.container.settings,
                 mood,
                 gs,
+                persona=persona,
             )
         )
         await self.add_cog(

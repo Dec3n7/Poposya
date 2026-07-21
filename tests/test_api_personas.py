@@ -221,3 +221,75 @@ async def test_identity_requires_operator(stranger):
 
 async def test_identity_unknown_persona_404(client):
     assert (await client.get("/api/personas/999999/identity")).status_code == 404
+
+
+# --- P4: каталог фраз --------------------------------------------------------
+
+
+async def test_phrases_list_defaults(client):
+    created = (await client.post("/api/personas", json={"name": "Фразы"})).json()
+    resp = await client.get(f"/api/personas/{created['id']}/phrases")
+    assert resp.status_code == 200
+    phrases = {p["key"]: p for p in resp.json()}
+    welcome = phrases["activity.welcome"]
+    assert welcome["is_override"] is False
+    assert welcome["value"] is None
+    assert "{name}" in welcome["default"]
+    assert welcome["allowed_modes"] == ["ai_then_static", "static", "silent"]
+
+
+async def test_phrase_set_and_reset(client, container):
+    created = (await client.post("/api/personas", json={"name": "Фразы"})).json()
+    pid = created["id"]
+    resp = await client.put(
+        f"/api/personas/{pid}/phrases/activity.farewell",
+        json={"value": "{name} испарился.", "mode": "static"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_override"] is True and body["mode"] == "static"
+
+    # рантайм-резолв после назначения
+    await client.put(f"/api/guilds/{GUILD}/persona", json={"persona_id": pid})
+    assert container.persona.phrase(GUILD, "activity.farewell", name="Ия") == "Ия испарился."
+
+    reset = await client.delete(f"/api/personas/{pid}/phrases/activity.farewell")
+    assert reset.status_code == 200
+    assert reset.json()["is_override"] is False
+    assert container.persona.phrase(GUILD, "activity.farewell", name="Ия") == "Ия ушёл. Бывает."
+
+
+async def test_phrase_validation_and_unknown_key(client):
+    created = (await client.post("/api/personas", json={"name": "Фразы"})).json()
+    pid = created["id"]
+    # неизвестный плейсхолдер -> 422
+    bad = await client.put(
+        f"/api/personas/{pid}/phrases/activity.welcome", json={"value": "Хай, {nick}"}
+    )
+    assert bad.status_code == 422
+    # неизвестный ключ -> 404
+    missing = await client.put(f"/api/personas/{pid}/phrases/nope.key", json={"value": "x"})
+    assert missing.status_code == 404
+
+
+async def test_phrase_replace_preview_and_apply(client, container):
+    created = (await client.post("/api/personas", json={"name": "Фразы"})).json()
+    pid = created["id"]
+    preview = await client.post(
+        f"/api/personas/{pid}/phrases/replace",
+        json={"find": "ушёл", "replace": "свалил", "dry_run": True},
+    )
+    assert preview.status_code == 200
+    assert any(c["key"] == "activity.farewell" for c in preview.json())
+
+    applied = await client.post(
+        f"/api/personas/{pid}/phrases/replace",
+        json={"find": "ушёл", "replace": "свалил", "dry_run": False},
+    )
+    assert applied.status_code == 200
+    await client.put(f"/api/guilds/{GUILD}/persona", json={"persona_id": pid})
+    assert container.persona.phrase(GUILD, "activity.farewell", name="Ия") == "Ия свалил. Бывает."
+
+
+async def test_phrases_require_operator(stranger):
+    assert (await stranger.get("/api/personas/1/phrases")).status_code == 403

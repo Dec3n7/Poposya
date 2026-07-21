@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import type { Guild, PersonaDetail, PersonaIdentity, PersonaSummary } from "../types";
 import { Dropdown } from "./Dropdown";
+import { PersonaPhrases } from "./PersonaPhrases";
 
 // int-цвет ↔ hex для <input type="color">
 const toHex = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
@@ -445,6 +446,9 @@ export function Persona({ guild }: { guild: Guild }) {
           </div>
         </div>
       )}
+
+      {/* каталог фраз выбранной персоны (отдельная карточка) */}
+      {detail && <PersonaPhrases personaId={detail.id} />}
     </div>
   );
 }

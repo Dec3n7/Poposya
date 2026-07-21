@@ -16,12 +16,16 @@ from src.api.schemas import (
     PersonaDetailDTO,
     PersonaIdentityDTO,
     PersonaIdentityUpdate,
+    PersonaPhraseDTO,
     PersonaRename,
     PersonaSummaryDTO,
+    PhraseChangeDTO,
+    PhraseReplace,
+    PhraseUpdate,
     PromptUpdate,
 )
 from src.api.security import Session
-from src.application.persona.registry import DEFAULT_ATTRIBUTES
+from src.application.persona.registry import DEFAULT_ATTRIBUTES, PHRASE_SPECS
 from src.domain.persona.entities import Persona
 from src.infrastructure.persona_service import PersonaService
 
@@ -249,6 +253,101 @@ async def set_identity(
         details={"presence_lines": len(body.presence)},
     )
     return _identity_dto(service, persona_id)
+
+
+def _phrase_dto(service: PersonaService, persona_id: int, key: str) -> PersonaPhraseDTO:
+    spec = PHRASE_SPECS[key]
+    override = service.phrase_override_of(persona_id, key)
+    return PersonaPhraseDTO(
+        key=spec.key,
+        label=spec.label,
+        category=spec.category,
+        kind=spec.kind,
+        default=spec.default,
+        value=override.value if override is not None else None,
+        mode=override.mode if override is not None else spec.allowed_modes[0],
+        is_override=override is not None,
+        placeholders=sorted(spec.placeholders),
+        allowed_modes=list(spec.allowed_modes),
+    )
+
+
+@router.get("/personas/{persona_id}/phrases", response_model=list[PersonaPhraseDTO])
+async def list_phrases(
+    persona_id: int,
+    _op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> list[PersonaPhraseDTO]:
+    """Весь каталог фраз персоны в порядке реестра (фронт группирует по
+    category)."""
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    return [_phrase_dto(service, persona_id, key) for key in PHRASE_SPECS]
+
+
+@router.post("/personas/{persona_id}/phrases/replace", response_model=list[PhraseChangeDTO])
+async def replace_phrases(
+    persona_id: int,
+    body: PhraseReplace,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> list[PhraseChangeDTO]:
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    try:
+        changes = await service.replace_phrases(
+            persona_id, body.find, body.replace, dry_run=body.dry_run
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    if not body.dry_run and changes:
+        await record_audit(
+            container, _GLOBAL, op.user_id, "persona.replace", target=persona_id,
+            details={"find": body.find, "replace": body.replace, "keys": len(changes)},
+        )
+    return [PhraseChangeDTO(**change) for change in changes]
+
+
+@router.put("/personas/{persona_id}/phrases/{key}", response_model=PersonaPhraseDTO)
+async def set_phrase(
+    persona_id: int,
+    key: str,
+    body: PhraseUpdate,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> PersonaPhraseDTO:
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    if key not in PHRASE_SPECS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого ключа фразы")
+    try:
+        await service.set_phrase(persona_id, key, body.value, body.mode)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    await record_audit(
+        container, _GLOBAL, op.user_id, "persona.phrase", target=persona_id,
+        details={"key": key},
+    )
+    return _phrase_dto(service, persona_id, key)
+
+
+@router.delete("/personas/{persona_id}/phrases/{key}", response_model=PersonaPhraseDTO)
+async def reset_phrase(
+    persona_id: int,
+    key: str,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> PersonaPhraseDTO:
+    service: PersonaService = container.persona
+    _require(service, persona_id)
+    if key not in PHRASE_SPECS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого ключа фразы")
+    await service.reset_phrase(persona_id, key)
+    await record_audit(
+        container, _GLOBAL, op.user_id, "persona.phrase_reset", target=persona_id,
+        details={"key": key},
+    )
+    return _phrase_dto(service, persona_id, key)
 
 
 @router.get("/personas/{persona_id}/export")
