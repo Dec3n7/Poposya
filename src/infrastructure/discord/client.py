@@ -65,7 +65,7 @@ class PoposyaBot(commands.Bot):
         mood = MoodTracker()
 
         gs = self.container.guild_settings
-        music_cog = MusicCog(self, self.container.music, gs)
+        music_cog = MusicCog(self, self.container.music, gs, persona=self.container.persona)
         await self.add_cog(music_cog)
         # presence из персоны: строки статуса берутся из библиотек, а по NOTIFY
         # (панель сменила персону/присвоение) статус переустанавливается сразу

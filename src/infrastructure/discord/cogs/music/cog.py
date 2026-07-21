@@ -32,6 +32,7 @@ from src.infrastructure.discord.cogs.music.views import (
 )
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.presence import PresenceService
+from src.infrastructure.persona_service import RegistryPersona
 
 
 class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь как плейлист"):
@@ -56,11 +57,19 @@ logger = logging.getLogger(__name__)
 
 
 class MusicCog(commands.Cog):
-    def __init__(self, bot: commands.Bot, container: MusicContainer, guild_settings=None):
+    def __init__(
+        self,
+        bot: commands.Bot,
+        container: MusicContainer,
+        guild_settings=None,
+        persona=None,
+    ):
         self.bot = bot
         self.container = container
         self.settings = container.settings
         self.gs = guild_settings
+        # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
+        self.persona = persona if persona is not None else RegistryPersona()
         self.audio = container.audio_source
         self.spotify = SpotifyLinkResolver()
         # композиция музыкального модуля: сервисы и их взаимные связи.
@@ -84,6 +93,10 @@ class MusicCog(commands.Cog):
         return PlayerView(
             self.service, self.lyrics, self.toggle_like_current, self.save_queue_current
         )
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def cog_load(self) -> None:
         # персистентный view: кнопки плеера работают и после рестарта бота
@@ -127,33 +140,32 @@ class MusicCog(commands.Cog):
         self, interaction: discord.Interaction, query: str, to_front: bool
     ) -> None:
         member = interaction.user
+        gid = interaction.guild_id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                "Сначала зайди в голосовой канал.", ephemeral=True
+                self._p(gid, "music.join_voice_first"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
-        added = "Поставила первой" if to_front else "Добавила"
+        added = self._p(gid, "music.add_front_prefix" if to_front else "music.add_prefix")
 
         # Spotify: одиночный трек через oEmbed -> поиск на YouTube
         if self.spotify.is_spotify_link(query):
             if "/track/" not in query:
                 await interaction.followup.send(
-                    "Плейлисты и альбомы Spotify пока не поддерживаются — для них нужен "
-                    "их API (SPOTIFY_CLIENT_ID/SECRET в .env). Кидай ссылку на трек.",
-                    ephemeral=True,
+                    self._p(gid, "music.spotify_playlist_unsupported"), ephemeral=True
                 )
                 return
             search_query = await self.spotify.search_query_for(query)
             if not search_query:
                 await interaction.followup.send(
-                    "Spotify не отдал название трека. Попробуй поиском.", ephemeral=True
+                    self._p(gid, "music.spotify_no_title"), ephemeral=True
                 )
                 return
             results = await self.audio.search(search_query, requested_by=member.id, limit=1)
             if not results:
                 await interaction.followup.send(
-                    f"На YouTube не нашлось: {search_query}", ephemeral=True
+                    self._p(gid, "music.youtube_not_found", query=search_query), ephemeral=True
                 )
                 return
             if await self.service.enqueue_tracks(interaction, results[:1], to_front=to_front):
@@ -171,15 +183,16 @@ class MusicCog(commands.Cog):
                 )
             except TrackResolveError as exc:
                 await interaction.followup.send(
-                    f"Не смогла открыть ссылку: {trim(str(exc), 300)}", ephemeral=True
+                    self._p(gid, "music.link_open_failed", error=trim(str(exc), 300)),
+                    ephemeral=True,
                 )
                 return
             if not tracks:
-                await interaction.followup.send("По ссылке ничего не нашлось.", ephemeral=True)
+                await interaction.followup.send(self._p(gid, "music.link_empty"), ephemeral=True)
                 return
             if await self.service.enqueue_tracks(interaction, tracks, to_front=to_front):
                 text = (
-                    f"{added}: **{len(tracks)}** треков из плейлиста."
+                    self._p(gid, "music.added_playlist_tracks", prefix=added, count=len(tracks))
                     if len(tracks) > 1
                     else f"{added}: **{tracks[0].title}**"
                 )
@@ -190,10 +203,10 @@ class MusicCog(commands.Cog):
             query, requested_by=member.id, limit=self.settings.music_search_limit
         )
         if not results:
-            await interaction.followup.send("Ничего не нашла по запросу.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "music.search_empty"), ephemeral=True)
             return
         await interaction.followup.send(
-            f"Нашла {len(results)} — выбери трек:",
+            self._p(gid, "music.search_results", count=len(results)),
             view=SearchView(self.service.enqueue_tracks, results, to_front=to_front),
             ephemeral=True,
         )
@@ -203,7 +216,9 @@ class MusicCog(commands.Cog):
     async def queue(self, interaction: discord.Interaction) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or (player.current is None and not player.queue):
-            await interaction.response.send_message("Очередь пуста.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.queue_empty"), ephemeral=True
+            )
             return
         view = QueueView(player)
         await interaction.response.send_message(
@@ -218,7 +233,9 @@ class MusicCog(commands.Cog):
     async def history(self, interaction: discord.Interaction) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or not player.history:
-            await interaction.response.send_message("История пуста.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.history_empty"), ephemeral=True
+            )
             return
         recent = list(reversed(player.history))[:25]  # свежие первыми, лимит select
         lines = [
@@ -226,7 +243,7 @@ class MusicCog(commands.Cog):
             for i, t in enumerate(recent, 1)
         ]
         embed = discord.Embed(
-            title=f"🕘 История ({len(player.history)})",
+            title=self._p(interaction.guild_id, "music.history_title", count=len(player.history)),
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
@@ -239,22 +256,25 @@ class MusicCog(commands.Cog):
         player = self.service.get_player(interaction.guild_id)
         if player is None or not player.all_tracks():
             await interaction.response.send_message(
-                "Очередь пуста — нечего сохранять.", ephemeral=True
+                self._p(interaction.guild_id, "music.save_queue_empty"), ephemeral=True
             )
             return
         await interaction.response.send_modal(SaveQueueModal(self))
 
     async def _do_save_queue(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         tracks = player.all_tracks() if player else []
         error = await self.container.save_playlist.execute(
-            interaction.guild_id, name, interaction.user.id, tracks
+            gid, name, interaction.user.id, tracks
         )
         replies = {
-            "": f"💾 Сохранила «{name.strip()[:50]}» — {len(tracks)} треков.",
-            "empty": "Очередь пуста — нечего сохранять.",
-            "limit": f"Лимит плейлистов на сервере ({self.settings.music_playlist_max_per_guild}) исчерпан.",
+            "": self._p(gid, "music.playlist_saved", name=name.strip()[:50], count=len(tracks)),
+            "empty": self._p(gid, "music.save_queue_empty"),
+            "limit": self._p(
+                gid, "music.playlist_limit", limit=self.settings.music_playlist_max_per_guild
+            ),
         }
         await interaction.followup.send(replies[error], ephemeral=True)
 
@@ -263,9 +283,13 @@ class MusicCog(commands.Cog):
     async def skip(self, interaction: discord.Interaction) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.nothing_playing"), ephemeral=True
+            )
             return
-        await interaction.response.send_message("⏭️ Пропустил.", ephemeral=True)
+        await interaction.response.send_message(
+            self._p(interaction.guild_id, "music.skipped"), ephemeral=True
+        )
         await player.skip()
 
     @app_commands.command(name="shuffle", description="Перемешать очередь")
@@ -273,28 +297,36 @@ class MusicCog(commands.Cog):
     async def shuffle(self, interaction: discord.Interaction) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or not player.queue:
-            await interaction.response.send_message("Перемешивать нечего.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.nothing_to_shuffle"), ephemeral=True
+            )
             return
         await player.shuffle()
-        await interaction.response.send_message("🔀 Перемешал очередь.", ephemeral=True)
+        await interaction.response.send_message(
+            self._p(interaction.guild_id, "music.shuffled"), ephemeral=True
+        )
 
     @app_commands.command(name="remove", description="Убрать трек из очереди по номеру")
     @app_commands.describe(position="Номер трека в очереди (как в /queue)")
     @app_commands.guild_only()
     async def remove(self, interaction: discord.Interaction, position: int) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or not player.queue:
-            await interaction.response.send_message("Очередь пуста.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.queue_empty"), ephemeral=True
+            )
             return
         count = len(player.queue)
         removed = await player.remove_at(position)
         if removed is None:
             await interaction.response.send_message(
-                f"В очереди нет трека №{position} — их всего {count}.", ephemeral=True
+                self._p(gid, "music.remove_no_track", position=position, count=count),
+                ephemeral=True,
             )
             return
         await interaction.response.send_message(
-            f"🗑️ Убрала из очереди: **{trim(removed.title, 100)}**.",
+            self._p(gid, "music.removed", title=trim(removed.title, 100)),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -303,60 +335,74 @@ class MusicCog(commands.Cog):
     @app_commands.describe(position="Позиция: «1:23», секунды «83» или «1:02:03»")
     @app_commands.guild_only()
     async def seek(self, interaction: discord.Interaction, position: str) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.nothing_playing"), ephemeral=True
+            )
             return
         seconds = parse_duration(position)
         if seconds is None:
             await interaction.response.send_message(
-                "Не поняла позицию. Пиши «1:23», «83» или «1:02:03».", ephemeral=True
+                self._p(gid, "music.seek_bad_position"), ephemeral=True
             )
             return
         if not await player.seek(seconds):
             track = player.current
             if track is not None and track.duration is None:
-                msg = "Живой эфир не перемотать."
+                msg = self._p(gid, "music.seek_live")
             else:
                 limit = fmt_duration(track.duration) if track else "?"
-                msg = f"За пределами трека — он длиной {limit}."
+                msg = self._p(gid, "music.seek_out_of_range", limit=limit)
             await interaction.response.send_message(msg, ephemeral=True)
             return
         await interaction.response.send_message(
-            f"⏩ Перемотала на `{fmt_duration(seconds)}`.", ephemeral=True
+            self._p(gid, "music.seeked", position=fmt_duration(seconds)), ephemeral=True
         )
 
     @app_commands.command(name="stop", description="Остановить музыку и выйти из канала")
     @app_commands.guild_only()
     async def stop(self, interaction: discord.Interaction) -> None:
-        if self.service.get_session(interaction.guild_id) is None:
-            await interaction.response.send_message("Я и так ничего не играю.", ephemeral=True)
+        gid = interaction.guild_id
+        if self.service.get_session(gid) is None:
+            await interaction.response.send_message(
+                self._p(gid, "music.not_playing_idle"), ephemeral=True
+            )
             return
-        await interaction.response.send_message("⏹️ Остановила и вышла.", ephemeral=True)
-        await self.service.cleanup(interaction.guild_id, "⏹️ Остановлено командой /stop.")
+        await interaction.response.send_message(self._p(gid, "music.stopped"), ephemeral=True)
+        await self.service.cleanup(gid, self._p(gid, "music.cleanup_stop"))
 
     @app_commands.command(name="pause", description="Пауза")
     @app_commands.guild_only()
     async def pause(self, interaction: discord.Interaction) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None:
-            await interaction.response.send_message("Нечего ставить на паузу.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.pause_nothing"), ephemeral=True
+            )
             return
         if player.is_paused:
-            await interaction.response.send_message("Уже на паузе.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.already_paused"), ephemeral=True
+            )
             return
         await player.toggle_pause()
-        await interaction.response.send_message("⏸️ Пауза.", ephemeral=True)
+        await interaction.response.send_message(self._p(gid, "music.paused"), ephemeral=True)
 
     @app_commands.command(name="resume", description="Продолжить воспроизведение")
     @app_commands.guild_only()
     async def resume(self, interaction: discord.Interaction) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None or not player.is_paused:
-            await interaction.response.send_message("Продолжать нечего.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.resume_nothing"), ephemeral=True
+            )
             return
         await player.toggle_pause()
-        await interaction.response.send_message("▶️ Продолжаю.", ephemeral=True)
+        await interaction.response.send_message(self._p(gid, "music.resumed"), ephemeral=True)
 
     @app_commands.command(name="volume", description="Громкость 0–200%")
     @app_commands.describe(value="Процент громкости (0–200)")
@@ -364,19 +410,26 @@ class MusicCog(commands.Cog):
     async def volume(
         self, interaction: discord.Interaction, value: app_commands.Range[int, 0, 200]
     ) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.nothing_playing"), ephemeral=True
+            )
             return
         await player.set_volume(value / 100)
-        await interaction.response.send_message(f"🔊 Громкость: {value}%.", ephemeral=True)
+        await interaction.response.send_message(
+            self._p(gid, "music.volume_set", value=value), ephemeral=True
+        )
 
     @app_commands.command(name="nowplaying", description="Что сейчас играет")
     @app_commands.guild_only()
     async def nowplaying(self, interaction: discord.Interaction) -> None:
         player = self.service.get_player(interaction.guild_id)
         if player is None or player.current is None:
-            await interaction.response.send_message("Тишина. Наслаждайся.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "music.nowplaying_silence"), ephemeral=True
+            )
             return
         await interaction.response.send_message(
             embed=self.service.build_embed(player), ephemeral=True
@@ -385,11 +438,14 @@ class MusicCog(commands.Cog):
     @app_commands.command(name="leave", description="Выйти из голосового канала")
     @app_commands.guild_only()
     async def leave(self, interaction: discord.Interaction) -> None:
-        if self.service.get_session(interaction.guild_id) is None:
-            await interaction.response.send_message("Меня и так нет в войсе.", ephemeral=True)
+        gid = interaction.guild_id
+        if self.service.get_session(gid) is None:
+            await interaction.response.send_message(
+                self._p(gid, "music.not_in_voice"), ephemeral=True
+            )
             return
-        await interaction.response.send_message("👋 Ушла.", ephemeral=True)
-        await self.service.cleanup(interaction.guild_id, "👋 Вышла по команде /leave.")
+        await interaction.response.send_message(self._p(gid, "music.left"), ephemeral=True)
+        await self.service.cleanup(gid, self._p(gid, "music.cleanup_leave"))
 
     # --- текст трека ---
 
@@ -397,29 +453,31 @@ class MusicCog(commands.Cog):
     @app_commands.describe(live="Караоке-режим: текст абзацами синхронно с треком")
     @app_commands.guild_only()
     async def lyrics_command(self, interaction: discord.Interaction, live: bool = False) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.nothing_playing"), ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True)
         track = player.current
         synced, plain = await self.lyrics.get(track)  # обычно уже в кэше
 
         if live:
-            if await self.lyrics.start_karaoke(
-                interaction.channel, interaction.guild_id, track, synced
-            ):
-                await interaction.followup.send("🎤 Караоке включено.", ephemeral=True)
+            if await self.lyrics.start_karaoke(interaction.channel, gid, track, synced):
+                await interaction.followup.send(
+                    self._p(gid, "music.karaoke_on"), ephemeral=True
+                )
             else:
                 await interaction.followup.send(
-                    "Синхронного текста для этого трека нет — попробуй `/lyrics` без live.",
-                    ephemeral=True,
+                    self._p(gid, "music.karaoke_no_synced"), ephemeral=True
                 )
             return
 
         if not plain:
             await interaction.followup.send(
-                "Текста не нашла. Или его нет, или назван криво.", ephemeral=True
+                self._p(gid, "music.lyrics_not_found"), ephemeral=True
             )
             return
         await interaction.followup.send(embed=self.lyrics.plain_embed(track, plain), ephemeral=True)
@@ -430,29 +488,30 @@ class MusicCog(commands.Cog):
     @app_commands.describe(file="Файл .lrc с таймкодами [mm:ss.xx]")
     @app_commands.guild_only()
     async def lyrics_file(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.nothing_playing"), ephemeral=True
+            )
             return
         if not file.filename.lower().endswith(".lrc") or file.size > 200_000:
-            await interaction.response.send_message("Нужен файл .lrc (до 200 КБ).", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.lrc_bad_file"), ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True)
         try:
             raw = (await file.read()).decode("utf-8", errors="replace")
         except discord.HTTPException:
-            await interaction.followup.send("Не смогла скачать файл.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "music.lrc_download_failed"), ephemeral=True)
             return
         if not self.lyrics.set_synced_lrc(player.current.video_id, raw):
             await interaction.followup.send(
-                "В файле нет строк с таймкодами `[mm:ss.xx]` — это не похоже на .lrc.",
-                ephemeral=True,
+                self._p(gid, "music.lrc_no_timecodes"), ephemeral=True
             )
             return
-        await interaction.followup.send(
-            "📄 Приняла твой текст. Жми 📜 в плеере или `/lyrics live` — караоке по нему.",
-            ephemeral=True,
-        )
+        await interaction.followup.send(self._p(gid, "music.lrc_accepted"), ephemeral=True)
 
     # --- плейлисты сервера ---
 
@@ -464,15 +523,18 @@ class MusicCog(commands.Cog):
     @app_commands.describe(name="Название плейлиста")
     async def playlist_save(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         tracks = player.all_tracks() if player else []
         error = await self.container.save_playlist.execute(
-            interaction.guild_id, name, interaction.user.id, tracks
+            gid, name, interaction.user.id, tracks
         )
         replies = {
-            "": f"💾 Сохранила «{name.strip()[:50]}» — {len(tracks)} треков.",
-            "empty": "Сохранять нечего — очередь пуста.",
-            "limit": f"Лимит плейлистов на сервере ({self.settings.music_playlist_max_per_guild}) исчерпан.",
+            "": self._p(gid, "music.playlist_saved", name=name.strip()[:50], count=len(tracks)),
+            "empty": self._p(gid, "music.playlist_save_empty"),
+            "limit": self._p(
+                gid, "music.playlist_limit", limit=self.settings.music_playlist_max_per_guild
+            ),
         }
         await interaction.followup.send(replies[error], ephemeral=True)
 
@@ -480,29 +542,31 @@ class MusicCog(commands.Cog):
     @app_commands.describe(name="Название плейлиста")
     async def playlist_play(self, interaction: discord.Interaction, name: str) -> None:
         member = interaction.user
+        gid = interaction.guild_id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                "Сначала зайди в голосовой канал.", ephemeral=True
+                self._p(gid, "music.join_voice_first"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
-        tracks = await self.container.load_playlist.execute(interaction.guild_id, name, member.id)
+        tracks = await self.container.load_playlist.execute(gid, name, member.id)
         if tracks is None:
-            await interaction.followup.send("Такого плейлиста нет.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "music.playlist_not_found"), ephemeral=True)
             return
         if await self.service.enqueue_tracks(interaction, tracks):
             await interaction.followup.send(
-                f"▶️ Плейлист «{name.strip()}»: {len(tracks)} треков в очереди.",
+                self._p(gid, "music.playlist_played", name=name.strip(), count=len(tracks)),
                 ephemeral=True,
             )
 
     @playlist_group.command(name="list", description="Список плейлистов сервера")
     async def playlist_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        items = await self.container.list_playlists.execute(interaction.guild_id)
+        gid = interaction.guild_id
+        items = await self.container.list_playlists.execute(gid)
         if not items:
             await interaction.followup.send(
-                "Плейлистов пока нет — `/playlist save`.", ephemeral=True
+                self._p(gid, "music.playlist_list_empty"), ephemeral=True
             )
             return
         lines = [
@@ -510,7 +574,7 @@ class MusicCog(commands.Cog):
             for i, (name, count, creator) in enumerate(items, 1)
         ]
         embed = discord.Embed(
-            title=f"💾 Плейлисты ({len(items)})",
+            title=self._p(gid, "music.playlist_list_title", count=len(items)),
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
@@ -520,59 +584,60 @@ class MusicCog(commands.Cog):
     @app_commands.describe(name="Название плейлиста")
     async def playlist_delete(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         result = await self.container.delete_playlist.execute(
-            interaction.guild_id,
+            gid,
             name,
             interaction.user.id,
             interaction.user.guild_permissions.administrator,
         )
         replies = {
-            "ok": f"🗑️ «{name.strip()}» удалён.",
-            "not_found": "Такого плейлиста нет.",
-            "forbidden": "Удалять может только автор плейлиста или администратор.",
+            "ok": self._p(gid, "music.playlist_deleted", name=name.strip()),
+            "not_found": self._p(gid, "music.playlist_not_found"),
+            "forbidden": self._p(gid, "music.playlist_delete_forbidden"),
         }
         await interaction.followup.send(replies[result], ephemeral=True)
 
     # --- совместимость вкусов ---
 
-    _TASTE_LINES = (
-        (75, "Подозрительно. Один из вас явно списывал. ✂️👁🖤"),
-        (50, "Серьёзно? Вам пора вести совместный плейлист."),
-        (25, "Неплохо. Есть о чём поговорить за виски."),
-        (1, "Слабое пересечение. Но хоть что-то."),
-        (0, "Ноль общих треков. Вы вообще на одном сервере сидите?"),
-    )
+    # порог совместимости -> ключ вердикта в music.taste_lines (dict)
+    _TASTE_TIERS = ((75, "suspicious"), (50, "high"), (25, "mid"), (1, "low"), (0, "none"))
 
     @app_commands.command(name="taste", description="Совместимость музыкальных вкусов — по лайкам")
     @app_commands.describe(user="С кем сравнить вкусы")
     @app_commands.guild_only()
     async def taste(self, interaction: discord.Interaction, user: discord.Member) -> None:
+        gid = interaction.guild_id
         if user.bot:
             await interaction.response.send_message(
-                "У ботов нет вкуса. Проверено на себе. Хотя у меня — есть.",
-                ephemeral=True,
+                self._p(gid, "music.taste_bot"), ephemeral=True
             )
             return
         if user.id == interaction.user.id:
             await interaction.response.send_message(
-                "Сравнивать себя с собой? 100%. Поздравляю, нарцисс.", ephemeral=True
+                self._p(gid, "music.taste_self"), ephemeral=True
             )
             return
         await interaction.response.defer()
         mine = await self.container.list_liked.execute(interaction.user.id)
         theirs = await self.container.list_liked.execute(user.id)
         if not mine or not theirs:
-            whose = "у тебя" if not mine else f"у {user.display_name}"
+            whose = (
+                self._p(gid, "music.taste_whose_you")
+                if not mine
+                else self._p(gid, "music.taste_whose_other", name=user.display_name)
+            )
             await interaction.followup.send(
-                f"Сравнивать нечего — {whose} пока нет лайков. ❤️ на плеере в помощь.",
-                ephemeral=True,
+                self._p(gid, "music.taste_no_likes", whose=whose), ephemeral=True
             )
             return
         my_ids = {t.video_id: t for t in mine}
         common = [t for t in theirs if t.video_id in my_ids]
         # процент от меньшей коллекции: честно к тем, у кого лайков мало
         percent = round(100 * len(common) / min(len(mine), len(theirs)))
-        line = next(text for bound, text in self._TASTE_LINES if percent >= bound)
+        tier = next(key for bound, key in self._TASTE_TIERS if percent >= bound)
+        verdicts = self.persona.phrase(gid, "music.taste_lines")
+        line = verdicts.get(tier, "") if isinstance(verdicts, dict) else ""
         parts = [
             f"{interaction.user.mention} × {user.mention}",
             f"# {percent}%",
@@ -580,16 +645,24 @@ class MusicCog(commands.Cog):
         ]
         if common:
             parts.append("")
-            parts.append("**Общие треки:**")
+            parts.append(self._p(gid, "music.taste_common_header"))
             parts.extend(f"🎵 {trim(t.title, 70)}" for t in common[:5])
             if len(common) > 5:
-                parts.append(f"…и ещё {len(common) - 5}")
+                parts.append(self._p(gid, "music.taste_common_more", count=len(common) - 5))
         embed = discord.Embed(
-            title="🎧 Совместимость вкусов",
+            title=self._p(gid, "music.taste_title"),
             description="\n".join(parts)[:4000],
             color=EMBED_COLOR,
         )
-        embed.set_footer(text=f"Лайков: {len(mine)} у тебя · {len(theirs)} у {user.display_name}")
+        embed.set_footer(
+            text=self._p(
+                gid,
+                "music.taste_footer",
+                mine=len(mine),
+                theirs=len(theirs),
+                other=user.display_name,
+            )
+        )
         await interaction.followup.send(
             embed=embed, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -605,12 +678,12 @@ class MusicCog(commands.Cog):
         guild_id = interaction.guild_id
         enabled = self.radio.toggle(guild_id)
         if not enabled:
-            await interaction.response.send_message("📻 Радио выключено.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(guild_id, "music.radio_off"), ephemeral=True
+            )
             return
         await interaction.response.send_message(
-            "📻 Радио включено: пустая очередь — не повод для тишины. "
-            "Беру треки из лайков тех, кто в войсе, или из плейлистов сервера.",
-            ephemeral=True,
+            self._p(guild_id, "music.radio_on"), ephemeral=True
         )
         # если прямо сейчас тишина — начинаем не дожидаясь следующего idle
         player = self.service.get_player(guild_id)
@@ -618,29 +691,31 @@ class MusicCog(commands.Cog):
             self.service.cancel_idle(guild_id)
             if not await self.radio.fill(guild_id):
                 await interaction.followup.send(
-                    "Пока нечего играть: ни лайков у слушателей, ни плейлистов.",
-                    ephemeral=True,
+                    self._p(guild_id, "music.radio_nothing"), ephemeral=True
                 )
 
     # --- лайки ---
 
     async def toggle_like_current(self, interaction: discord.Interaction) -> None:
         """Кнопка ❤️: личный лайк текущего трека (у каждого свой список)."""
-        player = self.service.get_player(interaction.guild_id)
+        gid = interaction.guild_id
+        player = self.service.get_player(gid)
         if player is None or player.current is None:
-            await interaction.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.nothing_playing"), ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True)
         track = player.current
         status = await self.container.toggle_like.execute(
             interaction.user.id, track, datetime.now(UTC)
         )
+        title = trim(track.title, 100)
         replies = {
-            "liked": f"❤️ В твоих лайках: **{trim(track.title, 100)}** — `/liked`",
-            "unliked": f"💔 Убрала из лайков: **{trim(track.title, 100)}**",
-            "limit": (
-                f"Лимит лайков ({self.settings.music_liked_max_per_user}) исчерпан — "
-                "почисти список через `/liked remove`."
+            "liked": self._p(gid, "music.like_liked", title=title),
+            "unliked": self._p(gid, "music.like_unliked", title=title),
+            "limit": self._p(
+                gid, "music.like_limit", limit=self.settings.music_liked_max_per_user
             ),
         }
         await interaction.followup.send(replies[status], ephemeral=True)
@@ -668,17 +743,20 @@ class MusicCog(commands.Cog):
     async def liked_list(
         self, interaction: discord.Interaction, user: discord.Member | None = None
     ) -> None:
+        gid = interaction.guild_id
         target = user or interaction.user
         if target.bot:
-            await interaction.response.send_message("У ботов нет лайков. И вкуса.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "music.liked_list_bot"), ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True)
         liked = await self.container.list_liked.execute(target.id)
         if not liked:
             text = (
-                "Пусто. Жми ❤️ на плеере, когда играет что-то стоящее."
+                self._p(gid, "music.liked_list_empty_self")
                 if target.id == interaction.user.id
-                else f"У {target.display_name} пока нет лайков."
+                else self._p(gid, "music.liked_list_empty_other", name=target.display_name)
             )
             await interaction.followup.send(text, ephemeral=True)
             return
@@ -694,9 +772,10 @@ class MusicCog(commands.Cog):
     @app_commands.autocomplete(track=_liked_autocomplete)
     async def liked_play(self, interaction: discord.Interaction, track: str) -> None:
         member = interaction.user
+        gid = interaction.guild_id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                "Сначала зайди в голосовой канал.", ephemeral=True
+                self._p(gid, "music.join_voice_first"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
@@ -706,36 +785,35 @@ class MusicCog(commands.Cog):
         )
         if resolved is None:
             await interaction.followup.send(
-                "Не смогла оживить этот трек: видео умерло, а поиск замены не дал. "
-                "Убери его через `/liked remove`.",
-                ephemeral=True,
+                self._p(gid, "music.liked_play_dead"), ephemeral=True
             )
             return
         if await self.service.enqueue_tracks(interaction, [resolved]):
             await interaction.followup.send(
-                f"Добавила из лайков: **{trim(resolved.title, 100)}**", ephemeral=True
+                self._p(gid, "music.liked_play_added", title=trim(resolved.title, 100)),
+                ephemeral=True,
             )
 
     @liked_group.command(name="all", description="Добавить все лайкнутые треки в очередь")
     async def liked_all(self, interaction: discord.Interaction) -> None:
         member = interaction.user
+        gid = interaction.guild_id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                "Сначала зайди в голосовой канал.", ephemeral=True
+                self._p(gid, "music.join_voice_first"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
         liked = await self.container.list_liked.execute(member.id)
         if not liked:
-            await interaction.followup.send("Лайков пока нет.", ephemeral=True)
+            await interaction.followup.send(self._p(gid, "music.liked_all_empty"), ephemeral=True)
             return
         limit = self.settings.music_playlist_limit
         tracks = [t.to_track(member.id) for t in liked[:limit]]
         if await self.service.enqueue_tracks(interaction, tracks):
-            note = f" (первые {limit})" if len(liked) > limit else ""
+            note = self._p(gid, "music.liked_all_note", limit=limit) if len(liked) > limit else ""
             await interaction.followup.send(
-                f"▶️ Все лайки в очереди: **{len(tracks)}** треков{note}. "
-                "Умершие видео пропущу сама.",
+                self._p(gid, "music.liked_all_queued", count=len(tracks), note=note),
                 ephemeral=True,
             )
 
@@ -744,9 +822,10 @@ class MusicCog(commands.Cog):
     @app_commands.autocomplete(track=_liked_autocomplete)
     async def liked_remove(self, interaction: discord.Interaction, track: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         removed = await self.container.remove_liked.execute(interaction.user.id, track)
         await interaction.followup.send(
-            "💔 Убрала." if removed else "Такого трека в твоих лайках нет.",
+            self._p(gid, "music.liked_remove_done" if removed else "music.liked_remove_none"),
             ephemeral=True,
         )
 
@@ -754,14 +833,17 @@ class MusicCog(commands.Cog):
     @app_commands.describe(name="Название плейлиста")
     async def liked_save(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         liked = await self.container.list_liked.execute(interaction.user.id)
         tracks = [t.to_track(interaction.user.id) for t in liked]
         error = await self.container.save_playlist.execute(
-            interaction.guild_id, name, interaction.user.id, tracks
+            gid, name, interaction.user.id, tracks
         )
         replies = {
-            "": f"💾 Плейлист «{name.strip()[:50]}» из твоих лайков — {len(tracks)} треков.",
-            "empty": "Лайков пока нет — сохранять нечего.",
-            "limit": f"Лимит плейлистов на сервере ({self.settings.music_playlist_max_per_guild}) исчерпан.",
+            "": self._p(gid, "music.liked_saved", name=name.strip()[:50], count=len(tracks)),
+            "empty": self._p(gid, "music.liked_save_empty"),
+            "limit": self._p(
+                gid, "music.playlist_limit", limit=self.settings.music_playlist_max_per_guild
+            ),
         }
         await interaction.followup.send(replies[error], ephemeral=True)
