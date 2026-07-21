@@ -85,6 +85,42 @@ export function IconShield() {
   );
 }
 
+/** Стрелка вниз в лоток: экспорт/скачать. */
+export function IconDownload() {
+  return (
+    <svg {...I}>
+      <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 18h14" />
+    </svg>
+  );
+}
+
+/** Стрелка вверх из лотка: импорт/загрузить. */
+export function IconUpload() {
+  return (
+    <svg {...I}>
+      <path d="M12 20V10m0 0l-4 4m4-4l4 4M5 6h14" />
+    </svg>
+  );
+}
+
+/** Искорки: шаблоны/пресеты. */
+export function IconSparkle() {
+  return (
+    <svg {...I}>
+      <path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3zM18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" />
+    </svg>
+  );
+}
+
+/** Человек с плюсом: автовыдача роли при входе. */
+export function IconUserPlus() {
+  return (
+    <svg {...I}>
+      <path d="M13 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM18 8v6M15 11h6" />
+    </svg>
+  );
+}
+
 /** Ручка перетаскивания (grip): шесть точек. */
 export function IconGrip() {
   return (

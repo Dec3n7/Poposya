@@ -69,6 +69,10 @@ class GuildSettings(BaseModel):
         min_length=2,
         max_length=21,
     )
+    # автовыдача ролей при входе (id ролей; пусто = выкл). Список — редактируется
+    # на вкладке «Роли», не в /config. Валидность ролей (ниже бота, не managed)
+    # проверяет API при записи и бот при выдаче — модель их знать не может.
+    autorole_ids: list[int] = Field(default=[], max_length=20)
     secret_room_min_level: int = Field(5, ge=1, le=7)
     secret_room_hours: int = Field(12, ge=1, le=168)
     survey_bonus_points: int = Field(5, ge=0, le=500)

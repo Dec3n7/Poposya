@@ -7,7 +7,7 @@
 (`command_executor`), панели на слово не верим.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from src.api.audit import record_audit
@@ -50,6 +50,16 @@ class PermissionsBody(BaseModel):
 
 class BulkBody(BaseModel):
     op: str  # "assign" | "unassign"
+
+
+class ImportBody(BaseModel):
+    # набор ролей из экспорта/шаблона. Права намеренно не переносим — бот создаёт
+    # роли без прав (безопасно), совпадения по имени пропускает.
+    roles: list[CreateRoleBody]
+
+
+class AutoRoleBody(BaseModel):
+    role_ids: list[str]  # id ролей, выдаваемых новичку при входе; [] = выключить
 
 
 def _editable(role: GuildRole, guild_id: int, bot_top: int | None) -> bool:
@@ -119,6 +129,80 @@ async def permissions_catalog(
     }
 
 
+@router.post("/import")
+async def import_roles(
+    body: ImportBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Создать недостающие роли из набора (шаблон/экспорт). Права не переносятся;
+    роли с совпадающим именем бот пропускает. Кап и создание — на стороне бота."""
+    payload = {
+        "roles": [
+            {"name": r.name, "color": r.color, "hoist": r.hoist, "mentionable": r.mentionable}
+            for r in body.roles
+        ]
+    }
+    cmd = await run_command(container, guild_id, "role.import", payload, session.user_id)
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "role.import",
+        details={"count": len(body.roles)},
+        result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.get("/autorole")
+async def get_autorole(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """id ролей, автоматически выдаваемых новичку при входе (пусто = выключено).
+    Отдаём строками — snowflake не влезает в JS-number."""
+    ids = container.guild_settings.get(guild_id, "autorole_ids", [])
+    return {"role_ids": [str(i) for i in ids]}
+
+
+@router.put("/autorole")
+async def set_autorole(
+    body: AutoRoleBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Задать автороли при входе. Принимаем только роли, доступные боту (ниже его
+    высшей, не managed/@everyone) — бот на входе всё равно перепроверит, но так
+    панель не сохранит заведомо бесполезный id."""
+    roles, meta, _counts = await container.list_roles.execute(guild_id)
+    bot_top = meta.bot_top_position if meta is not None else None
+    editable_ids = {r.role_id for r in roles if _editable(r, guild_id, bot_top)}
+    try:
+        requested = [int(rid) for rid in body.role_ids]
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Некорректный id роли.") from None
+    invalid = [rid for rid in requested if rid not in editable_ids]
+    if invalid:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Некоторые роли недоступны боту (выше его роли, managed или @everyone).",
+        )
+    # dedup с сохранением порядка
+    ordered = list(dict.fromkeys(requested))
+    await container.guild_settings.set_many(guild_id, {"autorole_ids": ordered})
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "role.autorole",
+        details={"count": len(ordered)},
+    )
+    return {"role_ids": [str(i) for i in ordered]}
+
+
 @router.post("")
 async def create_role(
     body: CreateRoleBody,
@@ -134,8 +218,12 @@ async def create_role(
     }
     cmd = await run_command(container, guild_id, "role.create", payload, session.user_id)
     await record_audit(
-        container, guild_id, session.user_id, "role.create",
-        details={"name": body.name}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.create",
+        details={"name": body.name},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -151,8 +239,12 @@ async def reorder_roles(
         container, guild_id, "role.reorder", {"order": body.order}, session.user_id
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.reorder",
-        details={"count": len(body.order)}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.reorder",
+        details={"count": len(body.order)},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -169,8 +261,13 @@ async def edit_role(
     payload.update(body.model_dump(exclude_unset=True))  # только реально присланные поля
     cmd = await run_command(container, guild_id, "role.edit", payload, session.user_id)
     await record_audit(
-        container, guild_id, session.user_id, "role.edit",
-        target=role_id, details=body.model_dump(exclude_unset=True), result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.edit",
+        target=role_id,
+        details=body.model_dump(exclude_unset=True),
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -186,8 +283,12 @@ async def delete_role(
         container, guild_id, "role.delete", {"role_id": str(role_id)}, session.user_id
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.delete",
-        target=role_id, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.delete",
+        target=role_id,
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -203,12 +304,20 @@ async def set_permissions(
     # ограждения (Administrator, недоступные боту права) применяет бот —
     # тут только доставляем желаемое битовое поле через мост
     cmd = await run_command(
-        container, guild_id, "role.permissions",
-        {"role_id": str(role_id), "permissions": body.permissions}, session.user_id,
+        container,
+        guild_id,
+        "role.permissions",
+        {"role_id": str(role_id), "permissions": body.permissions},
+        session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.permissions",
-        target=role_id, details={"permissions": body.permissions}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.permissions",
+        target=role_id,
+        details={"permissions": body.permissions},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -228,8 +337,13 @@ async def bulk_role(
         container, guild_id, "role.bulk", {"role_id": str(role_id), "op": body.op}, session.user_id
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.bulk",
-        target=role_id, details={"op": body.op}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.bulk",
+        target=role_id,
+        details={"op": body.op},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -247,9 +361,7 @@ async def member_roles(
     bot_top = meta.bot_top_position if meta is not None else None
     held_ids = set(await container.member_roles.execute(guild_id, user_id))
     by_id = {r.role_id: r for r in roles}
-    held = [
-        _role_json(by_id[rid], guild_id, bot_top, None) for rid in held_ids if rid in by_id
-    ]
+    held = [_role_json(by_id[rid], guild_id, bot_top, None) for rid in held_ids if rid in by_id]
     held.sort(key=lambda r: r["position"], reverse=True)
     assignable = [
         _role_json(r, guild_id, bot_top, None)
@@ -275,8 +387,13 @@ async def assign_role(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.assign",
-        target=user_id, details={"role_id": body.role_id}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.assign",
+        target=user_id,
+        details={"role_id": body.role_id},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -297,7 +414,12 @@ async def unassign_role(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "role.unassign",
-        target=user_id, details={"role_id": str(role_id)}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "role.unassign",
+        target=user_id,
+        details={"role_id": str(role_id)},
+        result=cmd.get("status"),
     )
     return cmd

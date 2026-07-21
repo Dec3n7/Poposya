@@ -105,6 +105,7 @@ class PoposyaBot(commands.Bot):
                 gs,
             )
         )
+        from src.infrastructure.discord.cogs.autorole import AutoRoleCog
         from src.infrastructure.discord.cogs.config import ConfigCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
@@ -115,6 +116,7 @@ class PoposyaBot(commands.Bot):
 
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
+        await self.add_cog(AutoRoleCog(self, gs))
         await self.add_cog(ConfigCog(self, self.container.guild_settings))
         await self.add_cog(StayKickCog(self, self.container.staykick, self.container.settings, gs))
         await self.add_cog(

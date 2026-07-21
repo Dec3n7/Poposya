@@ -2339,6 +2339,155 @@ a {
   border-top: 1px solid var(--border-soft);
 }
 
+/* пресеты цвета «Попоси» в редакторе роли */
+.role-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.role-preset {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.role-preset:hover {
+  transform: scale(1.15);
+}
+.role-preset.active {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--panel),
+    0 0 0 4px var(--accent-hover);
+}
+.role-preset:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+/* панель инструментов ролей: экспорт/импорт/шаблоны/автороли */
+.role-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+.btn.ghost.active {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+}
+
+/* раскрывающаяся панель (шаблоны/импорт/автороли) */
+.role-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-ring);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.role-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.role-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.role-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* сетка встроенных шаблонов */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-2);
+}
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+}
+.template-name {
+  font-weight: 600;
+}
+.template-desc {
+  flex: 1;
+}
+.template-roles,
+.import-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.template-role-chip {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+}
+.import-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  color: var(--fg-dim);
+}
+
+/* автороли при входе: список-переключатели */
+.autorole-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px;
+}
+.autorole-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
+}
+.autorole-item:hover {
+  border-color: var(--accent-ring);
+}
+.autorole-item.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.autorole-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* редактор прав роли */
 .perms-editor {
   display: flex;

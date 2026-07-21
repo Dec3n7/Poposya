@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "../api";
 import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
+  IconDownload,
   IconGrip,
   IconPencil,
   IconPlus,
   IconShield,
+  IconSparkle,
   IconTrash,
+  IconUpload,
+  IconUserPlus,
 } from "../icons";
 import { discordColor } from "../roles";
+import { POPOSYA_COLORS, ROLE_TEMPLATES, type RoleTemplate } from "../roleTemplates";
 import type { CommandResult, Guild, GuildRole, RoleInput, RolesView } from "../types";
 import { RolePermsEditor } from "./RolePerms";
 
@@ -163,6 +168,23 @@ function RoleEditor({
         </button>
       </div>
 
+      <div className="role-presets" role="group" aria-label="Цвета Попоси">
+        {POPOSYA_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            className={`role-preset${colorOn && hex.toLowerCase() === c.toLowerCase() ? " active" : ""}`}
+            style={{ background: c }}
+            title={c}
+            aria-label={`Цвет ${c}`}
+            onClick={() => {
+              setHex(c);
+              setColorOn(true);
+            }}
+          />
+        ))}
+      </div>
+
       <div className="role-editor-row toggles">
         <span className="role-toggle">
           <button
@@ -278,6 +300,173 @@ function RoleEditor({
   );
 }
 
+// Карточка встроенного шаблона с превью ролей и inline-подтверждением применения.
+function TemplateCard({
+  template,
+  busy,
+  onApply,
+}: {
+  template: RoleTemplate;
+  busy: boolean;
+  onApply: () => void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="template-card">
+      <div className="template-name">{template.name}</div>
+      <div className="muted small template-desc">{template.description}</div>
+      <div className="template-roles">
+        {template.roles.map((r, i) => {
+          const color = r.color ? toHex(r.color) : null;
+          return (
+            <span
+              key={i}
+              className="template-role-chip"
+              style={color ? { color, borderColor: color } : undefined}
+            >
+              {r.name}
+            </span>
+          );
+        })}
+      </div>
+      {confirm ? (
+        <div className="role-panel-actions">
+          <span className="faint small">Создать {template.roles.length} ролей?</span>
+          <button
+            className="btn primary small"
+            onClick={() => {
+              onApply();
+              setConfirm(false);
+            }}
+            disabled={busy}
+          >
+            Да
+          </button>
+          <button className="btn ghost small" onClick={() => setConfirm(false)} disabled={busy}>
+            Нет
+          </button>
+        </div>
+      ) : (
+        <button className="btn ghost small" onClick={() => setConfirm(true)} disabled={busy}>
+          <IconPlus /> Применить
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Автовыдача ролей новичку при входе. Самодостаточна: грузит текущий набор,
+// показывает доступные боту роли переключателями, сохраняет одной кнопкой.
+function AutoRoleSection({ guild, roles }: { guild: Guild; roles: GuildRole[] }) {
+  const editable = roles.filter((r) => r.editable);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .autorole(guild.id)
+      .then((v) => {
+        if (!alive) return;
+        setSelected(new Set(v.role_ids));
+        setSaved(new Set(v.role_ids));
+      })
+      .catch(() => {
+        /* нет доступа/пусто — оставляем пустой набор */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [guild.id]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const dirty =
+    selected.size !== saved.size || [...selected].some((id) => !saved.has(id));
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      // сохраняем в порядке списка сверху вниз; неактуальные (уехали выше бота) отсеются
+      const ordered = editable.filter((r) => selected.has(r.id)).map((r) => r.id);
+      const res = await api.setAutorole(guild.id, ordered);
+      setSelected(new Set(res.role_ids));
+      setSaved(new Set(res.role_ids));
+      setMsg(ordered.length ? "Сохранено." : "Автовыдача выключена.");
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="role-panel">
+      <div className="role-panel-head">
+        <div>
+          <div className="role-panel-title">
+            <IconUserPlus /> Автороли при входе
+          </div>
+          <p className="muted small" style={{ margin: "4px 0 0" }}>
+            Выбранные роли автоматически выдаются каждому новому участнику. Ботам не выдаём.
+            Доступны только роли ниже линии Попоси.
+          </p>
+        </div>
+        {msg && <span className="faint small">{msg}</span>}
+      </div>
+      {editable.length === 0 ? (
+        <div className="muted small">Нет ролей, доступных боту для выдачи.</div>
+      ) : (
+        <div className="autorole-list">
+          {editable.map((r) => {
+            const color = discordColor(r.color);
+            const on = selected.has(r.id);
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className={`autorole-item${on ? " on" : ""}`}
+                role="switch"
+                aria-checked={on}
+                onClick={() => toggle(r.id)}
+                disabled={busy}
+              >
+                <span
+                  className={`role-swatch${color ? "" : " empty"}`}
+                  style={color ? { background: color } : undefined}
+                  aria-hidden="true"
+                />
+                <span className="autorole-name" style={color ? { color } : undefined}>
+                  {r.name}
+                </span>
+                <span className={`toggle${on ? " on" : ""}`} aria-hidden="true">
+                  <span className="knob" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="role-panel-actions">
+        <button className="btn primary small" onClick={save} disabled={busy || !dirty}>
+          <IconCheck /> Сохранить
+        </button>
+        {dirty && <span className="faint small">Есть несохранённые изменения.</span>}
+      </div>
+    </div>
+  );
+}
+
 export function Roles({ guild }: { guild: Guild }) {
   const [view, setView] = useState<RolesView | null>(null);
   const [roles, setRoles] = useState<GuildRole[]>([]);
@@ -291,6 +480,11 @@ export function Roles({ guild }: { guild: Guild }) {
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  // панель инструментов: шаблоны / подтверждение импорта / автороли
+  const [tool, setTool] = useState<"templates" | "import" | "autorole" | null>(null);
+  const [importData, setImportData] = useState<RoleInput[] | null>(null);
+  const [importError, setImportError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     setView(null);
@@ -300,6 +494,9 @@ export function Roles({ guild }: { guild: Guild }) {
     setEditingId(null);
     setPermsId(null);
     setCreating(false);
+    setTool(null);
+    setImportData(null);
+    setImportError("");
     api
       .roles(guild.id)
       .then((v) => {
@@ -463,6 +660,83 @@ export function Roles({ guild }: { guild: Guild }) {
     }
   }
 
+  // --- экспорт / импорт / шаблоны ---
+
+  function doExport() {
+    const data = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      guild: guild.name,
+      roles: roles
+        .filter((r) => r.editable)
+        .map((r) => ({
+          name: r.name,
+          color: r.color || null,
+          hoist: r.hoist,
+          mentionable: r.mentionable,
+        })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roles-${guild.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg(`Экспортировано ролей: ${data.roles.length}.`);
+  }
+
+  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // сброс, чтобы повторный выбор того же файла сработал
+    if (!file) return;
+    setTool("import");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        const arr = Array.isArray(parsed) ? parsed : parsed?.roles;
+        if (!Array.isArray(arr)) throw new Error("нет массива ролей");
+        const clean: RoleInput[] = arr
+          .filter((r) => r && typeof r.name === "string" && r.name.trim())
+          .map((r) => ({
+            name: String(r.name).trim().slice(0, 100),
+            color: typeof r.color === "number" && r.color > 0 ? r.color : null,
+            hoist: !!r.hoist,
+            mentionable: !!r.mentionable,
+          }));
+        if (!clean.length) {
+          setImportError("В файле нет подходящих ролей.");
+          setImportData(null);
+          return;
+        }
+        setImportError("");
+        setImportData(clean);
+      } catch {
+        setImportError("Не удалось разобрать файл — нужен JSON от экспорта ролей.");
+        setImportData(null);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function applyRoles(toAdd: RoleInput[]) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const ok = report(await api.importRoles(guild.id, toAdd));
+      if (ok) {
+        setTool(null);
+        setImportData(null);
+        window.setTimeout(refresh, 1200); // дать зеркалу догнать создание
+      }
+    } catch (e) {
+      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (err) return <div className="error-banner">{err}</div>;
   if (!view)
     return (
@@ -502,6 +776,120 @@ export function Roles({ guild }: { guild: Guild }) {
         настроить права (щит). Перетаскивай за ручку или жми стрелки — порядок применится по
         кнопке. Administrator панель не выдаёт, опасные права просят подтверждения.
       </p>
+
+      <div className="role-tools">
+        <button className="btn ghost small" onClick={doExport} disabled={busy}>
+          <IconDownload /> Экспорт
+        </button>
+        <button
+          className="btn ghost small"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy || orderDirty}
+        >
+          <IconUpload /> Импорт
+        </button>
+        <button
+          className={`btn ghost small${tool === "templates" ? " active" : ""}`}
+          onClick={() => setTool((t) => (t === "templates" ? null : "templates"))}
+          disabled={busy || orderDirty}
+        >
+          <IconSparkle /> Шаблоны
+        </button>
+        <button
+          className={`btn ghost small${tool === "autorole" ? " active" : ""}`}
+          onClick={() => setTool((t) => (t === "autorole" ? null : "autorole"))}
+          disabled={busy}
+        >
+          <IconUserPlus /> Автороли
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={onImportFile}
+        />
+      </div>
+
+      {tool === "templates" && (
+        <div className="role-panel">
+          <div className="role-panel-title">
+            <IconSparkle /> Готовые наборы ролей
+          </div>
+          <p className="muted small" style={{ margin: "4px 0 8px" }}>
+            Создаёт недостающие роли (совпадающие по имени пропускаются). Права не переносятся —
+            задай их щитом после.
+          </p>
+          <div className="template-grid">
+            {ROLE_TEMPLATES.map((t) => (
+              <TemplateCard
+                key={t.key}
+                template={t}
+                busy={busy}
+                onApply={() => applyRoles(t.roles)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tool === "import" && (
+        <div className="role-panel">
+          <div className="role-panel-title">
+            <IconUpload /> Импорт ролей из файла
+          </div>
+          {importError ? (
+            <div className="muted small" style={{ color: "var(--danger)" }}>
+              {importError}
+            </div>
+          ) : importData ? (
+            <>
+              <p className="muted small" style={{ margin: "4px 0 8px" }}>
+                В файле {importData.length} ролей. Создадутся недостающие по имени, права не
+                переносятся.
+              </p>
+              <div className="import-preview">
+                {importData.map((r, i) => {
+                  const color = r.color ? toHex(r.color) : null;
+                  return (
+                    <span key={i} className="import-chip">
+                      <span
+                        className={`role-swatch${color ? "" : " empty"}`}
+                        style={color ? { background: color } : undefined}
+                        aria-hidden="true"
+                      />
+                      {r.name}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="role-panel-actions">
+                <button
+                  className="btn primary small"
+                  onClick={() => applyRoles(importData)}
+                  disabled={busy}
+                >
+                  <IconCheck /> Создать {importData.length}
+                </button>
+                <button
+                  className="btn ghost small"
+                  onClick={() => {
+                    setTool(null);
+                    setImportData(null);
+                  }}
+                  disabled={busy}
+                >
+                  Отмена
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="muted small">Читаю файл…</div>
+          )}
+        </div>
+      )}
+
+      {tool === "autorole" && <AutoRoleSection guild={guild} roles={roles} />}
 
       {creating && (
         <RoleEditor

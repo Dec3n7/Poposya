@@ -121,9 +121,7 @@ class DiscordCommandExecutor:
         try:
             await member.timeout(timedelta(minutes=minutes), reason=f"{reason} (панель)")
         except discord.Forbidden as exc:
-            raise CommandError(
-                "Нет права Timeout Members (или роль участника выше моей)."
-            ) from exc
+            raise CommandError("Нет права Timeout Members (или роль участника выше моей).") from exc
         return f"Замучен на {minutes} мин."
 
     async def _unmute(self, guild: discord.Guild, command: Command) -> str:
@@ -178,7 +176,7 @@ class DiscordCommandExecutor:
         p = command.payload
         kwargs: dict = {}
         if "nick" in p:
-            kwargs["nick"] = (str(p["nick"]).strip() or None)
+            kwargs["nick"] = str(p["nick"]).strip() or None
         # загруженный аватар (base64) приоритетнее URL
         avatar_data = str(p.get("avatar_data") or "").strip()
         if avatar_data:
@@ -323,9 +321,7 @@ class DiscordCommandExecutor:
         order = command.payload.get("order") or []
         roles = [self._manageable_role(guild, int(rid)) for rid in order]
         editable_now = {
-            r
-            for r in guild.roles
-            if not r.is_default() and not r.managed and r < guild.me.top_role
+            r for r in guild.roles if not r.is_default() and not r.managed and r < guild.me.top_role
         }
         # список должен совпасть с текущим набором редактируемых ролей один-в-один,
         # иначе панель устарела и перестановка сломала бы иерархию
@@ -411,6 +407,52 @@ class DiscordCommandExecutor:
         msg = f"{verb} роль «{role.name}»: {done} чел."
         return msg + (f", ошибок {failed}." if failed else ".")
 
+    # импорт набора ролей (шаблон/экспорт с другого сервера). Права роли НЕ
+    # переносим (как и role.create — безопасно, Discord бы срезал недоступные
+    # боту биты); создаём только недостающие по имени, чтобы повтор был безвреден.
+    _IMPORT_CAP = 50
+
+    async def _role_import(self, guild: discord.Guild, command: Command) -> str:
+        specs = command.payload.get("roles")
+        if not isinstance(specs, list):
+            raise CommandError("Некорректный формат импорта.")
+        if len(specs) > self._IMPORT_CAP:
+            raise CommandError(
+                f"Слишком много ролей ({len(specs)} > {self._IMPORT_CAP}) — предел безопасности."
+            )
+        existing = {r.name.casefold() for r in guild.roles}
+        created = 0
+        skipped = 0
+        for spec in specs:
+            if not isinstance(spec, dict):
+                skipped += 1
+                continue
+            try:
+                name = self._role_name(spec.get("name"))
+            except CommandError:
+                skipped += 1  # битое имя в файле — пропускаем, не валим весь импорт
+                continue
+            if name.casefold() in existing:
+                skipped += 1  # роль с таким именем уже есть — не плодим дубли
+                continue
+            try:
+                await guild.create_role(
+                    name=name,
+                    colour=self._role_colour(spec.get("color")),
+                    hoist=bool(spec.get("hoist")),
+                    mentionable=bool(spec.get("mentionable")),
+                    reason="Панель: импорт ролей",
+                )
+            except discord.Forbidden as exc:
+                raise CommandError("Нет права Manage Roles.") from exc
+            existing.add(name.casefold())
+            created += 1
+            await asyncio.sleep(0.2)  # вежливость к rate limit
+        if created == 0:
+            return f"Ничего не создано (пропущено: {skipped})."
+        msg = f"Создано ролей: {created}."
+        return msg + (f" Пропущено (уже есть/битые): {skipped}." if skipped else "")
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -430,4 +472,5 @@ _HANDLERS = {
     "role.reorder": DiscordCommandExecutor._role_reorder,
     "role.permissions": DiscordCommandExecutor._role_permissions,
     "role.bulk": DiscordCommandExecutor._role_bulk,
+    "role.import": DiscordCommandExecutor._role_import,
 }

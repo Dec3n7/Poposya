@@ -195,6 +195,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ op }),
     }),
+  importRoles: (guildId: string, roles: RoleInput[]): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/import`, {
+      method: "POST",
+      body: JSON.stringify({ roles }),
+    }),
+  autorole: (guildId: string): Promise<{ role_ids: string[] }> =>
+    req<{ role_ids: string[] }>(`/api/guilds/${guildId}/roles/autorole`),
+  setAutorole: (guildId: string, roleIds: string[]): Promise<{ role_ids: string[] }> =>
+    req<{ role_ids: string[] }>(`/api/guilds/${guildId}/roles/autorole`, {
+      method: "PUT",
+      body: JSON.stringify({ role_ids: roleIds }),
+    }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>
