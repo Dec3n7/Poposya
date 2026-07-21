@@ -9,6 +9,32 @@ export interface Me {
   username: string;
   avatar: string | null;
   guilds: Guild[]; // серверы, где можно управлять
+  is_operator: boolean; // оператор бота: доступ к вкладке «Персона»
+}
+
+// --- персоны (только оператор) ---
+
+export interface PersonaSummary {
+  id: number;
+  name: string;
+  is_default: boolean;
+  assigned_count: number; // на скольких серверах активна
+}
+
+export interface PersonaDetail {
+  id: number;
+  name: string;
+  is_default: boolean;
+  prompt: string; // пусто = используется встроенный дефолт
+  chime_prompt: string;
+  default_prompt: string; // встроенный промпт (что применяется при пустом поле)
+  default_chime_prompt: string;
+  assigned_count: number;
+}
+
+export interface GuildPersona {
+  guild_id: string;
+  persona_id: number; // что реально применяется (назначенная или дефолт)
 }
 
 export type SettingKind = "bool" | "channel" | "float" | "int";

@@ -9,6 +9,7 @@ import type {
   ComplexSettings,
   FindsOverview,
   GuildModule,
+  GuildPersona,
   GuildSummary,
   GuildWarn,
   Me,
@@ -17,6 +18,8 @@ import type {
   NowPlaying,
   Overview,
   PermCatalog,
+  PersonaDetail,
+  PersonaSummary,
   PersonDetail,
   PersonListItem,
   PlaylistDetail,
@@ -245,5 +248,49 @@ export const api = {
     req<CommandResult>(`/api/guilds/${guildId}/music/control`, {
       method: "POST",
       body: JSON.stringify({ action }),
+    }),
+
+  // --- персоны (только оператор) ---
+  personas: (): Promise<PersonaSummary[]> => req<PersonaSummary[]>("/api/personas"),
+  persona: (id: number): Promise<PersonaDetail> => req<PersonaDetail>(`/api/personas/${id}`),
+  createPersona: (name: string, duplicateOf?: number): Promise<PersonaDetail> =>
+    req<PersonaDetail>("/api/personas", {
+      method: "POST",
+      body: JSON.stringify({ name, duplicate_of: duplicateOf ?? null }),
+    }),
+  duplicatePersona: (id: number, name: string): Promise<PersonaDetail> =>
+    req<PersonaDetail>(`/api/personas/${id}/duplicate`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  renamePersona: (id: number, name: string): Promise<PersonaDetail> =>
+    req<PersonaDetail>(`/api/personas/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  deletePersona: (id: number): Promise<void> =>
+    req<void>(`/api/personas/${id}`, { method: "DELETE" }),
+  setPersonaPrompt: (id: number, prompt: string): Promise<PersonaDetail> =>
+    req<PersonaDetail>(`/api/personas/${id}/prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt }),
+    }),
+  setPersonaChimePrompt: (id: number, prompt: string): Promise<PersonaDetail> =>
+    req<PersonaDetail>(`/api/personas/${id}/chime_prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt }),
+    }),
+  exportPersona: (id: number): Promise<unknown> => req<unknown>(`/api/personas/${id}/export`),
+  importPersona: (data: unknown): Promise<PersonaDetail> =>
+    req<PersonaDetail>("/api/personas/import", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  guildPersona: (guildId: string): Promise<GuildPersona> =>
+    req<GuildPersona>(`/api/guilds/${guildId}/persona`),
+  assignPersona: (guildId: string, personaId: number): Promise<GuildPersona> =>
+    req<GuildPersona>(`/api/guilds/${guildId}/persona`, {
+      method: "PUT",
+      body: JSON.stringify({ persona_id: personaId }),
     }),
 };

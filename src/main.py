@@ -58,6 +58,9 @@ async def run() -> None:
     container = build_root_container(settings)
     # пер-гильдийные настройки (/config) — поднять переопределения в память
     await container.guild_settings.load_all()
+    # персоны (текст/личность бота) — поднять в память (в проде сид «Попоси» уже
+    # в БД из миграции 0031; иначе load_all создаст дефолт-строку идемпотентно)
+    await container.persona.load_all()
     bot = PoposyaBot(container)
 
     # командный мост панель→бот: панель кладёт команду в bot_commands + NOTIFY,
@@ -93,6 +96,10 @@ async def run() -> None:
     if container.settings_listener is not None:
         background.append(asyncio.create_task(container.settings_listener.run_forever()))
         started.append("settings-listener")
+    # межпроцессная инвалидация кэша персон (панель изменила персону → бот перечитал)
+    if container.persona_listener is not None:
+        background.append(asyncio.create_task(container.persona_listener.run_forever()))
+        started.append("persona-listener")
     # командный мост (Postgres): исполняет команды панели в Discord
     if command_listener is not None:
         background.append(asyncio.create_task(command_listener.run_forever()))

@@ -26,6 +26,20 @@ def current_session(request: Request) -> Session:
     return session
 
 
+def require_operator(
+    request: Request,
+    session: Session = Depends(current_session),
+) -> Session:
+    """Доступ к управлению персонами — только оператор(ы) бота из
+    web_operator_ids (владелец). Серверные админы персону не трогают вовсе.
+    Границу проверяет ТОЛЬКО бэкенд; под этой зависимостью будут все роуты
+    персон (P2)."""
+    container = get_container(request)
+    if session.user_id not in container.settings.web_operator_ids:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "только оператор бота")
+    return session
+
+
 async def require_guild_manager(
     guild_id: int,
     request: Request,

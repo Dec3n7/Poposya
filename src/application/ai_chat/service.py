@@ -124,6 +124,7 @@ class ChatService:
         settings_provider=None,
         chime_template: PromptTemplate | None = None,
         chime_provider: IAIProvider | None = None,
+        persona=None,
     ):
         self._calendar = calendar
         self._add_summary = add_dialog_summary
@@ -132,6 +133,11 @@ class ChatService:
         self._dialog_min_exchanges = dialog_min_exchanges
         self._deep_exchanges = deep_dialog_exchanges
         self._settings = settings_provider
+        # источник системного промпта per-guild: персона сервера (PersonaService,
+        # утиный тип — как settings_provider, без импорта инфраструктуры). Пустой
+        # промпт дефолт-персоны резолвится в файл-шаблон, поэтому поведение без
+        # назначенной персоны = прежнему. None (тесты) → фолбэк на self._template.
+        self._persona = persona
         # пассивное вклинивание: шаблон решения и (дешёвый) провайдер для него;
         # если шаблон не задан — фича выключена, maybe_chime всегда вернёт None
         self._chime_template = chime_template
@@ -286,7 +292,7 @@ class ChatService:
         """Короткая реплика на событие (включённый трек и т.п.)."""
         rank = await self._get_rank.execute(user_id, guild_id)
         variables = self._base_variables(now, rank.level, rank.is_exclusive, "", False)
-        system_prompt = self._template.render(variables) + (
+        system_prompt = self._render_base(guild_id, variables) + (
             "\n---\n"
             f"Событие на сервере: {instruction}\n"
             f"Участник: {user_display}. Ответь одной-двумя фразами в своём характере, "
@@ -299,12 +305,13 @@ class ChatService:
         return text.strip()
 
     async def freeform_remark(
-        self, instruction: str, now: datetime, mood: int | None = None
+        self, guild_id: int, instruction: str, now: datetime, mood: int | None = None
     ) -> str:
         """Реплика без конкретного собеседника: скука в пустом канале,
-        случайная мысль, приветствие новичка. Нейтральный тон (уровень 2)."""
+        случайная мысль, приветствие новичка. Нейтральный тон (уровень 2).
+        Промпт берётся от персоны сервера (guild_id)."""
         variables = self._base_variables(now, 2, False, "", False)
-        system_prompt = self._template.render(variables) + (
+        system_prompt = self._render_base(guild_id, variables) + (
             "\n---\n"
             f"{self._mood_line(mood)}"
             f"{self._holiday_line(now)}"
@@ -332,21 +339,22 @@ class ChatService:
         молчим. Фича выключена, если шаблон решения не задан."""
         if self._chime_template is None or not history:
             return None
-        decision = await self._decide_chime(history, now, mood)
+        decision = await self._decide_chime(guild_id, history, now, mood)
         if decision is None or not decision.should_chime:
             return None
         if decision.confidence < min_confidence:
             return None
-        text = await self._generate_chime(history, decision.hook, now, mood)
+        text = await self._generate_chime(guild_id, history, decision.hook, now, mood)
         return text or None
 
     async def _decide_chime(
-        self, history: list[tuple[str, str]], now: datetime, mood: int | None
+        self, guild_id: int, history: list[tuple[str, str]], now: datetime, mood: int | None
     ) -> ChimeDecision | None:
         if self._chime_template is None:
             return None
-        system = self._chime_template.render(
-            {"current_date": now.strftime("%d.%m.%Y"), "mood": mood if mood is not None else 50}
+        system = self._render_chime_decision(
+            guild_id,
+            {"current_date": now.strftime("%d.%m.%Y"), "mood": mood if mood is not None else 50},
         )
         conversation = "\n".join(f"{author}: {text}" for author, text in history)
         provider = self._chime_provider or self._provider
@@ -361,10 +369,10 @@ class ChatService:
         return _parse_chime_decision(raw)
 
     async def _generate_chime(
-        self, history: list[tuple[str, str]], hook: str, now: datetime, mood: int | None
+        self, guild_id: int, history: list[tuple[str, str]], hook: str, now: datetime, mood: int | None
     ) -> str:
         variables = self._base_variables(now, 2, False, "", False)
-        system = self._template.render(variables) + (
+        system = self._render_base(guild_id, variables) + (
             "\n---\n"
             f"{self._mood_line(mood)}"
             f"{self._holiday_line(now)}"
@@ -489,6 +497,20 @@ class ChatService:
             return ""
         return f"Сегодня {name} — у тебя праздничное, приподнятое настроение.\n"
 
+    def _render_base(self, guild_id: int, variables: dict) -> str:
+        """Базовый системный промпт персоны сервера (или файл-шаблон, если
+        персона не проброшена — в тестах). Формат-хвосты добавляют вызывающие."""
+        if self._persona is not None:
+            return self._persona.render_prompt(guild_id, variables)
+        return self._template.render(variables)
+
+    def _render_chime_decision(self, guild_id: int, variables: dict) -> str:
+        """Промпт решения о вклинивании (chime_prompt персоны или файл-шаблон)."""
+        if self._persona is not None:
+            return self._persona.render_chime_prompt(guild_id, variables)
+        assert self._chime_template is not None
+        return self._chime_template.render(variables)
+
     def _build_system_prompt(
         self,
         request: ChatRequest,
@@ -503,7 +525,7 @@ class ChatService:
             award.user_notes,
             award.returning_after_absence,
         )
-        prompt = self._template.render(variables)
+        prompt = self._render_base(request.guild_id, variables)
         extra = [
             "---",
             self._mood_line(mood).rstrip("\n"),

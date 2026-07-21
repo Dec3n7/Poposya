@@ -58,6 +58,8 @@ from src.infrastructure.db.session import create_engine, create_session_factory
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.guild_settings import GuildSettingsService
+from src.infrastructure.persona_listener import make_persona_listener
+from src.infrastructure.persona_service import PersonaService
 from src.infrastructure.settings_listener import make_settings_listener
 
 
@@ -67,6 +69,9 @@ class ApiContainer:
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     guild_settings: GuildSettingsService
+    # персоны (текст/личность бота): API держит свой кэш + слушает NOTIFY, как
+    # и с настройками — правки из панели должны быть видны сразу
+    persona: PersonaService
     # серверы, где есть бот (проверка «есть что настраивать») — кэш поверх Discord
     bot_guilds: BotGuildsCache
     # read-use-case'ы для дашборда (те же классы, что у бота)
@@ -117,6 +122,8 @@ class ApiContainer:
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
     settings_listener: object | None
+    # аналогичный слушатель для персон (Postgres NOTIFY; None на SQLite)
+    persona_listener: object | None
 
 
 def build_api_container(settings: Settings) -> ApiContainer:
@@ -136,6 +143,9 @@ def assemble_container(
     guild_settings = GuildSettingsService(settings, session_factory)
     settings_listener = make_settings_listener(settings.database_url, guild_settings)
 
+    persona = PersonaService(settings, session_factory)
+    persona_listener = make_persona_listener(settings.database_url, persona)
+
     event_bus = InMemoryEventBus()
 
     def uow_factory() -> IUnitOfWork:
@@ -151,6 +161,7 @@ def assemble_container(
         engine=engine,
         session_factory=session_factory,
         guild_settings=guild_settings,
+        persona=persona,
         bot_guilds=BotGuildsCache(settings.discord_token),
         leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=guild_settings),
         list_watchlist=ListWatchlistUseCase(uow_factory),
@@ -186,4 +197,5 @@ def assemble_container(
         get_role_template=GetRoleTemplateUseCase(uow_factory),
         delete_role_template=DeleteRoleTemplateUseCase(uow_factory),
         settings_listener=settings_listener,
+        persona_listener=persona_listener,
     )

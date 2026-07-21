@@ -119,4 +119,5 @@ async def me(
             GuildDTO(id=str(g.id), name=g.name, icon=guild_icon_url(g.id, g.icon))
             for g in guilds
         ],
+        is_operator=session.user_id in container.settings.web_operator_ids,
     )

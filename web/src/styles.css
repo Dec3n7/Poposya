@@ -269,6 +269,89 @@ a {
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-sm);
 }
+.ok-banner {
+  background: rgba(70, 224, 160, 0.12);
+  border: 1px solid rgba(70, 224, 160, 0.4);
+  color: var(--success);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-4);
+}
+
+/* --- утилиты, используемые вкладкой «Персона» --- */
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.btn-row {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+.chip.accent {
+  border-color: var(--accent-ring);
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+
+/* --- вкладка «Персона» --- */
+.persona-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.persona-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.persona-row:hover {
+  background: var(--panel-2);
+}
+.persona-row.active {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+}
+.persona-row-name {
+  font-weight: 600;
+  margin-right: auto;
+}
+.persona-footer {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-soft);
+}
+/* редактор персоны: широкие поля (базовый .input рассчитан на число, 110px) */
+.persona input.input {
+  width: 100%;
+}
+.persona textarea.input {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.5;
+  font-size: 13px;
+}
 
 /* --- login --- */
 .login-card {

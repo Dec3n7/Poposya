@@ -11,6 +11,7 @@ import { Moderation } from "./Moderation";
 import { Modules } from "./Modules";
 import { Music } from "./Music";
 import { People } from "./People";
+import { Persona } from "./Persona";
 import { Roles } from "./Roles";
 
 type Tab =
@@ -23,7 +24,8 @@ type Tab =
   | "moderation"
   | "audit"
   | "modules"
-  | "settings";
+  | "settings"
+  | "persona";
 
 const I = { fill: "none", stroke: "currentColor", strokeWidth: 2, viewBox: "0 0 24 24" } as const;
 
@@ -100,6 +102,18 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   },
 ];
 
+// вкладка только для оператора бота (управление персонами); назначение —
+// per-guild, поэтому живёт в рельсе сервера, но видна лишь оператору
+const OPERATOR_TABS: { id: Tab; label: string; icon: ReactNode }[] = [
+  {
+    id: "persona",
+    label: "Персона",
+    icon: (
+      <svg {...I}><path d="M4 5c0 6 3 9 8 9s8-3 8-9c-3 1.5-5 2-8 2s-5-.5-8-2Z" /><path d="M9 9h.01M15 9h.01M9.5 12.5c.8.7 4.2.7 5 0" /></svg>
+    ),
+  },
+];
+
 // бейдж-счётчик на пункте рельса для вкладки (null = без бейджа)
 function tabBadge(id: Tab, s: GuildSummary | null): number | null {
   if (!s) return null;
@@ -123,8 +137,11 @@ export function GuildView({
   onBack: () => void;
   onLogout: () => void;
 }) {
-  const tab: Tab = TABS.find((t) => t.id === tabProp)?.id ?? "overview";
-  const active = TABS.find((t) => t.id === tab)!;
+  // персона-вкладка видна только оператору бота (доступ к роутам всё равно
+  // стережёт require_operator на бэке; здесь — только видимость)
+  const tabs = me.is_operator ? [...TABS, ...OPERATOR_TABS] : TABS;
+  const tab: Tab = tabs.find((t) => t.id === tabProp)?.id ?? "overview";
+  const active = tabs.find((t) => t.id === tab)!;
   const setTab = onTab;
 
   const [summary, setSummary] = useState<GuildSummary | null>(null);
@@ -149,7 +166,7 @@ export function GuildView({
 
         <div className="rail-label">Меню</div>
         <nav className="rail-nav">
-          {TABS.map((t) => {
+          {tabs.map((t) => {
             const badge = tabBadge(t.id, summary);
             return (
               <button
@@ -220,6 +237,7 @@ export function GuildView({
           {tab === "audit" && <Audit guild={guild} />}
           {tab === "modules" && <Modules guild={guild} />}
           {tab === "settings" && <GuildSettings guild={guild} />}
+          {tab === "persona" && <Persona guild={guild} />}
         </div>
       </main>
     </div>

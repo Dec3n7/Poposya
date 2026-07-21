@@ -10,6 +10,7 @@ import src.infrastructure.db.models.guild  # noqa: F401
 import src.infrastructure.db.models.moderation  # noqa: F401
 import src.infrastructure.db.models.music  # noqa: F401
 import src.infrastructure.db.models.outbox  # noqa: F401
+import src.infrastructure.db.models.persona  # noqa: F401
 import src.infrastructure.db.models.relationship  # noqa: F401
 import src.infrastructure.db.models.roles  # noqa: F401
 import src.infrastructure.db.models.staykick  # noqa: F401

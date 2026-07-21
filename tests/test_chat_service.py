@@ -347,11 +347,38 @@ async def test_freeform_remark_with_mood_and_holiday():
     cal = HolidayCalendar(holidays={"11-07": "Праздник"})
     provider = FakeProvider(reply="скучно...")
     svc = make_service(provider=provider, calendar=cal)
-    text = await svc.freeform_remark("В канале тихо", NOW, mood=20)
+    text = await svc.freeform_remark(10, "В канале тихо", NOW, mood=20)
     assert text == "скучно..."
     system = provider.calls[0][0]
     assert "настроение: 20/100" in system
     assert "Праздник" in system
+
+
+class _FakePersona:
+    """Минимальная персона: подставляет свой промпт независимо от guild_id."""
+
+    def __init__(self, prompt: str):
+        self._prompt = prompt
+
+    def render_prompt(self, guild_id, variables):
+        return self._prompt
+
+    def render_chime_prompt(self, guild_id, variables):
+        return self._prompt
+
+
+async def test_persona_prompt_reaches_provider():
+    """Промпт персоны сервера идёт в системный промпт всех веток (freeform,
+    событие, реактив) — это и есть «заказчик дал свой промпт»."""
+    provider = FakeProvider(reply="ок")
+    svc = make_service(provider=provider, persona=_FakePersona("Я НЕ ПОПОСЯ, я альтер-эго."))
+    await svc.freeform_remark(10, "скажи что-нибудь", NOW)
+    assert "Я НЕ ПОПОСЯ, я альтер-эго." in provider.calls[0][0]
+
+    provider2 = FakeProvider(reply="ок")
+    svc2 = make_service(provider=provider2, persona=_FakePersona("АЛЬТЕР"), rank=FakeRank(make_rank()))
+    await svc2.comment_on_event(10, 1, "Гость", "включил трек", NOW)
+    assert "АЛЬТЕР" in provider2.calls[0][0]
 
 
 async def test_refresh_notes_success():

@@ -32,12 +32,14 @@ class RootContainer:
     tempvoice: TempVoiceContainer
     roles: RolesContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
+    persona: object  # PersonaService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
     session_factory: object  # async_sessionmaker; командному мосту в main
     ai_provider: object | None  # IAIProvider; закрывается в main
     chime_provider: object | None  # IAIProvider решения (дешёвая модель); закрывается в main
     outbox_dispatcher: object  # OutboxDispatcher; цикл запускает main
     settings_listener: object | None  # SettingsChangeListener (Postgres); цикл запускает main
+    persona_listener: object | None  # PersonaChangeListener (Postgres); цикл запускает main
 
 
 def build_root_container(settings: Settings) -> RootContainer:
@@ -121,6 +123,14 @@ def build_root_container(settings: Settings) -> RootContainer:
     # межпроцессная инвалидация кэша (веб-панель ∥ бот): Postgres LISTEN/NOTIFY.
     # На SQLite вернёт None — там второго писателя нет.
     settings_listener = make_settings_listener(settings.database_url, guild_settings)
+
+    # персоны (библиотеки текста/личности бота): тот же паттерн, что и настройки —
+    # кэш в памяти + Postgres NOTIFY для инвалидации при правках из панели
+    from src.infrastructure.persona_listener import make_persona_listener
+    from src.infrastructure.persona_service import PersonaService
+
+    persona = PersonaService(settings, session_factory)
+    persona_listener = make_persona_listener(settings.database_url, persona)
 
     # --- relationship ---
     from src.domain.shared.holidays import HolidayCalendar
@@ -257,6 +267,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             settings_provider=guild_settings,
             chime_template=chime_template,
             chime_provider=chime_provider,
+            persona=persona,
         )
     else:
         logger.warning("GROQ_API_KEY не задан — общение Попоси (ai_chat) отключено")
@@ -491,10 +502,12 @@ def build_root_container(settings: Settings) -> RootContainer:
         tempvoice=tempvoice,
         roles=roles,
         guild_settings=guild_settings,
+        persona=persona,
         engine=engine,
         session_factory=session_factory,
         ai_provider=ai_provider,
         chime_provider=chime_provider,
         outbox_dispatcher=outbox_dispatcher,
         settings_listener=settings_listener,
+        persona_listener=persona_listener,
     )

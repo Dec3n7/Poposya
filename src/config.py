@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # сколько ждать результат команды моста (бан/мут/музыка) перед ответом
     # «отправлено, применяется»; бот обычно исполняет за доли секунды
     web_command_wait_seconds: float = 5.0
+    # операторы бота (Discord-ID): только они управляют персонами в панели.
+    # Серверные админы персону не трогают (границу проверяет require_operator).
+    web_operator_ids: list[int] = []
 
     # --- база данных ---
     database_url: str = "sqlite+aiosqlite:///./poposya.db"

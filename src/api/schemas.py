@@ -15,6 +15,9 @@ class MeDTO(BaseModel):
     username: str
     avatar: str | None = None
     guilds: list[GuildDTO]  # серверы, где пользователь может управлять
+    # оператор бота (web_operator_ids) — фронт по этому флагу показывает вкладку
+    # «Персона»; сам доступ к роутам всё равно стережёт require_operator на бэке
+    is_operator: bool = False
 
 
 class SettingFieldDTO(BaseModel):
@@ -41,3 +44,51 @@ class BatchUpdate(BaseModel):
     # для списочных/словарных настроек (роли, лимиты): несколько ключей разом,
     # чтобы связанные (пороги ↔ имена) прошли кросс-валидацию вместе (set_many)
     values: dict[str, object]
+
+
+# --- персоны (только оператор бота) ---
+
+
+class PersonaSummaryDTO(BaseModel):
+    """Строка списка библиотек персон."""
+
+    id: int
+    name: str
+    is_default: bool
+    assigned_count: int  # на скольких серверах активна
+
+
+class PersonaDetailDTO(BaseModel):
+    """Персона для редактора: сохранённые промпты (пусто = встроенный дефолт) +
+    сами встроенные дефолты для показа как базовой строки."""
+
+    id: int
+    name: str
+    is_default: bool
+    prompt: str
+    chime_prompt: str
+    default_prompt: str  # встроенный промпт из файла (что применяется при пустом)
+    default_chime_prompt: str
+    assigned_count: int
+
+
+class PersonaCreate(BaseModel):
+    name: str
+    duplicate_of: int | None = None  # если задано — копия этой персоны
+
+
+class PersonaRename(BaseModel):
+    name: str
+
+
+class PromptUpdate(BaseModel):
+    prompt: str  # пустая строка = сброс к встроенному дефолту
+
+
+class GuildPersonaDTO(BaseModel):
+    guild_id: str
+    persona_id: int  # что реально применяется (назначенная или дефолт)
+
+
+class GuildPersonaAssign(BaseModel):
+    persona_id: int

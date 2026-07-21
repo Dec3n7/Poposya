@@ -83,6 +83,7 @@ class CinemaService:
         if self._chat is not None:
             try:
                 comment = await self._chat.freeform_remark(
+                    night.guild_id,
                     f"Киноклуб сервера голосованием выбрал фильм для совместного "
                     f"просмотра: «{winner.title}»"
                     + (f" ({winner.year})" if winner.year else "")
@@ -173,6 +174,7 @@ class CinemaService:
             return None, ""
         try:
             text = await self._chat.freeform_remark(
+                guild_id,
                 f"Киноклуб сервера посмотрел фильм «{entry.title}»"
                 + (f" ({entry.year})" if entry.year else "")
                 + ". Ты тоже смотрела. Ответь СТРОГО в формате «N/10 — комментарий», "

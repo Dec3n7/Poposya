@@ -132,6 +132,7 @@ class ActivityCog(commands.Cog):
         if self.chat is not None:
             try:
                 text = await self.chat.freeform_remark(
+                    member.guild.id,
                     f"На сервер пришёл новый участник — {member.display_name}. "
                     "Поприветствуй его в своём стиле: сдержанно, с лёгкой иронией, без сюсюканья.",
                     datetime.now(UTC),
@@ -152,6 +153,7 @@ class ActivityCog(commands.Cog):
         if self.chat is not None:
             try:
                 text = await self.chat.freeform_remark(
+                    member.guild.id,
                     f"Участник {member.display_name} покинул сервер. "
                     "Попрощайся одной фразой в своём стиле — сухо, без драмы.",
                     datetime.now(UTC),
@@ -210,6 +212,7 @@ class ActivityCog(commands.Cog):
                 return
             try:
                 text = await self.chat.freeform_remark(
+                    message.guild.id,
                     f"Участник {message.author.display_name} впервые написал после "
                     f"{touch.days_absent} дней отсутствия. Отметь его возвращение одной "
                     "фразой в своём стиле: заметила, но без сцен.",
@@ -272,6 +275,7 @@ class ActivityCog(commands.Cog):
         if self.chat is not None:
             try:
                 caption = await self.chat.freeform_remark(
+                    guild.id,
                     f"Сообщение участника {message.author.display_name} набрало "
                     f"{max(counts)} реакций и попадает в твой «Альбом» — коллекцию лучших "
                     f"моментов сервера. Текст сообщения: «{message.content[:300]}». "
@@ -368,6 +372,7 @@ class ActivityCog(commands.Cog):
                 if self.chat is not None:
                     try:
                         text = await self.chat.freeform_remark(
+                            guild.id,
                             f"Сегодня {holiday}. Объяви об этом серверу в своём стиле — "
                             "празднично, но без сюсюканья.",
                             now,
@@ -423,6 +428,7 @@ class ActivityCog(commands.Cog):
             if self.chat is not None:
                 try:
                     generated = await self.chat.freeform_remark(
+                        guild_id,
                         f"Сегодня день рождения у участника {name}. Поздравь его в своём "
                         "стиле — тепло, но без пафоса и открыточных штампов.",
                         datetime.now(UTC),
@@ -616,6 +622,7 @@ class ActivityCog(commands.Cog):
                 self._lonely_notified.add(guild.id)
                 try:
                     text = await self.chat.freeform_remark(
+                        guild.id,
                         f"В канале уже больше {lonely_hours} часов никто не пишет. "
                         "Напиши одну реплику в пустоту в своём стиле — тебе слегка не хватает "
                         "этих людей, но признаваться в этом прямо ты не станешь.",
@@ -642,6 +649,7 @@ class ActivityCog(commands.Cog):
                     continue
                 try:
                     text = await self.chat.freeform_remark(
+                        guild.id,
                         "Напиши одну случайную мысль или наблюдение в своём характере — "
                         "про дождь, кофе, работу над артом, игры, Токио. Как будто просто "
                         "захотелось сказать вслух. Без обращения к кому-то конкретному.",
