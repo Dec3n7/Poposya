@@ -1,17 +1,23 @@
 """Техдолг: бэкап SQLite, Outbox критичных событий, персист войс-минут."""
 
+import asyncio
+import contextlib
 import os
 import shutil
 import sqlite3
 from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
+from src.infrastructure.db import backup as backup_module
 from src.infrastructure.db.backup import (
     PostgresBackupService,
     SqliteBackupService,
+    make_backup_service,
     postgres_params_from_url,
     sqlite_path_from_url,
 )
@@ -45,6 +51,20 @@ def test_sqlite_path_from_url():
         == "/app/data/poposya.db"
     )
     assert sqlite_path_from_url("postgresql+asyncpg://x/y") is None
+
+
+def test_sqlite_path_from_url_without_triple_slash_is_malformed():
+    assert sqlite_path_from_url("sqlite+aiosqlite://") is None
+
+
+def test_make_backup_service_dispatches_by_url(tmp_path):
+    sqlite_service = make_backup_service(
+        f"sqlite+aiosqlite:///{tmp_path / 'p.db'}", "data/backups", 24, 7
+    )
+    assert isinstance(sqlite_service, SqliteBackupService)
+    postgres_service = make_backup_service("postgresql+asyncpg://u:p@h/d", "data/backups", 24, 7)
+    assert isinstance(postgres_service, PostgresBackupService)
+    assert make_backup_service("mysql://u:p@h/d", "data/backups", 24, 7) is None
 
 
 def _make_db(path) -> None:
@@ -87,6 +107,61 @@ def test_backup_disabled_for_non_sqlite():
     assert not service.enabled
 
 
+def test_backup_once_missing_db_file_returns_none(tmp_path):
+    service = SqliteBackupService(f"sqlite+aiosqlite:///{tmp_path / 'never-created.db'}", 24, 7)
+    assert service.backup_once() is None
+
+
+def test_sqlite_prune_swallows_unlink_errors(tmp_path, monkeypatch, caplog):
+    db = tmp_path / "poposya.db"
+    _make_db(db)
+    service = SqliteBackupService(f"sqlite+aiosqlite:///{db}", interval_hours=24, keep=1)
+    service.backup_dir.mkdir()
+    for stamp in ("20260101-000000", "20260102-000000"):
+        (service.backup_dir / f"poposya-{stamp}.db").write_bytes(b"old")
+
+    def raising_unlink(self, *a, **kw):
+        raise OSError("файл занят другим процессом")
+
+    monkeypatch.setattr(Path, "unlink", raising_unlink)
+    with caplog.at_level("WARNING"):
+        service._prune()  # не падает — старые копии просто остаются
+    assert "Не удалось удалить" in caplog.text
+    remaining = list(service.backup_dir.glob("poposya-*.db"))
+    assert len(remaining) == 2  # ничего не удалилось
+
+
+async def test_sqlite_run_forever_backs_up_repeatedly_and_survives_errors(tmp_path):
+    db = tmp_path / "poposya.db"
+    _make_db(db)
+    # interval_hours=0 -> sleep(0) между итерациями, цикл крутится без реального ожидания
+    service = SqliteBackupService(f"sqlite+aiosqlite:///{db}", interval_hours=0, keep=7)
+
+    calls = 0
+    real_backup_once = service.backup_once
+
+    def flaky_backup_once():
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("диск занят")
+        return real_backup_once()
+
+    service.backup_once = flaky_backup_once
+
+    task = asyncio.create_task(service.run_forever())
+    try:
+        deadline = asyncio.get_event_loop().time() + 3.0
+        while calls < 3 and asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    assert calls >= 3  # ошибка на второй итерации не остановила цикл
+
+
 # --- бэкап Postgres (pg_dump) ---
 
 
@@ -118,6 +193,114 @@ def test_postgres_backup_enabled_gating():
     assert not PostgresBackupService("sqlite:///x.db", "data/backups", 24, 7).enabled
     assert not PostgresBackupService("postgresql://u:p@h/d", "data/backups", 0, 7).enabled
     assert not PostgresBackupService("postgresql://u:p@h/d", "data/backups", 24, 0).enabled
+
+
+def test_postgres_backup_dir_property():
+    service = PostgresBackupService("postgresql://u:p@h/d", "some/dir", 24, 7)
+    assert service.backup_dir == Path("some/dir")
+
+
+def test_postgres_backup_once_returns_none_when_params_missing(tmp_path):
+    service = PostgresBackupService("sqlite:///x.db", str(tmp_path), 24, 7)
+    assert service.backup_once() is None
+
+
+# --- бэкап Postgres: логика backup_once/prune/run_forever без реального
+# pg_dump (subprocess.run подменён) — сквозная проверка с настоящим бинарником
+# ниже, под skipif; здесь про то, что сервис делает с результатом процесса.
+
+
+def test_postgres_backup_once_success_invokes_pg_dump_and_prunes(tmp_path, monkeypatch):
+    url = "postgresql+asyncpg://poposya:s3cret@dbhost:5432/poposya"
+    service = PostgresBackupService(url, str(tmp_path / "backups"), interval_hours=24, keep=2)
+    service.backup_dir.mkdir(parents=True)
+    for stamp in ("20260101-000000", "20260102-000000"):
+        (service.backup_dir / f"poposya-{stamp}.dump").write_bytes(b"old")
+
+    captured = {}
+
+    def fake_run(args, env=None, capture_output=None, text=None, timeout=None):
+        captured["args"] = args
+        captured["env"] = env
+        captured["timeout"] = timeout
+        target = Path(args[args.index("-f") + 1])
+        target.write_bytes(b"PGDMP-fake")
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(backup_module.subprocess, "run", fake_run)
+    target = service.backup_once()
+
+    assert target is not None and target.exists()
+    assert target.read_bytes() == b"PGDMP-fake"
+    args = captured["args"]
+    assert args[0] == "pg_dump" and "-Fc" in args
+    assert "dbhost" in args and "5432" in args and "poposya" in args
+    assert captured["env"]["PGPASSWORD"] == "s3cret"
+    assert captured["timeout"] == backup_module._PG_DUMP_TIMEOUT_SECONDS
+
+    remaining = sorted(p.name for p in service.backup_dir.glob("poposya-*.dump"))
+    assert len(remaining) == 2  # keep=2: самый старый из трёх выпилен
+    assert "poposya-20260101-000000.dump" not in remaining
+
+
+def test_postgres_backup_once_failure_cleans_up_and_raises(tmp_path, monkeypatch):
+    url = "postgresql+asyncpg://u:p@h/d"
+    service = PostgresBackupService(url, str(tmp_path / "backups"), interval_hours=24, keep=7)
+
+    def fake_run(args, **kw):
+        target = Path(args[args.index("-f") + 1])
+        target.write_bytes(b"partial")  # pg_dump успел что-то написать до падения
+        return SimpleNamespace(returncode=1, stderr="connection refused" * 50)
+
+    monkeypatch.setattr(backup_module.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="pg_dump упал"):
+        service.backup_once()
+
+    assert list(service.backup_dir.glob("*.dump")) == []  # битый файл подчищен
+
+
+def test_postgres_prune_swallows_unlink_errors(tmp_path, monkeypatch, caplog):
+    service = PostgresBackupService("postgresql://u:p@h/d", str(tmp_path / "backups"), 24, keep=1)
+    service.backup_dir.mkdir(parents=True)
+    for stamp in ("20260101-000000", "20260102-000000"):
+        (service.backup_dir / f"d-{stamp}.dump").write_bytes(b"old")
+
+    def raising_unlink(self, *a, **kw):
+        raise OSError("занято")
+
+    monkeypatch.setattr(Path, "unlink", raising_unlink)
+    with caplog.at_level("WARNING"):
+        service._prune()  # не падает — старые копии просто остаются
+    assert "Не удалось удалить" in caplog.text
+    assert len(list(service.backup_dir.glob("d-*.dump"))) == 2
+
+
+async def test_postgres_run_forever_backs_up_repeatedly_and_survives_errors(tmp_path):
+    service = PostgresBackupService(
+        "postgresql://u:p@h/d", str(tmp_path / "backups"), interval_hours=0, keep=7
+    )
+    calls = 0
+
+    def flaky_backup_once():
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("pg_dump упал")
+        return tmp_path / f"dump-{calls}.dump"  # успешный вызов -> залогирован путь
+
+    service.backup_once = flaky_backup_once
+
+    task = asyncio.create_task(service.run_forever())
+    try:
+        deadline = asyncio.get_event_loop().time() + 3.0
+        while calls < 3 and asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    assert calls >= 3  # ошибка на второй итерации не остановила цикл
 
 
 @pytest.mark.skipif(

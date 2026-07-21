@@ -1,6 +1,10 @@
 """FindsCog: хелперы, отслеживание активности, кнопка «Сходить туда» во всех
-исходах, команды /finds /collection /gift (+autocomplete) /walk."""
+исходах, команды /finds /collection /gift (+autocomplete) /walk, фоновые циклы
+спавна/протухания находок, cog_load/unload."""
 
+import asyncio
+import contextlib
+import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -15,8 +19,17 @@ from src.application.finds.use_cases import (
 )
 from src.domain.finds import catalog
 from src.domain.finds.entities import NightFind
-from src.infrastructure.discord.cogs.finds import FindsCog, _ts
-from tests.cog_fakes import make_interaction
+from src.infrastructure.discord.cogs import finds as finds_module
+from src.infrastructure.discord.cogs.finds import (
+    _SUCCESS_HIGH,
+    _SUCCESS_LEGENDARY,
+    _SUCCESS_LOW,
+    _SUCCESS_MID,
+    FindClaimView,
+    FindsCog,
+    _ts,
+)
+from tests.cog_fakes import http_error, make_interaction
 
 NOW = datetime(2026, 7, 11, 22, 0, tzinfo=UTC)
 COMMON = catalog.get_item("postcard_90s")  # COMMON
@@ -31,6 +44,7 @@ def make_settings(**over):
         holidays={"01-01": "НГ"},
         finds_min_interval_hours=12,
         finds_max_interval_hours=48,
+        finds_enabled=True,
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -42,6 +56,7 @@ def make_container():
     c.get_active_find = SimpleNamespace(execute=AsyncMock(return_value=None))
     c.get_collection = SimpleNamespace(execute=AsyncMock(return_value=[]))
     c.gift_item = SimpleNamespace(execute=AsyncMock())
+    c.spawn_find = SimpleNamespace(execute=AsyncMock())
     c.special_walk = SimpleNamespace(execute=AsyncMock())
     c.list_live_finds = SimpleNamespace(execute=AsyncMock(return_value=[]))
     c.register_find_message = SimpleNamespace(execute=AsyncMock())
@@ -346,3 +361,579 @@ async def test_walk_success():
     interaction = make_interaction()
     await type(cog).walk_command.callback(cog, interaction)
     assert COMMON.name in interaction.followup.send.await_args.args[0]
+
+
+async def test_walk_fail():
+    container = make_container()
+    container.special_walk.execute.return_value = WalkResult(
+        status="fail", cost=60, points_total=40
+    )
+    cog = make_cog(container)
+    interaction = make_interaction()
+    await type(cog).walk_command.callback(cog, interaction)
+    assert "60 очков" in interaction.followup.send.await_args.args[0]
+
+
+# --- interaction_check / _roll_interval -------------------------------------
+
+
+async def test_interaction_check_allows_when_module_enabled():
+    cog = make_cog()
+    interaction = make_interaction()
+    assert await cog.interaction_check(interaction) is True
+
+
+async def test_interaction_check_blocks_when_module_disabled():
+    cog = make_cog(settings=make_settings(finds_enabled=False))
+    interaction = make_interaction()
+    result = await cog.interaction_check(interaction)
+    assert result is False
+    interaction.response.send_message.assert_awaited_once()
+
+
+def test_roll_interval_within_configured_bounds():
+    cog = make_cog(settings=make_settings(finds_min_interval_hours=1, finds_max_interval_hours=1))
+    assert cog._roll_interval(10) == 1 * 3600
+
+
+def test_roll_interval_clamps_max_to_min():
+    cog = make_cog(settings=make_settings(finds_min_interval_hours=5, finds_max_interval_hours=1))
+    # hi(1) < lo(5) — _roll_interval поднимает hi до lo, uniform(5, 5) детерминирован
+    seconds = cog._roll_interval(10)
+    assert seconds == 5 * 3600
+
+
+# --- cog_load / cog_unload ---------------------------------------------------
+
+
+async def test_cog_load_registers_persistent_claim_view():
+    cog = make_cog()
+    await cog.cog_load()
+    cog.bot.add_view.assert_called_once()
+    assert isinstance(cog.bot.add_view.call_args.args[0], FindClaimView)
+
+
+def test_cog_unload_cancels_tasks_and_expiry_tasks():
+    cog = make_cog()
+    loop_task = MagicMock()
+    expiry_task = MagicMock()
+    cog._tasks = [loop_task]
+    cog._expiry_tasks = {1: expiry_task}
+    cog.cog_unload()
+    loop_task.cancel.assert_called_once()
+    expiry_task.cancel.assert_called_once()
+
+
+# --- on_message: игнор ботов/ЛС ---------------------------------------------
+
+
+async def test_on_message_ignores_bots():
+    cog = make_cog()
+    msg = MagicMock()
+    msg.author = SimpleNamespace(bot=True)
+    await cog.on_message(msg)
+    assert cog._main_last_activity == {}
+
+
+async def test_on_message_ignores_dm():
+    cog = make_cog()
+    msg = MagicMock()
+    msg.author = SimpleNamespace(bot=False)
+    msg.guild = None
+    await cog.on_message(msg)
+    assert cog._main_last_activity == {}
+
+
+# --- on_ready -----------------------------------------------------------------
+
+
+async def test_on_ready_starts_loops_once():
+    cog = make_cog()
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._spawn_loop = AsyncMock()
+    cog._restore_live_finds = AsyncMock()
+    await cog.on_ready()
+    assert cog._loops_started is True
+    assert len(cog._tasks) == 2
+    await asyncio.sleep(0)  # дать AsyncMock-корутинам завершиться
+    await cog.on_ready()  # второй вызов не должен пересоздавать задачи
+    assert len(cog._tasks) == 2
+
+
+# --- _restore_live_finds -----------------------------------------------------
+
+
+async def test_restore_live_finds_schedules_expiry_for_each():
+    container = make_container()
+    find = NightFind(
+        guild_id=10,
+        location_id="nezu_square",
+        item_id="postcard_90s",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+        id=1,
+    )
+    container.list_live_finds.execute.return_value = [find]
+    cog = make_cog(container)
+    cog._schedule_expiry = MagicMock()
+    await cog._restore_live_finds()
+    cog._schedule_expiry.assert_called_once_with(find)
+
+
+async def test_restore_live_finds_swallows_exception():
+    container = make_container()
+    container.list_live_finds.execute.side_effect = RuntimeError("boom")
+    cog = make_cog(container)
+    await cog._restore_live_finds()  # не падает
+
+
+# --- _spawn_loop ---------------------------------------------------------------
+
+
+async def _drive_spawn_loop(monkeypatch, cog, iterations):
+    calls = 0
+
+    async def fake_sleep(_):
+        nonlocal calls
+        calls += 1
+        if calls > iterations:
+            raise asyncio.CancelledError()
+
+    monkeypatch.setattr(finds_module.asyncio, "sleep", fake_sleep)
+    with contextlib.suppress(asyncio.CancelledError):
+        await cog._spawn_loop()
+
+
+async def test_spawn_loop_skips_disabled_guild(monkeypatch):
+    gs = MagicMock()
+    gs.get.return_value = False  # finds_enabled=False на сервере
+    cog = make_cog()
+    cog.gs = gs
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._try_spawn = AsyncMock()
+    await _drive_spawn_loop(monkeypatch, cog, iterations=1)
+    cog._try_spawn.assert_not_awaited()
+
+
+async def test_spawn_loop_first_tick_sets_next_spawn_without_spawning(monkeypatch):
+    cog = make_cog(settings=make_settings(finds_min_interval_hours=1, finds_max_interval_hours=1))
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._try_spawn = AsyncMock()
+    await _drive_spawn_loop(monkeypatch, cog, iterations=1)
+    assert 10 in cog._next_spawn
+    cog._try_spawn.assert_not_awaited()
+
+
+async def test_spawn_loop_skips_when_not_due_yet(monkeypatch):
+    cog = make_cog()
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._next_spawn[10] = time.monotonic() + 999
+    cog._try_spawn = AsyncMock()
+    await _drive_spawn_loop(monkeypatch, cog, iterations=1)
+    cog._try_spawn.assert_not_awaited()
+
+
+async def test_spawn_loop_spawns_when_due_and_reschedules(monkeypatch):
+    cog = make_cog(settings=make_settings(finds_min_interval_hours=1, finds_max_interval_hours=1))
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._next_spawn[10] = time.monotonic() - 1
+    cog._try_spawn = AsyncMock()
+    await _drive_spawn_loop(monkeypatch, cog, iterations=1)
+    cog._try_spawn.assert_awaited_once_with(guild)
+    assert cog._next_spawn[10] > time.monotonic()
+
+
+async def test_spawn_loop_survives_try_spawn_exception(monkeypatch):
+    cog = make_cog()
+    guild = SimpleNamespace(id=10)
+    cog.bot.guilds = [guild]
+    cog._next_spawn[10] = time.monotonic() - 1
+    cog._try_spawn = AsyncMock(side_effect=RuntimeError("boom"))
+    await _drive_spawn_loop(monkeypatch, cog, iterations=1)  # не падает
+
+
+# --- _try_spawn ----------------------------------------------------------------
+
+
+async def test_try_spawn_no_channel_returns_none():
+    cog = make_cog(settings=make_settings(main_channel="x"))
+    guild = MagicMock()
+    guild.id = 10
+    guild.text_channels = []
+    guild.get_channel = MagicMock(return_value=None)
+    assert await cog._try_spawn(guild) is None
+
+
+async def test_try_spawn_bad_mood_may_skip():
+    cog = make_cog(settings=make_settings(main_channel="c"))
+    guild = MagicMock()
+    guild.id = 10
+    guild.text_channels = [SimpleNamespace(name="c")]
+    cog.mood.bump(10, -100)  # настроение <= 30
+    cog._rng = SimpleNamespace(random=lambda: 0.1)  # < 0.5 -> пропускаем
+    result = await cog._try_spawn(guild)
+    assert result is None
+    cog.finds.spawn_find.execute.assert_not_awaited()
+
+
+async def test_try_spawn_active_find_already_present_returns_none():
+    container = make_container()
+    container.spawn_find = SimpleNamespace(execute=AsyncMock(return_value=None))
+    cog = make_cog(container, settings=make_settings(main_channel="c"))
+    guild = MagicMock()
+    guild.id = 10
+    guild.text_channels = [SimpleNamespace(name="c")]
+    result = await cog._try_spawn(guild, force=True)
+    assert result is None
+
+
+async def test_try_spawn_full_success_flow():
+    container = make_container()
+    location = catalog.get_location("nezu_square")
+    find = NightFind(
+        guild_id=10,
+        location_id=location.id,
+        item_id="postcard_90s",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=2),
+        id=77,
+    )
+    container.spawn_find = SimpleNamespace(execute=AsyncMock(return_value=(find, location, COMMON)))
+    cog = make_cog(container, settings=make_settings(main_channel="c"))
+    guild = MagicMock()
+    guild.id = 10
+    channel = MagicMock()
+    channel.name = "c"
+    channel.id = 100
+    channel.send = AsyncMock(return_value=SimpleNamespace(id=555))
+    guild.text_channels = [channel]
+    try:
+        result = await cog._try_spawn(guild, force=True)
+        assert result is find
+        channel.send.assert_awaited_once()
+        container.register_find_message.execute.assert_awaited_once_with(77, 100, 555)
+        assert (find.channel_id, find.message_id) == (100, 555)
+        assert 77 in cog._expiry_tasks
+    finally:
+        for task in cog._expiry_tasks.values():
+            task.cancel()
+
+
+async def test_try_spawn_send_http_exception_returns_none():
+    container = make_container()
+    location = catalog.get_location("nezu_square")
+    find = NightFind(
+        guild_id=10,
+        location_id=location.id,
+        item_id="postcard_90s",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=2),
+        id=78,
+    )
+    container.spawn_find = SimpleNamespace(execute=AsyncMock(return_value=(find, location, COMMON)))
+    cog = make_cog(container, settings=make_settings(main_channel="c"))
+    guild = MagicMock()
+    guild.id = 10
+    channel = MagicMock()
+    channel.name = "c"
+    channel.send = AsyncMock(side_effect=http_error())
+    guild.text_channels = [channel]
+    result = await cog._try_spawn(guild, force=True)
+    assert result is None
+    container.register_find_message.execute.assert_not_awaited()
+
+
+# --- _schedule_expiry / _expire_later / _close_announcement -------------------
+
+
+async def test_schedule_expiry_dedupes_by_find_id():
+    cog = make_cog()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+        id=1,
+    )
+    cog._schedule_expiry(find)
+    task = cog._expiry_tasks[1]
+    cog._schedule_expiry(find)  # уже запланировано — не дублируем
+    assert cog._expiry_tasks[1] is task
+    task.cancel()
+
+
+def test_schedule_expiry_noop_without_id():
+    cog = make_cog()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        id=None,
+    )
+    cog._schedule_expiry(find)
+    assert cog._expiry_tasks == {}
+
+
+async def test_expire_later_waits_for_expiry(monkeypatch):
+    sleeps = []
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    monkeypatch.setattr(finds_module.asyncio, "sleep", fake_sleep)
+    container = make_container()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=datetime.now(UTC) + timedelta(seconds=30),
+        id=1,
+    )
+    cog = make_cog(container)
+    cog._close_announcement = AsyncMock()
+    await cog._expire_later(find)
+    assert sleeps and sleeps[0] > 0
+    cog._close_announcement.assert_awaited_once()
+
+
+async def test_expire_later_still_active_skips_close():
+    container = make_container()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW - timedelta(seconds=1),
+        id=1,
+    )
+    container.get_active_find.execute.return_value = SimpleNamespace(find=SimpleNamespace(id=1))
+    cog = make_cog(container)
+    cog._close_announcement = AsyncMock()
+    await cog._expire_later(find)
+    cog._close_announcement.assert_not_awaited()
+
+
+async def test_expire_later_fresh_list_contains_find_skips_close():
+    container = make_container()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW - timedelta(seconds=1),
+        id=1,
+    )
+    container.get_active_find.execute.return_value = None
+    container.list_live_finds.execute.return_value = [find]
+    cog = make_cog(container)
+    cog._close_announcement = AsyncMock()
+    await cog._expire_later(find)
+    cog._close_announcement.assert_not_awaited()
+
+
+async def test_expire_later_closes_when_truly_gone():
+    container = make_container()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW - timedelta(seconds=1),
+        id=1,
+    )
+    container.get_active_find.execute.return_value = None
+    container.list_live_finds.execute.return_value = []
+    cog = make_cog(container)
+    cog._close_announcement = AsyncMock()
+    await cog._expire_later(find)
+    cog._close_announcement.assert_awaited_once()
+
+
+async def test_close_announcement_noop_without_ids():
+    cog = make_cog()
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        channel_id=0,
+        message_id=0,
+    )
+    await cog._close_announcement(find, "note")
+    cog.bot.get_channel.assert_not_called()
+
+
+async def test_close_announcement_noop_when_channel_missing():
+    cog = make_cog()
+    cog.bot.get_channel.return_value = None
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        channel_id=1,
+        message_id=2,
+    )
+    await cog._close_announcement(find, "note")
+
+
+async def test_close_announcement_appends_note_to_embed():
+    cog = make_cog()
+    channel = MagicMock()
+    message = MagicMock()
+    embed = SimpleNamespace(description="исходное")
+    message.embeds = [embed]
+    message.edit = AsyncMock()
+    channel.fetch_message = AsyncMock(return_value=message)
+    cog.bot.get_channel.return_value = channel
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        channel_id=1,
+        message_id=2,
+    )
+    await cog._close_announcement(find, "-# опоздали")
+    assert embed.description == "исходное\n\n-# опоздали"
+    message.edit.assert_awaited_once_with(embed=embed, view=None)
+
+
+async def test_close_announcement_no_embed_edits_with_none():
+    cog = make_cog()
+    channel = MagicMock()
+    message = MagicMock()
+    message.embeds = []
+    message.edit = AsyncMock()
+    channel.fetch_message = AsyncMock(return_value=message)
+    cog.bot.get_channel.return_value = channel
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        channel_id=1,
+        message_id=2,
+    )
+    await cog._close_announcement(find, "note")
+    message.edit.assert_awaited_once_with(embed=None, view=None)
+
+
+async def test_close_announcement_http_exception_ignored():
+    cog = make_cog()
+    channel = MagicMock()
+    channel.fetch_message = AsyncMock(side_effect=http_error())
+    cog.bot.get_channel.return_value = channel
+    find = NightFind(
+        guild_id=10,
+        location_id="x",
+        item_id="y",
+        created_at=NOW,
+        expires_at=NOW,
+        channel_id=1,
+        message_id=2,
+    )
+    await cog._close_announcement(find, "note")  # не падает
+
+
+# --- _announce_claim: недостающие ветки --------------------------------------
+
+
+async def test_announce_claim_embed_present_appends_note():
+    cog = make_cog()
+    interaction = claim_interaction()
+    embed = SimpleNamespace(description="исходное")
+    interaction.message.embeds = [embed]
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=1)
+    await cog._announce_claim(interaction, result)
+    assert "Забрал" in embed.description
+    interaction.message.edit.assert_awaited_once()
+
+
+async def test_announce_claim_message_edit_http_exception_ignored():
+    cog = make_cog()
+    interaction = claim_interaction()
+    interaction.message.edit = AsyncMock(side_effect=http_error())
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=1)
+    await cog._announce_claim(interaction, result)
+    interaction.channel.send.assert_awaited_once()  # публичный анонс всё равно уходит
+
+
+async def test_announce_claim_legendary_line():
+    cog = make_cog()
+    interaction = claim_interaction()
+    result = ClaimResult(status="success", item=LEGENDARY, points_delta=5, points_total=10, level=1)
+    await cog._announce_claim(interaction, result)
+    embed = interaction.channel.send.await_args.kwargs["embed"]
+    assert _SUCCESS_LEGENDARY in embed.description
+
+
+async def test_announce_claim_high_level_line():
+    cog = make_cog()
+    interaction = claim_interaction()
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=6)
+    await cog._announce_claim(interaction, result)
+    embed = interaction.channel.send.await_args.kwargs["embed"]
+    assert _SUCCESS_HIGH in embed.description
+
+
+async def test_announce_claim_mid_level_line():
+    cog = make_cog()
+    interaction = claim_interaction()
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=3)
+    await cog._announce_claim(interaction, result)
+    embed = interaction.channel.send.await_args.kwargs["embed"]
+    assert _SUCCESS_MID in embed.description
+
+
+async def test_announce_claim_low_level_line():
+    cog = make_cog()
+    interaction = claim_interaction()
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=1)
+    await cog._announce_claim(interaction, result)
+    embed = interaction.channel.send.await_args.kwargs["embed"]
+    assert _SUCCESS_LOW in embed.description
+
+
+async def test_announce_claim_public_send_http_exception_logged():
+    cog = make_cog()
+    interaction = claim_interaction()
+    interaction.channel.send = AsyncMock(side_effect=http_error())
+    result = ClaimResult(status="success", item=COMMON, points_delta=5, points_total=10, level=1)
+    await cog._announce_claim(interaction, result)  # не падает
+
+
+# --- /spawnfind: провал спавна -------------------------------------------------
+
+
+async def test_find_claim_view_button_delegates_to_handle_claim():
+    cog = make_cog()
+    cog.handle_claim = AsyncMock()
+    view = FindClaimView(cog)
+    interaction = make_interaction()
+    await view.claim_button.callback(interaction)
+    cog.handle_claim.assert_awaited_once_with(interaction)
+
+
+async def test_spawnfind_reports_failure_to_spawn():
+    cog = make_cog(settings=make_settings(main_channel="c"))
+    interaction = make_interaction()
+    channel = SimpleNamespace(name="c", mention="#c")
+    interaction.guild.text_channels = [channel]
+    cog.finds.get_active_find.execute = AsyncMock(return_value=None)
+    cog._try_spawn = AsyncMock(return_value=None)
+    await type(cog).spawn_find_command.callback(cog, interaction)
+    assert "Не вышло" in interaction.followup.send.await_args.args[0]
