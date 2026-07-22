@@ -52,7 +52,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.role_sync import RoleSyncService
 
         # единая сеть безопасности для необработанных ошибок слеш-команд
-        setup_error_handler(self)
+        setup_error_handler(self, self.container.persona)
 
         # accent-цвет эмбедов — из персоны сервера (мягкая личность, P3)
         accent.set_persona_service(self.container.persona)
@@ -111,6 +111,7 @@ class PoposyaBot(commands.Bot):
                 self.container.event_bus,
                 self.container.settings,
                 gs,
+                persona=persona,
             )
         )
         await self.add_cog(
@@ -150,7 +151,11 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
         await self.add_cog(ConfigCog(self, self.container.guild_settings, persona=persona))
-        await self.add_cog(StayKickCog(self, self.container.staykick, self.container.settings, gs))
+        await self.add_cog(
+            StayKickCog(
+                self, self.container.staykick, self.container.settings, gs, persona=persona
+            )
+        )
         await self.add_cog(
             TempVoiceCog(self, self.container.tempvoice, self.container.settings, gs, persona=persona)
         )

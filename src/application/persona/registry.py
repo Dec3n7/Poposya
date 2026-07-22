@@ -4097,6 +4097,269 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             placeholders=("key", "value"),
             allowed_modes=STATIC_MODES,
         ),
+        # --- «остаться или уйти» (ЛС новичку): банки фраз, случайный выбор ---
+        _spec(
+            "staykick.join_prompts",
+            "staykick",
+            "list",
+            [
+                "Новое лицо. Посмотрим, надолго ли.\n"
+                "Остаёшься — или заглянул на один вечер? Транзитных убираю через 12 часов. "
+                "Молчание считаю за «остаюсь».",
+                "Ты только что зашёл. Не будем делать вид, что мы знакомы.\n"
+                "Ты часть этого места — или просто искал, с кем скоротать катку? Если второе — "
+                "через 12 часов тебя тут не будет. Ничего не жми — останешься.",
+                "Добро пожаловать. Формально.\n"
+                "Мне без разницы, останешься ты или нет, но список я держу в порядке. "
+                "Ты с нами или мимоходом? По умолчанию — остаёшься.",
+                "Зашёл. И?\n"
+                "Остаёшься или ты из разовых? Разовых убираю через 12 часов. "
+                "Промолчишь — значит, остаёшься.",
+                "Ещё один. Ладно.\n"
+                "Решай сразу, чтобы я знала: задержишься или это визит на один вечер? "
+                "Транзит — минус через 12 часов. Тишина — остаёшься.",
+                "Привет. Без фанфар.\n"
+                "Ты сюда играть с нами или разово перехватить катку? Разовых провожаю через "
+                "12 часов. Не нажмёшь ничего — останешься, так и быть.",
+            ],
+            label="Вход новичка: приглашение остаться/уйти (случайное)",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "staykick.stay_replies",
+            "staykick",
+            "list",
+            [
+                "Приемлемо. Не заставляй меня пожалеть.",
+                "Хорошо. Веди себя так, чтобы я не передумала. 🖤",
+                "Значит, остаёшься. Список принял тебя.",
+                "Ладно. Считай, что я тебя запомнила. Пока по-хорошему.",
+                "Остаёшься. Разумно. Не разочаровывай.",
+            ],
+            label="Нажал «Останусь» (случайное)",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "staykick.leave_replies",
+            "staykick",
+            "list",
+            [
+                "Честно. Уважаю тех, кто знает, зачем пришёл. Через 12 часов провожу.",
+                "Договорились. Заглянул — и дальше. Уберу сама, не переживай.",
+                "Как скажешь. Дверь придержу ровно на 12 часов.",
+                "Транзит так транзит. Через 12 часов тебя тут не будет. Без обид.",
+                "Понятно. Ты из тех, кто на один вечер. Провожу через 12 часов.",
+            ],
+            label="Нажал «уйти через 12 ч» (случайное)",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "staykick.remind_replies",
+            "staykick",
+            "list",
+            [
+                "Через час тебя тут не будет. Передумал — жми «Останусь». Я не гордая. "
+                "(Гордая, но ладно.)",
+                "Час до выхода. Последний шанс остаться — или всё по плану?",
+                "Напоминаю: через час провожаю. Если катка затянулась и ты передумал — скажи.",
+                "Скоро провожу. Час у тебя есть. Дальше — как договаривались.",
+            ],
+            label="Напоминание примерно за час до кика (случайное)",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "staykick.farewell_replies",
+            "staykick",
+            "list",
+            [
+                "Время вышло. Было… нейтрально. Захочешь вернуться — знаешь, где я. 🌧",
+                "Ну всё, провожаю. Без обид — ты сам выбрал транзит. ✂️👁🖤",
+                "Твои 12 часов истекли. Дверь закрывается. Возвращайся, если надумаешь.",
+                "Провожаю, как и договаривались. Было спокойно. Иногда это лучший комплимент.",
+            ],
+            label="Прощание в ЛС перед киком (случайное)",
+            allowed_modes=STATIC_MODES,
+        ),
+        # --- отношения: /rank ---
+        _spec(
+            "relationship.rank_no_status",
+            "relationship",
+            "str",
+            "без статуса (она тебя ещё не заметила)",
+            label="/rank: статуса ещё нет",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.rank_points",
+            "relationship",
+            "template",
+            "**Очки:** {points}",
+            label="/rank: строка очков",
+            placeholders=("points",),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.rank_status",
+            "relationship",
+            "template",
+            "**Статус:** {status}",
+            label="/rank: строка статуса",
+            placeholders=("status",),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.rank_to_next",
+            "relationship",
+            "template",
+            "**До следующего статуса:** {remaining} очков",
+            label="/rank: сколько до следующего статуса",
+            placeholders=("remaining",),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.rank_exclusive_hint",
+            "relationship",
+            "str",
+            "Дальше — только место Единственного. Его придётся отвоевать.",
+            label="/rank: подсказка про Единственного",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.rank_frozen",
+            "relationship",
+            "str",
+            "⚠️ Начисление очков заморожено администратором.",
+            label="/rank: очки заморожены",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.no_status_short",
+            "relationship",
+            "str",
+            "без статуса",
+            label="/leaderboard·/relationship: короткое «без статуса»",
+            allowed_modes=STATIC_MODES,
+        ),
+        # --- отношения: /leaderboard ---
+        _spec(
+            "relationship.leaderboard_empty",
+            "relationship",
+            "str",
+            "Пока никто не заработал ни очка. Скучные.",
+            label="/leaderboard: таблица пуста",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.leaderboard_title",
+            "relationship",
+            "str",
+            "🏆 Кто ближе всех к Попосе",
+            label="/leaderboard: заголовок",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.leaderboard_footer",
+            "relationship",
+            "str",
+            "Очки за общение с ней · титул Единственного — у лидера от 350",
+            label="/leaderboard: футер",
+            allowed_modes=STATIC_MODES,
+        ),
+        # --- отношения: админ-группа ---
+        _spec(
+            "relationship.points_set",
+            "relationship",
+            "template",
+            "У {mention} теперь {points} очков ({status}).",
+            label="/relationship points: очки заданы",
+            placeholders=("mention", "points", "status"),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.freeze_frozen",
+            "relationship",
+            "str",
+            "заморожено ❄️",
+            label="/relationship freeze: состояние «заморожено»",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.freeze_active",
+            "relationship",
+            "str",
+            "снова идёт ▶️",
+            label="/relationship freeze: состояние «идёт»",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.freeze_set",
+            "relationship",
+            "template",
+            "Начисление очков для {mention}: {state}",
+            label="/relationship freeze: подтверждение",
+            placeholders=("mention", "state"),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "relationship.sync_done",
+            "relationship",
+            "str",
+            "Роль сверена с очками.",
+            label="/relationship sync: роль сверена",
+            allowed_modes=STATIC_MODES,
+        ),
+        # --- ошибки команд (глобальная сеть безопасности) ---
+        _spec(
+            "errors.cooldown",
+            "errors",
+            "template",
+            "Слишком часто. Попробуй через {seconds} с.",
+            label="Ошибка: кулдаун команды",
+            placeholders=("seconds",),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "errors.missing_perms",
+            "errors",
+            "str",
+            "У тебя нет прав на эту команду.",
+            label="Ошибка: у тебя нет прав",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "errors.bot_missing_perms",
+            "errors",
+            "str",
+            "Мне не хватает прав в этом канале, чтобы выполнить команду.",
+            label="Ошибка: боту не хватает прав",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "errors.no_dm",
+            "errors",
+            "str",
+            "Эта команда работает только на сервере.",
+            label="Ошибка: только на сервере",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "errors.check_failure",
+            "errors",
+            "str",
+            "Команда сейчас недоступна.",
+            label="Ошибка: команда недоступна",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "errors.internal",
+            "errors",
+            "template",
+            "Ой, что-то сломалось на моей стороне. Я записала ошибку — "
+            "назови код `{code}`, если повторится.",
+            label="Ошибка: внутренний сбой (с кодом)",
+            placeholders=("code",),
+            allowed_modes=STATIC_MODES,
+        ),
     )
 }
 

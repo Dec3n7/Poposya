@@ -14,12 +14,17 @@ from discord.ext import commands
 
 from src.application.staykick.di import StayKickContainer
 from src.config import Settings
-
-from . import staykick_phrases as phrases
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
 _LOOP_INTERVAL_SECONDS = 60
+
+# Подписи кнопок — структурная form-chrome (нужны при инстанцировании
+# DynamicItem, где персоны под рукой нет). Голос — банки фраз в реестре.
+# Альтернативы: ("Задержусь", "Один вечер, и всё") · ("Я с вами", "Транзит").
+BUTTON_STAY = "Останусь"
+BUTTON_LEAVE = "Я мимоходом — убери через 12 ч"
 
 
 def _now() -> datetime:
@@ -31,7 +36,7 @@ class _StayButton(discord.ui.DynamicItem[discord.ui.Button], template=r"sk:stay:
         self.guild_id = guild_id
         super().__init__(
             discord.ui.Button(
-                label=phrases.BUTTON_STAY,
+                label=BUTTON_STAY,
                 style=discord.ButtonStyle.success,
                 custom_id=f"sk:stay:{guild_id}",
             )
@@ -52,7 +57,7 @@ class _LeaveButton(discord.ui.DynamicItem[discord.ui.Button], template=r"sk:leav
         self.guild_id = guild_id
         super().__init__(
             discord.ui.Button(
-                label=phrases.BUTTON_LEAVE,
+                label=BUTTON_LEAVE,
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"sk:leave:{guild_id}",
             )
@@ -82,16 +87,22 @@ class StayKickCog(commands.Cog):
         container: StayKickContainer,
         settings: Settings,
         guild_settings=None,
+        persona=None,  # PersonaService — банки фраз (голос кога)
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
         self.gs = guild_settings
+        self.persona = persona if persona is not None else RegistryPersona()
         self._loop_task: asyncio.Task | None = None
 
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    async def _pick(self, guild_id: int, key: str) -> str:
+        """Случайная фраза из банка каталога персоны сервера."""
+        return await self.persona.render_block(guild_id, key, None) or ""
 
     async def cog_load(self) -> None:
         # клики по кнопкам переживают рестарт: регистрируем динамические items
@@ -111,7 +122,8 @@ class StayKickCog(commands.Cog):
         if member.bot or not self._cfg(member.guild.id, "staykick_enabled"):
             return
         try:
-            await member.send(phrases.pick(phrases.JOIN_PROMPTS), view=_make_view(member.guild.id))
+            prompt = await self._pick(member.guild.id, "staykick.join_prompts")
+            await member.send(prompt, view=_make_view(member.guild.id))
         except discord.Forbidden:
             pass  # ЛС закрыты — по дефолту остаётся, молчим
         except discord.HTTPException:
@@ -121,7 +133,7 @@ class StayKickCog(commands.Cog):
 
     async def on_stay(self, interaction: discord.Interaction, guild_id: int) -> None:
         await self.container.cancel_kick.execute(guild_id, interaction.user.id)
-        await self._close(interaction, phrases.pick(phrases.STAY_REPLIES))
+        await self._close(interaction, await self._pick(guild_id, "staykick.stay_replies"))
 
     async def on_leave(self, interaction: discord.Interaction, guild_id: int) -> None:
         await self.container.schedule_kick.execute(
@@ -131,7 +143,7 @@ class StayKickCog(commands.Cog):
             self._cfg(guild_id, "staykick_hours"),
             self.settings.staykick_remind_before_minutes,
         )
-        await self._close(interaction, phrases.pick(phrases.LEAVE_REPLIES))
+        await self._close(interaction, await self._pick(guild_id, "staykick.leave_replies"))
 
     @staticmethod
     async def _close(interaction: discord.Interaction, text: str) -> None:
@@ -156,7 +168,7 @@ class StayKickCog(commands.Cog):
                 continue  # модуль выключен на сервере
             member = self._member(pk.guild_id, pk.user_id)
             if member is not None:
-                await _dm_quiet(member, phrases.pick(phrases.REMIND_REPLIES))
+                await _dm_quiet(member, await self._pick(pk.guild_id, "staykick.remind_replies"))
 
         for pk in await self.container.pop_due_kicks.execute(now):
             if not self._cfg(pk.guild_id, "staykick_enabled"):
@@ -164,7 +176,7 @@ class StayKickCog(commands.Cog):
             member = self._member(pk.guild_id, pk.user_id)
             if member is None:
                 continue  # уже ушёл сам
-            await _dm_quiet(member, phrases.pick(phrases.FAREWELL_REPLIES))
+            await _dm_quiet(member, await self._pick(pk.guild_id, "staykick.farewell_replies"))
             try:
                 await member.guild.kick(member, reason="Авто-кик: выбрал «уйти»")
             except discord.HTTPException:

@@ -29,9 +29,12 @@ CONVERTED = [
     "src/infrastructure/discord/cogs/music/lyrics.py",
     "src/infrastructure/discord/cogs/music/service.py",
     "src/infrastructure/discord/cogs/music/views.py",
+    "src/infrastructure/discord/cogs/relationship.py",
     "src/infrastructure/discord/cogs/secret_room.py",
+    "src/infrastructure/discord/cogs/staykick.py",
     "src/infrastructure/discord/cogs/tempvoice/cog.py",
     "src/infrastructure/discord/cogs/tempvoice/views.py",
+    "src/infrastructure/discord/error_handler.py",
 ]
 
 # вызовы, в которых литералы = голос бота

@@ -11,9 +11,9 @@ from src.domain.relationship.events import ExclusiveTransferred, RelationshipRol
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
-
 
 
 class RelationshipCog(commands.Cog):
@@ -25,14 +25,20 @@ class RelationshipCog(commands.Cog):
         event_bus: IEventBus,
         settings: Settings | None = None,
         guild_settings=None,
+        persona=None,  # PersonaService — голос кога (каталог фраз)
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
         self.settings = settings
         self.gs = guild_settings
+        self.persona = persona if persona is not None else RegistryPersona()
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
         event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Команды /rank, /leaderboard и админ-группа /relationship гаснут разом,
@@ -82,23 +88,31 @@ class RelationshipCog(commands.Cog):
     async def rank(self, interaction: discord.Interaction) -> None:
         # defer сразу: чтение БД на холодном старте может превысить 3 секунды
         await interaction.response.defer(ephemeral=True)
-        info = await self.container.get_rank.execute(interaction.user.id, interaction.guild_id)
+        gid = interaction.guild_id
+        info = await self.container.get_rank.execute(interaction.user.id, gid)
         role_name = (
-            self._names(interaction.guild_id)[info.role_index]
+            self._names(gid)[info.role_index]
             if info.role_index is not None
-            else "без статуса (она тебя ещё не заметила)"
+            else self._p(gid, "relationship.rank_no_status")
         )
-        lines = [f"**Очки:** {info.points}", f"**Статус:** {role_name}"]
+        lines = [
+            self._p(gid, "relationship.rank_points", points=info.points),
+            self._p(gid, "relationship.rank_status", status=role_name),
+        ]
         if info.next_threshold is not None:
-            lines.append(f"**До следующего статуса:** {info.next_threshold - info.points} очков")
+            lines.append(
+                self._p(
+                    gid, "relationship.rank_to_next", remaining=info.next_threshold - info.points
+                )
+            )
         elif not info.is_exclusive:
-            lines.append("Дальше — только место Единственного. Его придётся отвоевать.")
+            lines.append(self._p(gid, "relationship.rank_exclusive_hint"))
         if info.frozen:
-            lines.append("⚠️ Начисление очков заморожено администратором.")
+            lines.append(self._p(gid, "relationship.rank_frozen"))
         embed = discord.Embed(
             title=f"✂️👁🖤 {interaction.user.display_name}",
             description="\n".join(lines),
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -108,9 +122,10 @@ class RelationshipCog(commands.Cog):
     @app_commands.guild_only()
     async def leaderboard(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        entries = await self.container.leaderboard.execute(interaction.guild_id, 10)
+        gid = interaction.guild_id
+        entries = await self.container.leaderboard.execute(gid, 10)
         if not entries:
-            await interaction.followup.send("Пока никто не заработал ни очка. Скучные.")
+            await interaction.followup.send(self._p(gid, "relationship.leaderboard_empty"))
             return
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines = []
@@ -118,17 +133,17 @@ class RelationshipCog(commands.Cog):
             member = interaction.guild.get_member(entry.user_id)
             name = member.display_name if member else f"<@{entry.user_id}>"
             role_name = (
-                self._names(interaction.guild_id)[entry.role_index]
+                self._names(gid)[entry.role_index]
                 if entry.role_index is not None
-                else "без статуса"
+                else self._p(gid, "relationship.no_status_short")
             )
             lines.append(f"{medals.get(i, f'`{i}.`')} **{name}** — {entry.points} · {role_name}")
         embed = discord.Embed(
-            title="🏆 Кто ближе всех к Попосе",
+            title=self._p(gid, "relationship.leaderboard_title"),
             description="\n".join(lines),
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
-        embed.set_footer(text="Очки за общение с ней · титул Единственного — у лидера от 350")
+        embed.set_footer(text=self._p(gid, "relationship.leaderboard_footer"))
         await interaction.followup.send(embed=embed)
 
     relationship_group = app_commands.Group(
@@ -143,15 +158,19 @@ class RelationshipCog(commands.Cog):
     async def set_points(
         self, interaction: discord.Interaction, user: discord.Member, points: int
     ) -> None:
-        info = await self.container.set_points.execute(user.id, interaction.guild_id, points)
+        gid = interaction.guild_id
+        info = await self.container.set_points.execute(user.id, gid, points)
         await self.role_sync.sync_member(interaction.guild, user.id, info.role_index)
         role_name = (
-            self._names(interaction.guild_id)[info.role_index]
+            self._names(gid)[info.role_index]
             if info.role_index is not None
-            else "без статуса"
+            else self._p(gid, "relationship.no_status_short")
         )
         await interaction.response.send_message(
-            f"У {user.mention} теперь {info.points} очков ({role_name}).",
+            self._p(
+                gid, "relationship.points_set", mention=user.mention, points=info.points,
+                status=role_name,
+            ),
             ephemeral=True,
         )
 
@@ -160,10 +179,14 @@ class RelationshipCog(commands.Cog):
     )
     @app_commands.describe(user="Пользователь")
     async def freeze(self, interaction: discord.Interaction, user: discord.Member) -> None:
-        frozen = await self.container.toggle_freeze.execute(user.id, interaction.guild_id)
-        state = "заморожено ❄️" if frozen else "снова идёт ▶️"
+        gid = interaction.guild_id
+        frozen = await self.container.toggle_freeze.execute(user.id, gid)
+        state = self._p(
+            gid, "relationship.freeze_frozen" if frozen else "relationship.freeze_active"
+        )
         await interaction.response.send_message(
-            f"Начисление очков для {user.mention}: {state}", ephemeral=True
+            self._p(gid, "relationship.freeze_set", mention=user.mention, state=state),
+            ephemeral=True,
         )
 
     @relationship_group.command(name="sync", description="Пересинхронизировать роль пользователя")
@@ -171,4 +194,6 @@ class RelationshipCog(commands.Cog):
     async def sync(self, interaction: discord.Interaction, user: discord.Member) -> None:
         info = await self.container.get_rank.execute(user.id, interaction.guild_id)
         await self.role_sync.sync_member(interaction.guild, user.id, info.role_index)
-        await interaction.response.send_message("Роль сверена с очками.", ephemeral=True)
+        await interaction.response.send_message(
+            self._p(interaction.guild_id, "relationship.sync_done"), ephemeral=True
+        )

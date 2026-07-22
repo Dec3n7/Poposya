@@ -6,23 +6,31 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.infrastructure.logging.context import LoggingContext
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
+# Голос сети безопасности — каталог фраз. По умолчанию дефолты реестра
+# (RegistryPersona); setup_error_handler подменяет на PersonaService бота.
+# on_app_command_error остаётся модульной функцией (её ставят на bot.tree.on_error
+# и импортируют тесты), поэтому персона хранится в модульном состоянии, а не в
+# замыкании.
+_persona = RegistryPersona()
 
-def _friendly_message(error: app_commands.AppCommandError) -> str | None:
+
+def _friendly_message(guild_id: int, error: app_commands.AppCommandError) -> str | None:
     """Ожидаемые ошибки прав/проверок/кулдаунов — это не баги: отвечаем
     спокойно и не шумим трейсом в логах. None = ошибка неожиданная."""
     if isinstance(error, app_commands.CommandOnCooldown):
-        return f"Слишком часто. Попробуй через {error.retry_after:.0f} с."
+        return str(_persona.phrase(guild_id, "errors.cooldown", seconds=f"{error.retry_after:.0f}"))
     if isinstance(error, app_commands.MissingPermissions):
-        return "У тебя нет прав на эту команду."
+        return str(_persona.phrase(guild_id, "errors.missing_perms"))
     if isinstance(error, app_commands.BotMissingPermissions):
-        return "Мне не хватает прав в этом канале, чтобы выполнить команду."
+        return str(_persona.phrase(guild_id, "errors.bot_missing_perms"))
     if isinstance(error, app_commands.NoPrivateMessage):
-        return "Эта команда работает только на сервере."
+        return str(_persona.phrase(guild_id, "errors.no_dm"))
     if isinstance(error, app_commands.CheckFailure):
-        return "Команда сейчас недоступна."
+        return str(_persona.phrase(guild_id, "errors.check_failure"))
     return None
 
 
@@ -45,7 +53,7 @@ async def on_app_command_error(
 ) -> None:
     """Единая сеть безопасности для всех слеш-команд. Коги валидируют свои
     ожидаемые случаи сами; сюда долетает то, что они не поймали."""
-    friendly = _friendly_message(error)
+    friendly = _friendly_message(interaction.guild_id, error)
     if friendly is not None:
         await _reply(interaction, friendly)
         return
@@ -69,12 +77,13 @@ async def on_app_command_error(
                 "guild_id": interaction.guild_id,
             },
         )
-    await _reply(
-        interaction,
-        "Ой, что-то сломалось на моей стороне. Я записала ошибку — "
-        f"назови код `{code}`, если повторится.",
-    )
+    await _reply(interaction, str(_persona.phrase(interaction.guild_id, "errors.internal", code=code)))
 
 
-def setup_error_handler(bot: commands.Bot) -> None:
+def setup_error_handler(bot: commands.Bot, persona=None) -> None:
+    """Ставит глобальный обработчик и (опционально) подключает голос персоны.
+    Без persona остаются дефолты реестра (RegistryPersona) — для тестов."""
+    global _persona
+    if persona is not None:
+        _persona = persona
     bot.tree.on_error = on_app_command_error
