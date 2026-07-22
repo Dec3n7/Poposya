@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
+from src.application.persona.registry import PHRASE_SPECS
 from src.application.tempvoice.use_cases import ClaimResult
 from src.domain.tempvoice.entities import TempChannel
-from src.infrastructure.discord.cogs.tempvoice import phrases
 from src.infrastructure.discord.cogs.tempvoice.cog import TempVoiceCog
 from src.infrastructure.discord.cogs.tempvoice.views import (
     TempVoicePanel,
@@ -151,7 +151,7 @@ async def test_button_outside_temp_without_voice_refused():
     cog, _ = make_cog(temp_ids=())
     interaction = _interaction()
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == phrases.NOT_IN_VOICE
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_voice"].default
 
 
 # --- замок и видимость ---
@@ -192,7 +192,7 @@ async def test_permission_failure_is_explained():
     channel.set_permissions = AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403), "no"))
     interaction = _interaction(channel=channel)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == phrases.ACTION_FAILED
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.action_failed"].default
     interaction.response.edit_message.assert_not_awaited()
 
 
@@ -252,7 +252,7 @@ async def test_limit_rejects_garbage_and_out_of_range():
     for raw in ("много", "-1", "100"):
         interaction = _interaction()
         await cog.apply_limit(interaction, raw)
-        assert interaction.response.send_message.await_args.args[0] == phrases.LIMIT_BAD
+        assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.limit_bad"].default
         interaction.channel.edit.assert_not_awaited()
 
 
@@ -281,7 +281,7 @@ async def test_kick_absent_member_says_so():
     interaction = _interaction(channel=_channel(members=[]))
     await cog.apply_member_action(interaction, "kick", target)
     target.move_to.assert_not_awaited()
-    assert interaction.response.send_message.await_args.args[0] == phrases.NOT_HERE
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_here"].default
 
 
 async def test_permit_grants_connect():
@@ -318,7 +318,7 @@ async def test_cannot_target_self():
     interaction = _interaction(user_id=OWNER_ID)
     await cog.apply_member_action(interaction, "kick", owner)
     owner.move_to.assert_not_awaited()
-    assert interaction.response.send_message.await_args.args[0] == phrases.SELF_TARGET
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.self_target"].default
 
 
 # --- «Забрать» ---
@@ -350,7 +350,7 @@ async def test_claim_refusal_explains_reason():
     await cog.on_claim(interaction)
     assert (
         interaction.response.send_message.await_args.args[0]
-        == phrases.CLAIM_REFUSALS["owner_present"]
+        == PHRASE_SPECS["tempvoice.claim_refusals"].default["owner_present"]
     )
     interaction.response.edit_message.assert_not_awaited()
 
@@ -391,7 +391,7 @@ async def test_hub_button_without_voice_explains():
     cog, _ = make_cog()
     interaction = _interaction(channel=_channel(channel_id=HUB_ID), in_voice=None)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == phrases.NOT_IN_VOICE
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_voice"].default
 
 
 async def test_hub_button_from_ordinary_voice_explains():
@@ -399,7 +399,7 @@ async def test_hub_button_from_ordinary_voice_explains():
     ordinary = _channel(channel_id=777)  # обычный войс, не каморка
     interaction = _interaction(channel=_channel(channel_id=HUB_ID), in_voice=ordinary)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == phrases.NOT_IN_TEMP
+    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_temp"].default
 
 
 async def test_hub_button_respects_ownership():
@@ -470,7 +470,7 @@ async def test_hub_panel_posted_when_absent():
     hub = _hub_with_history([_chatter(), _chatter()])
     await cog._ensure_hub_panel(_guild_with_hub(hub))
     hub.send.assert_awaited_once()
-    assert hub.send.await_args.kwargs["embed"].title == phrases.HUB_TITLE
+    assert hub.send.await_args.kwargs["embed"].title == PHRASE_SPECS["tempvoice.hub_title"].default
 
 
 async def test_hub_panel_not_duplicated_when_present():

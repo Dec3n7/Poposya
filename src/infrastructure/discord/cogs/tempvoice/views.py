@@ -13,9 +13,13 @@ bot.add_view(TempVoicePanel()) регистрирует вид как МАРШР
 
 import discord
 
-from . import phrases
+from src.infrastructure.persona_service import RegistryPersona
 
 PANEL_COLOR = 0x9B59B6
+
+
+def _resolve(persona):
+    return persona if persona is not None else RegistryPersona()
 
 
 def panel_state(channel: discord.VoiceChannel) -> tuple[bool, bool]:
@@ -25,15 +29,20 @@ def panel_state(channel: discord.VoiceChannel) -> tuple[bool, bool]:
     return overwrite.connect is False, overwrite.view_channel is False
 
 
-def hub_embed() -> discord.Embed:
+def hub_embed(guild_id: int, persona=None) -> discord.Embed:
     """Витрина в чате хаба: одна на сервер, поэтому состояния конкретной
     каморки показать не может — только объясняет, что тут происходит."""
+    p = _resolve(persona)
     embed = discord.Embed(
-        title=phrases.HUB_TITLE,
-        description=phrases.HUB_INTRO,
+        title=str(p.phrase(guild_id, "tempvoice.hub_title")),
+        description=str(p.phrase(guild_id, "tempvoice.hub_intro")),
         color=PANEL_COLOR,
     )
-    embed.add_field(name="Кнопки", value=phrases.HUB_HOW, inline=False)
+    embed.add_field(
+        name=str(p.phrase(guild_id, "tempvoice.hub_field_buttons")),
+        value=str(p.phrase(guild_id, "tempvoice.hub_how")),
+        inline=False,
+    )
     return embed
 
 
@@ -49,19 +58,32 @@ def is_panel(message: discord.Message, bot_user_id: int) -> bool:
     return False
 
 
-def panel_embed(channel: discord.VoiceChannel, owner_id: int) -> discord.Embed:
+def panel_embed(channel: discord.VoiceChannel, owner_id: int, persona=None) -> discord.Embed:
+    p = _resolve(persona)
+    gid = channel.guild.id
     locked, hidden = panel_state(channel)
     embed = discord.Embed(
         title=channel.name,
-        description=phrases.PANEL_INTRO,
+        description=str(p.phrase(gid, "tempvoice.panel_intro")),
         color=PANEL_COLOR,
     )
-    embed.add_field(name="Дверь", value="🔒 закрыта" if locked else "🔓 открыта")
-    embed.add_field(name="Видимость", value="🙈 скрыта" if hidden else "👁 видна всем")
     embed.add_field(
-        name="Мест", value="без лимита" if not channel.user_limit else str(channel.user_limit)
+        name=str(p.phrase(gid, "tempvoice.field_door")),
+        value=str(p.phrase(gid, "tempvoice.door_locked" if locked else "tempvoice.door_open")),
     )
-    embed.add_field(name="Хозяин", value=f"<@{owner_id}>")
+    embed.add_field(
+        name=str(p.phrase(gid, "tempvoice.field_visibility")),
+        value=str(p.phrase(gid, "tempvoice.vis_hidden" if hidden else "tempvoice.vis_shown")),
+    )
+    embed.add_field(
+        name=str(p.phrase(gid, "tempvoice.field_slots")),
+        value=(
+            str(p.phrase(gid, "tempvoice.slots_unlimited"))
+            if not channel.user_limit
+            else str(channel.user_limit)
+        ),
+    )
+    embed.add_field(name=str(p.phrase(gid, "tempvoice.field_owner")), value=f"<@{owner_id}>")
     return embed
 
 
