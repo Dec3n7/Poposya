@@ -140,8 +140,7 @@ class FindsCog(commands.Cog):
         self._tasks.append(asyncio.create_task(self._spawn_loop()))
         self._tasks.append(asyncio.create_task(self._restore_live_finds()))
         logger.info(
-            "Находки: цикл спавна запущен (интервал %d–%d ч) · "
-            "условие «сервер живой» ОТКЛЮЧЕНО (тест)",
+            "Находки: цикл спавна запущен (интервал %d–%d ч)",
             self.settings.finds_min_interval_hours,
             self.settings.finds_max_interval_hours,
         )
@@ -177,12 +176,13 @@ class FindsCog(commands.Cog):
                     logger.exception("Спавн находки упал", extra={"guild_id": guild.id})
 
     async def _try_spawn(self, guild: discord.Guild, force: bool = False) -> NightFind | None:
-        # ВРЕМЕННО для визуальных тестов: условие «сервер живой» отключено,
-        # чтобы находки спавнились даже в тихом канале. Вернуть, когда бот
-        # заработает для всех:
-        #   last = self._main_last_activity.get(guild.id)
-        #   if last is None or time.monotonic() - last > _ACTIVITY_WINDOW_SECONDS:
-        #       return  # сервер спит — Попося гуляет молча
+        # «сервер живой»: находку спавним только если в основном канале недавно
+        # была активность — иначе Попося гуляет молча. Форс из /spawnfind
+        # (админ-тест) этот гейт игнорирует, как и проверку настроения ниже.
+        if not force:
+            last = self._main_last_activity.get(guild.id)
+            if last is None or time.monotonic() - last > _ACTIVITY_WINDOW_SECONDS:
+                return None  # сервер спит — Попося гуляет молча
         channel = self._announce_channel(guild)
         if channel is None:
             return None
