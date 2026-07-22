@@ -102,8 +102,11 @@ class PhraseResolver:
     def _phrase_override(self, guild_id: int, key: str) -> PersonaPhrase | None:
         return None
 
-    def phrase(self, guild_id: int, key: str, **variables: object) -> object:
+    def phrase(self, guild_id: int, key: str, /, **variables: object) -> object:
         """Разрешённое значение фразы: override персоны → дефолт PHRASE_SPECS.
+
+        guild_id/key — positional-only: иначе плейсхолдер с именем «key»/
+        «guild_id» (например у /config) столкнётся с параметром метода.
 
         Для str/template с variables делает .format(**variables) (лишние
         переменные игнорируются — статика и AI-инструкция блока получают общий
@@ -129,6 +132,7 @@ class PhraseResolver:
         guild_id: int,
         key: str,
         ai_fn: "Callable[[str], Awaitable[str]] | None" = None,
+        /,
         **variables: object,
     ) -> str | None:
         """Блок «AI с фолбэком на статику» — общий путь голосовых мест когов.

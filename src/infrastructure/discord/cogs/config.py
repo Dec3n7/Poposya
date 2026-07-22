@@ -20,6 +20,7 @@ from src.infrastructure.guild_settings import (
     SETTING_SPECS,
     GuildSettingsService,
 )
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +104,17 @@ class _LimitsModal(discord.ui.Modal):
 
 
 class ConfigCog(commands.Cog):
-    def __init__(self, bot: commands.Bot, guild_settings: GuildSettingsService):
+    def __init__(
+        self, bot: commands.Bot, guild_settings: GuildSettingsService, persona=None
+    ):
         self.bot = bot
         self.settings = guild_settings
+        self.persona = persona if persona is not None else RegistryPersona()
+
+    def _p(self, guild_id: int, key: str, /, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера. guild_id/key —
+        позиционные (positional-only): у настроек есть плейсхолдер {key}."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     config_group = app_commands.Group(
         name="config",
@@ -155,15 +164,20 @@ class ConfigCog(commands.Cog):
         return spec
 
     async def _apply(self, interaction: discord.Interaction, spec, raw: str) -> None:
+        gid = interaction.guild_id
         try:
-            parsed = await self.settings.set(interaction.guild_id, spec.key, raw)
+            parsed = await self.settings.set(gid, spec.key, raw)
         except ValueError as exc:
             await interaction.response.send_message(
-                f"Не приняла: {exc}. `{spec.key}` — {spec.label}.", ephemeral=True
+                self._p(
+                    gid, "config.apply_rejected", error=exc, key=spec.key, label=spec.label
+                ),
+                ephemeral=True,
             )
             return
         await interaction.response.send_message(
-            f"✅ **{spec.key}** = {_fmt(spec, parsed)} (для этого сервера).", ephemeral=True
+            self._p(gid, "config.apply_ok", key=spec.key, value=_fmt(spec, parsed)),
+            ephemeral=True,
         )
         logger.info(
             "Настройка сервера изменена",
@@ -188,37 +202,43 @@ class ConfigCog(commands.Cog):
             mark = "🔧" if self.settings.is_override(gid, spec.key) else "·"
             lines.append(f"{mark} **{spec.key}** — {_fmt(spec, value)}  *{spec.label}*")
         embed = discord.Embed(
-            title="⚙️ Настройки сервера",
+            title=self._p(gid, "config.list_title"),
             description="\n".join(lines)[:4000],
             color=accent(gid),
         )
-        embed.set_footer(text="🔧 — переопределено на сервере · · — глобальный дефолт")
+        embed.set_footer(text=self._p(gid, "config.list_footer"))
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @config_group.command(name="show", description="Подробно об одной настройке")
     @app_commands.describe(key="Ключ настройки")
     @app_commands.autocomplete(key=_key_autocomplete)
     async def config_show(self, interaction: discord.Interaction, key: str) -> None:
+        gid = interaction.guild_id
         spec = SETTING_SPECS.get(key)
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой настройки. Смотри `/config list`.", ephemeral=True
+                self._p(gid, "config.no_setting"), ephemeral=True
             )
             return
-        gid = interaction.guild_id
         current = self.settings.current(gid, key)
         default = self.settings.default(key)
         overridden = self.settings.is_override(gid, key)
         rng = ""
         if spec.kind in ("int", "float") and (spec.min is not None or spec.max is not None):
-            rng = f"\n**Диапазон:** {spec.min}–{spec.max}"
+            rng = self._p(gid, "config.show_range", min=spec.min, max=spec.max)
+        note = self._p(
+            gid, "config.show_overridden" if overridden else "config.show_default_note"
+        )
         embed = discord.Embed(
             title=f"⚙️ {spec.key}",
-            description=(
-                f"{spec.label}\n\n"
-                f"**Сейчас:** {_fmt(spec, current)}"
-                + (" 🔧 (переопределено)" if overridden else " (дефолт)")
-                + f"\n**Дефолт:** {_fmt(spec, default)}{rng}"
+            description=self._p(
+                gid,
+                "config.show_body",
+                label=spec.label,
+                current=_fmt(spec, current),
+                note=note,
+                default=_fmt(spec, default),
+                range=rng,
             ),
             color=accent(gid),
         )
@@ -240,7 +260,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"channel"})
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой настройки-канала. Смотри `/config list`.", ephemeral=True
+                self._p(interaction.guild_id, "config.no_channel_setting"), ephemeral=True
             )
             return
         await self._apply(interaction, spec, str(channel.id) if channel else "0")
@@ -252,7 +272,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"bool"})
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой вкл/выкл-настройки. Смотри `/config list`.", ephemeral=True
+                self._p(interaction.guild_id, "config.no_bool_setting"), ephemeral=True
             )
             return
         await self._apply(interaction, spec, "1" if value else "0")
@@ -264,7 +284,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"int", "float"})
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой числовой настройки. Смотри `/config list`.", ephemeral=True
+                self._p(interaction.guild_id, "config.no_number_setting"), ephemeral=True
             )
             return
         # целые ключи принимают целое: 8.0 -> "8"; дробное для int-ключа
@@ -277,28 +297,30 @@ class ConfigCog(commands.Cog):
     async def _apply_roles(
         self, interaction: discord.Interaction, thresholds_text: str, names_text: str
     ) -> None:
+        gid = interaction.guild_id
         try:
             thresholds = _parse_int_list(thresholds_text)
             names = _parse_str_list(names_text)
         except ValueError:
             await interaction.response.send_message(
-                "Пороги — только целые числа через запятую/пробел.", ephemeral=True
+                self._p(gid, "config.roles_bad_thresholds"), ephemeral=True
             )
             return
         try:
             await self.settings.set_many(
-                interaction.guild_id,
+                gid,
                 {
                     "relationship_role_thresholds": thresholds,
                     "relationship_role_names": names,
                 },
             )
         except ValueError as exc:
-            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "config.rejected_simple", error=exc), ephemeral=True
+            )
             return
         await interaction.response.send_message(
-            f"✅ Роли обновлены: {len(thresholds)} порогов и {len(names)} имён "
-            "(для этого сервера).",
+            self._p(gid, "config.roles_updated", thresholds=len(thresholds), names=len(names)),
             ephemeral=True,
         )
         logger.info(
@@ -307,18 +329,23 @@ class ConfigCog(commands.Cog):
         )
 
     async def _apply_limits(self, interaction: discord.Interaction, limits_text: str) -> None:
+        gid = interaction.guild_id
         try:
             limits = _parse_level_limits(limits_text)
         except ValueError as exc:
-            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "config.rejected_simple", error=exc), ephemeral=True
+            )
             return
         try:
-            await self.settings.set_many(interaction.guild_id, {"ai_rate_limits_by_level": limits})
+            await self.settings.set_many(gid, {"ai_rate_limits_by_level": limits})
         except ValueError as exc:
-            await interaction.response.send_message(f"Не приняла: {exc}.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "config.rejected_simple", error=exc), ephemeral=True
+            )
             return
         await interaction.response.send_message(
-            f"✅ Лимиты реплик обновлены ({len(limits)} уровней, для этого сервера).",
+            self._p(gid, "config.limits_updated", count=len(limits)),
             ephemeral=True,
         )
 
@@ -330,7 +357,7 @@ class ConfigCog(commands.Cog):
             await self.settings.reset(gid, "relationship_role_thresholds")
             await self.settings.reset(gid, "relationship_role_names")
             await interaction.response.send_message(
-                "↩️ Пороги и имена ролей сброшены к дефолту.", ephemeral=True
+                self._p(gid, "config.roles_reset"), ephemeral=True
             )
             return
         gs = self.settings.resolved(gid)
@@ -345,7 +372,7 @@ class ConfigCog(commands.Cog):
         if reset:
             await self.settings.reset(gid, "ai_rate_limits_by_level")
             await interaction.response.send_message(
-                "↩️ Лимиты реплик сброшены к дефолту.", ephemeral=True
+                self._p(gid, "config.limits_reset"), ephemeral=True
             )
             return
         limits = self.settings.resolved(gid).ai_rate_limits_by_level
@@ -356,19 +383,22 @@ class ConfigCog(commands.Cog):
     @app_commands.describe(key="Ключ настройки")
     @app_commands.autocomplete(key=_key_autocomplete)
     async def config_reset(self, interaction: discord.Interaction, key: str) -> None:
+        gid = interaction.guild_id
         spec = SETTING_SPECS.get(key)
         if spec is None:
             await interaction.response.send_message(
-                "Нет такой настройки. Смотри `/config list`.", ephemeral=True
+                self._p(gid, "config.no_setting"), ephemeral=True
             )
             return
-        removed = await self.settings.reset(interaction.guild_id, key)
+        removed = await self.settings.reset(gid, key)
         default = self.settings.default(key)
         if removed:
             await interaction.response.send_message(
-                f"↩️ **{key}** сброшено к дефолту: {_fmt(spec, default)}.", ephemeral=True
+                self._p(gid, "config.reset_done", key=key, value=_fmt(spec, default)),
+                ephemeral=True,
             )
         else:
             await interaction.response.send_message(
-                f"**{key}** и так на дефолте: {_fmt(spec, default)}.", ephemeral=True
+                self._p(gid, "config.reset_noop", key=key, value=_fmt(spec, default)),
+                ephemeral=True,
             )

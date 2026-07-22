@@ -149,7 +149,7 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
-        await self.add_cog(ConfigCog(self, self.container.guild_settings))
+        await self.add_cog(ConfigCog(self, self.container.guild_settings, persona=persona))
         await self.add_cog(StayKickCog(self, self.container.staykick, self.container.settings, gs))
         await self.add_cog(
             TempVoiceCog(self, self.container.tempvoice, self.container.settings, gs, persona=persona)
