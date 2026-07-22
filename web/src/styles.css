@@ -241,14 +241,6 @@ a {
   color: var(--fg-faint);
   margin: var(--sp-5) 0 var(--sp-2);
 }
-/* заголовок секции с переключателем справа (напр. хитмап: Сообщения/Войс) */
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
 .spinner {
   width: 22px;
   height: 22px;
@@ -935,55 +927,6 @@ a {
 .tab.active {
   color: var(--fg);
   border-bottom-color: var(--accent);
-}
-
-/* --- dashboard: stat cards --- */
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-.stat-card {
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  padding: var(--sp-4);
-}
-.stat-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-.stat-value {
-  font-size: 30px;
-  font-weight: 600;
-  color: var(--accent-hover);
-  line-height: 1;
-}
-.stat-delta {
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.stat-delta.up {
-  color: var(--success);
-}
-.stat-delta.down {
-  color: var(--danger);
-}
-.stat-label {
-  color: var(--fg-dim);
-  font-size: 13px;
-  margin-top: 6px;
-}
-.sparkline {
-  display: block;
-  width: 100%;
-  height: 34px;
-  margin-top: var(--sp-3);
-  overflow: visible;
 }
 
 /* --- dashboard: leaderboard --- */
@@ -1750,7 +1693,6 @@ a {
 
 /* --- стеклянный материал: панели над фото --- */
 .card,
-.stat-card,
 .rail,
 .guild-chip {
   --mx: 50%;
@@ -1778,7 +1720,6 @@ a {
 
 /* реагирующий кант: грань светится ярче со стороны курсора (магента→белый) */
 .card::before,
-.stat-card::before,
 .rail::before,
 .guild-chip::before {
   content: "";
@@ -1804,17 +1745,9 @@ a {
   transition: opacity 0.3s var(--ease);
 }
 .card:hover::before,
-.stat-card:hover::before,
 .rail:hover::before,
 .guild-chip:hover::before {
   opacity: 1;
-}
-
-/* лёгкий наклон к курсору (значения из glass.ts) */
-.tilt {
-  transform: perspective(1000px) rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
-  transform-style: preserve-3d;
-  transition: transform 0.3s var(--ease);
 }
 
 /* --- оболочка: сайдбар + сцена --- */
@@ -2042,12 +1975,6 @@ a {
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 4px 0 0;
-}
-
-/* --- стат-карточки под наклон --- */
-.stat-card {
-  border-radius: var(--radius);
-  padding: var(--sp-4);
 }
 
 /* --- пилюли/бейджи в стеклянном ключе --- */
@@ -2334,13 +2261,6 @@ a {
 }
 
 /* --- сегмент-контрол (период трендов, вкладки лидерборда) --- */
-.dash-head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-3);
-}
 .seg {
   display: inline-flex;
   padding: 3px;
