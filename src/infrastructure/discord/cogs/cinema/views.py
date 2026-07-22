@@ -35,9 +35,12 @@ class MoviePickView(discord.ui.View):
 
         async def on_pick(interaction: discord.Interaction) -> None:
             info = results[int(select.values[0])]
-            await interaction.response.edit_message(
-                content=f"Беру: **{_trim(info.title, 100)}**", view=None
+            content = str(
+                cog.persona.phrase(
+                    interaction.guild_id, "cinema.pick_taken", title=_trim(info.title, 100)
+                )
             )
+            await interaction.response.edit_message(content=content, view=None)
             await cog.add_entry(interaction, info)
 
         select.callback = on_pick

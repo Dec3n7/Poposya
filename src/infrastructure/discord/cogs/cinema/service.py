@@ -17,6 +17,7 @@ from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry, MovieNight
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.scheduler import DeferredScheduler
+from src.infrastructure.persona_service import RegistryPersona
 
 from .formatting import _SCORE_RE, _title_of, _trim, _ts
 from .forum import CinemaForum
@@ -37,6 +38,7 @@ class CinemaService:
         forum: CinemaForum,
         watched_view: ViewFactory,
         rating_view: ViewFactory,
+        persona=None,
     ):
         self._cinema = cinema
         self._bot = bot
@@ -46,6 +48,12 @@ class CinemaService:
         self._forum = forum
         self._watched_view = watched_view
         self._rating_view = rating_view
+        # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
+        self._persona = persona if persona is not None else RegistryPersona()
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self._persona.phrase(guild_id, key, **vars))
 
     async def disable_message(self, channel_id: int, message_id: int) -> None:
         if not channel_id or not message_id:
@@ -70,12 +78,10 @@ class CinemaService:
         channel = self._bot.get_channel(night.channel_id)
         if channel is None:
             return
+        gid = night.guild_id
         if result.status == "no_votes":
             try:
-                await channel.send(
-                    "🍿 Никто не проголосовал — киновечер отменяется. "
-                    "Посмотрю одна. Мне не привыкать."
-                )
+                await channel.send(self._p(gid, "cinema.poll_no_votes"))
             except discord.HTTPException:
                 pass
             return
@@ -84,25 +90,33 @@ class CinemaService:
         if self._chat is not None:
             try:
                 comment = await self._chat.freeform_remark(
-                    night.guild_id,
-                    f"Киноклуб сервера голосованием выбрал фильм для совместного "
-                    f"просмотра: «{winner.title}»"
-                    + (f" ({winner.year})" if winner.year else "")
-                    + ". Прокомментируй выбор одной-двумя фразами в своём стиле.",
+                    gid,
+                    self._p(
+                        gid,
+                        "cinema.winner_comment_instruction",
+                        title=winner.title,
+                        year=f" ({winner.year})" if winner.year else "",
+                    ),
                     datetime.now(UTC),
-                    mood=self._mood.get(night.guild_id),
+                    mood=self._mood.get(gid),
                 )
             except Exception:
                 logger.warning("Комментарий к победителю не сгенерировался", exc_info=True)
         votes_total = sum((result.votes or {}).values())
         embed = discord.Embed(
-            title=f"🏆 Смотрим: {_trim(_title_of(winner), 200)}",
+            title=self._p(gid, "cinema.winner_title", title=_trim(_title_of(winner), 200)),
             description=(
                 (f"{_trim(winner.overview, 300)}\n\n" if winner.overview else "")
-                + f"**Сеанс:** {_ts(night.scheduled_at, 'F')} ({_ts(night.scheduled_at)})\n"
-                + f"-# Голосов: {votes_total}. После просмотра жмите кнопку ниже."
+                + self._p(
+                    gid,
+                    "cinema.night_session",
+                    when=_ts(night.scheduled_at, "F"),
+                    rel=_ts(night.scheduled_at),
+                )
+                + "\n"
+                + self._p(gid, "cinema.winner_votes", votes=votes_total)
             )[:4000],
-            color=accent(night.guild_id),
+            color=accent(gid),
         )
         if winner.poster_url:
             embed.set_thumbnail(url=winner.poster_url)
@@ -133,8 +147,7 @@ class CinemaService:
             return
         try:
             await channel.send(
-                f"🍿 Время. Смотрим **{_trim(_title_of(winner), 120)}** — "
-                "как закончите, жмите «Мы посмотрели» под анонсом. Я уже с чаем."
+                self._p(night.guild_id, "cinema.remind", title=_trim(_title_of(winner), 120))
             )
         except discord.HTTPException:
             pass
@@ -144,18 +157,15 @@ class CinemaService:
     async def post_rating_message(
         self, channel: discord.abc.Messageable, entry: MovieEntry
     ) -> None:
+        gid = entry.guild_id
         embed = discord.Embed(
-            title=f"⭐ Оцениваем: {_trim(_title_of(entry), 200)}",
-            description=(
-                "Кнопки 1–10 — твоя оценка (можно передумать), "
-                "✍️ **Отзыв** — пара слов рецензии.\n"
-                f"Итоги {_ts(entry.rating_ends_at)}."
-            ),
-            color=accent(entry.guild_id),
+            title=self._p(gid, "cinema.rating_title", title=_trim(_title_of(entry), 200)),
+            description=self._p(gid, "cinema.rating_body", when=_ts(entry.rating_ends_at)),
+            color=accent(gid),
         )
         if entry.poster_url:
             embed.set_thumbnail(url=entry.poster_url)
-        embed.set_footer(text="Оценок: 0 · Отзывов: 0")
+        embed.set_footer(text=self._p(gid, "cinema.rating_footer", count=0, reviews=0))
         try:
             message = await channel.send(embed=embed, view=self._rating_view())
         except discord.HTTPException:
@@ -176,11 +186,12 @@ class CinemaService:
         try:
             text = await self._chat.freeform_remark(
                 guild_id,
-                f"Киноклуб сервера посмотрел фильм «{entry.title}»"
-                + (f" ({entry.year})" if entry.year else "")
-                + ". Ты тоже смотрела. Ответь СТРОГО в формате «N/10 — комментарий», "
-                "где N — твоя оценка от 1 до 10, а комментарий — одна колкая "
-                "фраза-рецензия в твоём стиле.",
+                self._p(
+                    guild_id,
+                    "cinema.verdict_instruction",
+                    title=entry.title,
+                    year=f" ({entry.year})" if entry.year else "",
+                ),
                 datetime.now(UTC),
                 mood=self._mood.get(guild_id),
             )
@@ -216,8 +227,12 @@ class CinemaService:
             if channel is not None:
                 try:
                     await channel.send(
-                        f"🎬 **{_trim(_title_of(final), 100)}** — в золотом фонде. "
-                        f"Итоги и рецензии: {forum_link}",
+                        self._p(
+                            final.guild_id,
+                            "cinema.finalized_forum",
+                            title=_trim(_title_of(final), 100),
+                            link=forum_link,
+                        ),
                         allowed_mentions=discord.AllowedMentions.none(),
                     )
                 except discord.HTTPException:

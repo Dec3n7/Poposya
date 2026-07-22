@@ -66,7 +66,7 @@ class CinemaCog(commands.Cog):
         self.persona = persona if persona is not None else RegistryPersona()
         self._scheduler = DeferredScheduler("cinema")
         self._restored = False
-        self.forum = CinemaForum(self.bot, self.cinema, self._cfg)
+        self.forum = CinemaForum(self.bot, self.cinema, self._cfg, persona=self.persona)
         self.service = CinemaService(
             cinema=self.cinema,
             bot=self.bot,
@@ -76,6 +76,7 @@ class CinemaCog(commands.Cog):
             forum=self.forum,
             watched_view=lambda: CinemaWatchedView(self),
             rating_view=lambda: CinemaRatingView(self),
+            persona=self.persona,
         )
 
     def _cfg(self, guild_id: int, key: str):

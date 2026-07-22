@@ -10,6 +10,7 @@ import discord
 from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.persona_service import RegistryPersona
 
 from .formatting import _title_of, _trim
 
@@ -25,10 +26,17 @@ class CinemaForum:
         bot: discord.Client,
         cinema: CinemaContainer,
         cfg: Callable[[int, str], object],
+        persona=None,
     ):
         self._bot = bot
         self._cinema = cinema
         self._cfg = cfg
+        # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
+        self._persona = persona if persona is not None else RegistryPersona()
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self._persona.phrase(guild_id, key, **vars))
 
     def summary_embed(self, final: MovieEntry, avg: float | None, count: int) -> discord.Embed:
         """Красивая сводка по фильму: оценка сервера + вердикт Попоси."""
@@ -38,21 +46,26 @@ class CinemaForum:
             color=accent(final.guild_id),
             timestamp=final.watched_at,
         )
+        gid = final.guild_id
         embed.add_field(
-            name="⭐ Оценка сервера",
-            value=(f"**{avg}/10** · {count} оцен." if avg is not None else "оценок нет"),
+            name=self._p(gid, "cinema.summary_score_field"),
+            value=(
+                self._p(gid, "cinema.summary_score_value", avg=avg, count=count)
+                if avg is not None
+                else self._p(gid, "cinema.summary_no_ratings")
+            ),
             inline=True,
         )
         if final.poposya_score is not None or final.poposya_review:
             head = f"**{final.poposya_score}/10** — " if final.poposya_score is not None else ""
             embed.add_field(
-                name="✂️👁🖤 Вердикт Попоси",
+                name=self._p(gid, "cinema.summary_verdict_field"),
                 value=_trim(f"{head}{final.poposya_review}", 500) or "—",
                 inline=False,
             )
         if final.poster_url:
             embed.set_thumbnail(url=final.poster_url)
-        embed.set_footer(text="Золотой фонд · /movie top")
+        embed.set_footer(text=self._p(gid, "cinema.summary_footer"))
         return embed
 
     async def publish(self, final: MovieEntry, embed: discord.Embed) -> str | None:
