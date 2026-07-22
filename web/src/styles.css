@@ -2772,7 +2772,6 @@ a {
   border-radius: 18px;
   background: color-mix(in srgb, var(--elevated) 82%, transparent);
   border: 1px solid var(--border-soft);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
   will-change: transform, opacity;
 }
 .pod3-av {
