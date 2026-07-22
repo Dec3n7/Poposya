@@ -17,7 +17,7 @@ export function Coverflow({ entries }: { entries: LeaderEntry[] }) {
     const N = cards.length;
     if (N === 0) return;
 
-    const SPREAD = 150; // px между центром и боковой
+    const SPREAD = 108; // px между центром и боковой
     const BASE = 0.32; // карточек/сек
     const W = 1.9; // видимый радиус в карточках
     let pos = 0;

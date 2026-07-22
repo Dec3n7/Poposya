@@ -2756,29 +2756,33 @@ a {
   perspective: 950px;
   transform-style: preserve-3d;
   overflow: hidden;
+  /* мягкая маска по краям: боковые карточки растворяются, а не режутся ровной
+     линией по границе сцены */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
 .pod3 {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 190px;
+  width: 148px;
   transform: translate(-50%, -50%);
   text-align: center;
-  padding: 24px 18px 20px;
-  border-radius: 20px;
+  padding: 18px 12px 15px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--elevated) 82%, transparent);
   border: 1px solid var(--border-soft);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
   will-change: transform, opacity;
 }
 .pod3-av {
-  width: 82px;
-  height: 82px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
-  margin: 0 auto 14px;
+  margin: 0 auto 11px;
   display: grid;
   place-items: center;
-  font-size: 33px;
+  font-size: 25px;
   font-weight: 700;
   color: #0b1120;
   overflow: hidden;
@@ -2790,14 +2794,14 @@ a {
 }
 .pod3-name {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pod3-role {
-  font-size: 13.5px;
-  margin-top: 4px;
+  font-size: 12px;
+  margin-top: 3px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -2805,8 +2809,8 @@ a {
 }
 .pod3-pts {
   font-weight: 700;
-  font-size: 22px;
-  margin-top: 11px;
+  font-size: 18px;
+  margin-top: 9px;
   font-variant-numeric: tabular-nums;
 }
 
