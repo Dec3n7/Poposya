@@ -159,6 +159,7 @@ export interface BirthdayEntry {
 export interface Overview {
   leaderboard: LeaderEntry[];
   counts: { watchlist: number; watched: number; playlists: number };
+  online: number | null; // приблизительный онлайн (в сети сейчас); null = Discord не отдал
   voice: VoiceEntry[];
   birthdays: BirthdayEntry[];
   distribution: RoleSlice[];

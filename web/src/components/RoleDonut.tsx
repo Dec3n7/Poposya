@@ -72,6 +72,7 @@ export function RoleDonut({ slices }: { slices: RoleSlice[] }) {
             />
             <span className="donut-name">{s.name ?? "без роли"}</span>
             <span className="donut-count mono">{s.count}</span>
+            <span className="donut-pct mono">{Math.round((s.count / total) * 100)}%</span>
           </li>
         ))}
       </ul>

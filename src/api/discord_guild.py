@@ -41,3 +41,25 @@ async def fetch_guild_channels(bot_token: str, guild_id: int) -> list[dict]:
         )
     channels.sort(key=lambda c: (c["group"], c["position"]))
     return channels
+
+
+async def fetch_guild_presence(bot_token: str, guild_id: int) -> int | None:
+    """Приблизительное число участников онлайн (approximate_presence_count из
+    Discord, ?with_counts=true) — для счётчика «в сети» в хиро «Обзора».
+
+    Устойчиво к сбоям: None при любой ошибке/лимите — хиро просто скроет счётчик,
+    сводка от этого не падает.
+    """
+    headers = {"Authorization": f"Bot {bot_token}"}
+    try:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(
+                f"{DISCORD_API}/guilds/{guild_id}", params={"with_counts": "true"}
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+    except aiohttp.ClientError:
+        return None
+    count = data.get("approximate_presence_count")
+    return int(count) if isinstance(count, int) else None

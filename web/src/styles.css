@@ -2381,15 +2381,20 @@ a {
 /* --- обзор: лидерборд + пончик распределения --- */
 .board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: 1.55fr 1fr;
   gap: var(--sp-4);
-  align-items: start;
+  align-items: stretch;
+  margin-top: var(--sp-5);
 }
-.board-main {
+/* min-width:0 — коверфлоу-карусель иначе раздувает ячейку; flex-колонка — чтобы
+   лидерборд тянулся по высоте до карточки «Роли сервера» */
+.board > section {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-.board-side .section-title {
-  margin-top: 0;
+.board .card-head .seg {
+  margin-bottom: 0;
 }
 @media (max-width: 720px) {
   .board {
@@ -2444,6 +2449,11 @@ a {
   color: var(--fg);
   font-weight: 600;
 }
+.donut-pct {
+  color: var(--fg-faint);
+  width: 40px;
+  text-align: right;
+}
 .minibars {
   display: block;
   width: 100%;
@@ -2488,8 +2498,316 @@ a {
 .heatmap-cell.on {
   background: color-mix(in srgb, var(--accent) calc(var(--i) * 100%), transparent);
 }
+.heatmap-cell.peak {
+  box-shadow: 0 0 0 2px var(--magenta);
+}
 .heatmap-note {
   margin-top: 10px;
+}
+.heatmap-note b {
+  color: var(--fg);
+}
+
+/* =========================================================================
+   Обзор v2: хиро «Пульс сервера» + bento-KPI + коверфлоу-лидерборд
+   ========================================================================= */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- хиро --- */
+.hero {
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.hero-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.hero-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, #2b1150, var(--accent-strong) 65%, #4c1d95);
+  border: 1px solid var(--accent-ring);
+}
+.hero-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hero-id {
+  min-width: 0;
+}
+.hero-name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.hero-meta {
+  color: var(--fg-faint);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.hero-spacer {
+  flex: 1 1 20px;
+}
+.pulse {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+}
+.pulse-item {
+  flex: 1 1 150px;
+  min-width: 140px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border: 1px solid var(--border-soft);
+}
+.pulse-k {
+  font-size: 11.5px;
+  color: var(--fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pulse-v {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.pulse-u {
+  font-size: 12px;
+  color: var(--fg-faint);
+  font-weight: 500;
+}
+.trend {
+  font-size: 12px;
+  font-weight: 600;
+}
+.trend.up {
+  color: var(--success);
+}
+.trend.down {
+  color: var(--danger);
+}
+.vibe {
+  margin-top: var(--sp-4);
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 28%, transparent);
+  color: var(--fg-dim);
+  font-size: 13.5px;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+/* --- KPI bento --- */
+.group-label {
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-weight: 600;
+  margin: var(--sp-5) 2px var(--sp-3);
+}
+.bento {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(4, 1fr);
+}
+.kpi {
+  padding: 15px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 128px;
+}
+.kpi.wide {
+  grid-column: span 2;
+}
+.kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kpi-label {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+.kpi-delta {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.kpi-delta.up {
+  color: var(--success);
+}
+.kpi-delta.down {
+  color: var(--danger);
+}
+.kpi-value {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.kpi.big .kpi-value {
+  font-size: 38px;
+}
+.kpi-spark {
+  margin-top: auto;
+}
+.spark {
+  width: 100%;
+}
+.spark-svg {
+  display: block;
+  overflow: visible;
+}
+@media (max-width: 900px) {
+  .bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kpi.wide {
+    grid-column: span 1;
+  }
+}
+@media (max-width: 480px) {
+  .bento {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* --- карточки лидерборд/роли/активность --- */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 15px 18px 0;
+  flex-wrap: wrap;
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.lb {
+  padding: 14px 16px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.lb-list {
+  display: flex;
+  flex-direction: column;
+}
+.lb-empty {
+  padding: var(--sp-4);
+}
+.roles-body {
+  padding: 8px 18px 18px;
+}
+.activity {
+  margin-top: var(--sp-5);
+}
+.act-body {
+  padding: 6px 18px 18px;
+}
+.growth {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-soft);
+}
+.growth-title {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* --- коверфлоу-подиум: 3 карточки, центр ближе, крутится --- */
+.pod-stage {
+  position: relative;
+  flex: 1;
+  min-height: 200px;
+  margin: 6px 0 2px;
+  perspective: 950px;
+  transform-style: preserve-3d;
+  overflow: hidden;
+}
+.pod3 {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 190px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  padding: 24px 18px 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--elevated) 82%, transparent);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+  will-change: transform, opacity;
+}
+.pod3-av {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  font-size: 33px;
+  font-weight: 700;
+  color: #0b1120;
+  overflow: hidden;
+}
+.pod3-av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pod3-name {
+  font-weight: 700;
+  font-size: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pod3-role {
+  font-size: 13.5px;
+  margin-top: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pod3-pts {
+  font-weight: 700;
+  font-size: 22px;
+  margin-top: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- вкладка «Роли» (зеркало, read-only) --- */

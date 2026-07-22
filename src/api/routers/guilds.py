@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.dependencies import current_session, get_container, require_guild_manager
-from src.api.discord_guild import fetch_guild_channels
+from src.api.discord_guild import fetch_guild_channels, fetch_guild_presence
 from src.api.discord_oauth import OAuthError
 from src.api.discord_users import fetch_users
 from src.api.security import Session
@@ -48,6 +48,8 @@ async def overview(
         {e.user_id for e in board} | {uid for uid, _ in voice} | {uid for uid, _, _, _ in birthdays}
     )
     users = await fetch_users(container.settings.discord_token, list(ids))
+    # приблизительный онлайн для счётчика «в сети» в хиро (устойчиво к сбою -> None)
+    online = await fetch_guild_presence(container.settings.discord_token, guild_id)
     role_names = container.guild_settings.resolved(guild_id).relationship_role_names
 
     def role_name(idx: int | None) -> str | None:
@@ -86,6 +88,7 @@ async def overview(
             "watched": len(watched),
             "playlists": len(playlists),
         },
+        "online": online,
         "voice": [{**user_fields(uid), "hours": hours} for uid, hours in voice],
         "birthdays": [
             {**user_fields(uid), "month": month, "day": day, "in_days": in_days}

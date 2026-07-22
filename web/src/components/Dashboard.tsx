@@ -1,24 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type {
   ActivityStats,
   BirthdayEntry,
   Guild,
-  LeaderEntry,
   Overview,
   TrendPoint,
   Trends,
   VoiceEntry,
 } from "../types";
+import { Coverflow } from "./Coverflow";
 import { Heatmap } from "./Heatmap";
 import { MiniBars } from "./MiniBars";
-import { RoleChip } from "./RoleChip";
+import { PulseHero, type PulseItem } from "./PulseHero";
 import { RoleDonut } from "./RoleDonut";
-import { Sparkline } from "./Sparkline";
+import { Spark } from "./Spark";
 
 type BoardTab = "points" | "voice" | "birthdays";
-const PERIODS = [7, 30, 90] as const;
 
 const MONTHS_RU = [
   "янв", "фев", "мар", "апр", "мая", "июн",
@@ -39,62 +38,63 @@ function Avatar({ src, name }: { src: string | null; name: string }) {
   );
 }
 
-function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+const fmt = (n: number): string => Math.round(n).toLocaleString("ru");
+
+// компактно для крупных чисел: 218000 -> «218k», 24500 -> «24.5k»
+function fmtCompact(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 100000) return `${Math.round(n / 1000)}k`;
+  if (a >= 10000) return `${(n / 1000).toFixed(1)}k`;
+  return fmt(n);
 }
 
-// дельта за период = последнее значение минус первое в серии
-function delta(series: TrendPoint[]): number | null {
-  if (series.length < 2) return null;
-  return series[series.length - 1][1] - series[0][1];
+const last = (s: TrendPoint[]): number => s[s.length - 1][1];
+
+// дельта за период = последнее минус первое
+function delta(series?: TrendPoint[]): number | null {
+  if (!series || series.length < 2) return null;
+  return last(series) - series[0][1];
 }
 
-function StatCard({
+// изменение в процентах first -> last; null если серии нет или старт нулевой
+function deltaPct(series?: TrendPoint[]): number | null {
+  if (!series || series.length < 2) return null;
+  const first = series[0][1];
+  if (first === 0) return null;
+  return Math.round(((last(series) - first) / Math.abs(first)) * 100);
+}
+
+function KpiTile({
   label,
   value,
   series,
+  color,
+  wide,
+  big,
 }: {
   label: string;
-  value: number;
+  value: string;
   series?: TrendPoint[];
+  color: string;
+  wide?: boolean;
+  big?: boolean;
 }) {
-  const d = series ? delta(series) : null;
+  const pct = deltaPct(series);
   return (
-    <div className="stat-card tilt">
-      <div className="stat-head">
-        <div className="stat-value mono">{fmt(value)}</div>
-        {d !== null && d !== 0 && (
-          <span className={`stat-delta ${d > 0 ? "up" : "down"}`}>
-            {d > 0 ? "▲" : "▼"} {fmt(Math.abs(d))}
+    <div className={`card kpi${wide ? " wide" : ""}${big ? " big" : ""}`}>
+      <div className="kpi-top">
+        <span className="kpi-label">{label}</span>
+        {pct != null && pct !== 0 && (
+          <span className={`kpi-delta ${pct > 0 ? "up" : "down"}`}>
+            {pct > 0 ? "▲ +" : "▼ "}
+            {Math.abs(pct)}%
           </span>
         )}
       </div>
-      <div className="stat-label">{label}</div>
-      {series && series.length >= 2 && <Sparkline series={series} />}
-    </div>
-  );
-}
-
-function LeaderRow({ rank, e }: { rank: number; e: LeaderEntry }) {
-  const name = e.username ?? `ID ${e.user_id}`;
-  return (
-    <div className={`leader-row${e.is_exclusive ? " exclusive" : ""}`}>
-      <span className="leader-rank mono">{rank}</span>
-      {e.avatar ? (
-        <img className="leader-avatar" src={e.avatar} alt="" />
-      ) : (
-        <span className="leader-avatar fallback">{name.slice(0, 1).toUpperCase()}</span>
-      )}
-      <span className="leader-name">
-        <span>{name}</span>
-        {e.role && (
-          <span className="person-meta">
-            <RoleChip name={e.role} index={e.role_index} />
-          </span>
-        )}
-      </span>
-      {e.is_exclusive && <span className="badge">🖤 Единственный</span>}
-      <span className="leader-points mono">{e.points}</span>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-spark">
+        <Spark series={series ?? []} color={color} height={big ? 54 : 40} />
+      </div>
     </div>
   );
 }
@@ -106,7 +106,7 @@ export function Dashboard({ guild }: { guild: Guild }) {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<number>(30);
   const [board, setBoard] = useState<BoardTab>("points");
-  const [heatMode, setHeatMode] = useState<"messages" | "voice">("messages");
+  const [heatMode, setHeatMode] = useState<"messages" | "voice">("voice");
 
   useEffect(() => {
     setData(null);
@@ -121,23 +121,14 @@ export function Dashboard({ guild }: { guild: Guild }) {
       });
   }, [guild.id]);
 
-  // тренды — не критичны (если снапшотов ещё нет, просто без спарклайнов) и
-  // перезапрашиваются при смене периода
   useEffect(() => {
     setTrends({});
-    api
-      .trends(guild.id, days)
-      .then(setTrends)
-      .catch(() => setTrends({}));
+    api.trends(guild.id, days).then(setTrends).catch(() => setTrends({}));
   }, [guild.id, days]);
 
-  // активность (сообщения/день + хитмап) — тоже не критична, копится ботом
   useEffect(() => {
     setActivity(null);
-    api
-      .activity(guild.id, days)
-      .then(setActivity)
-      .catch(() => setActivity(null));
+    api.activity(guild.id, days).then(setActivity).catch(() => setActivity(null));
   }, [guild.id, days]);
 
   // прирост участников по дням = разности соседних точек серии members
@@ -157,170 +148,220 @@ export function Dashboard({ guild }: { guild: Guild }) {
       </div>
     );
 
-  // текущее значение метрики из последнего снапшота (для карточек без live-счётчика)
+  // последнее значение метрики из снапшотов (для карточек без live-счётчика)
   const latest = (metric: string): number | null => {
     const s = trends[metric];
-    return s && s.length > 0 ? s[s.length - 1][1] : null;
+    return s && s.length > 0 ? last(s) : null;
   };
 
-  // карточки на основе снапшотов появляются, только когда данные накопились
-  const snapshotCards: { metric: string; label: string }[] = [
-    { metric: "members", label: "Участников" },
-    { metric: "points_total", label: "Всего очков" },
-    { metric: "voice_hours", label: "Часов в войсе" },
-    { metric: "finds_collected", label: "Находок собрано" },
-  ];
+  // прирост участников за неделю (последняя точка минус ~7 дней назад)
+  const memberSeries = trends.members;
+  const weekDelta =
+    memberSeries && memberSeries.length >= 2
+      ? last(memberSeries) - memberSeries[Math.max(0, memberSeries.length - 8)][1]
+      : null;
+
+  // строка «пульса» — метрики момента (появляются по мере накопления данных)
+  const pulses: PulseItem[] = [];
+  if (activity && activity.daily.length > 0) {
+    pulses.push({
+      k: "Сообщений сегодня",
+      value: fmt(last(activity.daily)),
+      trend: deltaPct(activity.daily),
+    });
+  }
+  const voiceH = latest("voice_hours");
+  if (voiceH != null) {
+    pulses.push({ k: "Часов в войсе", value: fmt(voiceH), unit: "ч", trend: deltaPct(trends.voice_hours) });
+  }
+  const ptsDelta = delta(trends.points_total);
+  if (ptsDelta != null) {
+    pulses.push({ k: "Очков за период", value: `${ptsDelta >= 0 ? "+" : ""}${fmt(ptsDelta)}` });
+  }
+  const findsN = latest("finds_collected");
+  if (findsN != null) {
+    pulses.push({ k: "Находок собрано", value: fmt(findsN), trend: deltaPct(trends.finds_collected) });
+  }
+
+  // vibe-строка из активности (только если данные есть — без выдумок)
+  let vibe: string | null = null;
+  if (activity && activity.daily.length >= 5) {
+    const vals = activity.daily.map(([, v]) => v);
+    const lastV = vals[vals.length - 1];
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    if (avg > 0) {
+      const pct = Math.round(((lastV - avg) / avg) * 100);
+      if (pct >= 12) vibe = `Оживлённо — на ${pct}% больше сообщений, чем в среднем за период.`;
+      else if (pct <= -12) vibe = `Потише обычного — на ${Math.abs(pct)}% меньше сообщений, чем в среднем.`;
+      else vibe = "Ровный ритм — активность около среднего за период.";
+    }
+  }
+
+  // KPI-плитки «Сообщество/Вовлечённость» (появляются по мере накопления снапшотов)
+  const community: ReactNode[] = [];
+  const mem = latest("members");
+  if (mem != null)
+    community.push(
+      <KpiTile key="members" label="Участников" value={fmtCompact(mem)} series={trends.members} color="var(--accent-hover)" wide big />,
+    );
+  const pts = latest("points_total");
+  if (pts != null)
+    community.push(
+      <KpiTile key="points" label="Всего очков" value={fmtCompact(pts)} series={trends.points_total} color="var(--magenta)" />,
+    );
+  if (activity && activity.daily.length > 0)
+    community.push(
+      <KpiTile key="messages" label="Сообщений/день" value={fmtCompact(last(activity.daily))} series={activity.daily} color="var(--accent-hover)" />,
+    );
+  if (voiceH != null)
+    community.push(
+      <KpiTile key="voice" label="Часов в войсе" value={fmtCompact(voiceH)} series={trends.voice_hours} color="#7dd3fc" wide />,
+    );
+  if (findsN != null)
+    community.push(
+      <KpiTile key="finds" label="Находок" value={fmtCompact(findsN)} series={trends.finds_collected} color="#e6b24d" />,
+    );
 
   return (
-    <div>
-      <div className="dash-head">
-        <span className="faint small">Тренды за</span>
-        <div className="seg" role="group" aria-label="Период трендов">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              className={`seg-item${days === p ? " active" : ""}`}
-              onClick={() => setDays(p)}
-            >
-              {p} дн
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="dashboard">
+      <PulseHero
+        guild={guild}
+        online={data.online}
+        weekDelta={weekDelta}
+        pulses={pulses}
+        vibe={vibe}
+        days={days}
+        onDays={setDays}
+      />
 
-      <div className="stat-row">
-        <StatCard label="В вотчлисте" value={data.counts.watchlist} series={trends.watchlist} />
-        <StatCard label="Просмотрено" value={data.counts.watched} series={trends.watched} />
-        <StatCard label="Плейлистов" value={data.counts.playlists} series={trends.playlists} />
-        {snapshotCards.map(({ metric, label }) => {
-          const v = latest(metric);
-          return v === null ? null : (
-            <StatCard key={metric} label={label} value={v} series={trends[metric]} />
-          );
-        })}
-        {activity && activity.daily.length > 0 && (
-          <StatCard
-            label="Сообщений/день"
-            value={activity.daily[activity.daily.length - 1][1]}
-            series={activity.daily}
-          />
-        )}
+      {community.length > 0 && (
+        <>
+          <h2 className="group-label">Сообщество и вовлечённость</h2>
+          <div className="bento">{community}</div>
+        </>
+      )}
+
+      <h2 className="group-label">Киноклуб</h2>
+      <div className="bento">
+        <KpiTile label="В вотчлисте" value={fmt(data.counts.watchlist)} series={trends.watchlist} color="var(--accent-hover)" />
+        <KpiTile label="Просмотрено" value={fmt(data.counts.watched)} series={trends.watched} color="var(--success)" />
+        <KpiTile label="Плейлистов" value={fmt(data.counts.playlists)} series={trends.playlists} color="var(--magenta)" wide />
       </div>
 
       <div className="board">
-        <div className="board-main">
-          <div className="seg" role="tablist" aria-label="Лидерборды">
-            <button
-              role="tab"
-              aria-selected={board === "points"}
-              className={`seg-item${board === "points" ? " active" : ""}`}
-              onClick={() => setBoard("points")}
-            >
-              Очки
-            </button>
-            {data.voice.length > 0 && (
+        <section className="card">
+          <div className="card-head">
+            <div className="card-title">Лидерборд</div>
+            <div className="seg lb-tabs" role="tablist" aria-label="Лидерборды">
               <button
                 role="tab"
-                aria-selected={board === "voice"}
-                className={`seg-item${board === "voice" ? " active" : ""}`}
-                onClick={() => setBoard("voice")}
+                aria-selected={board === "points"}
+                className={`seg-item${board === "points" ? " active" : ""}`}
+                onClick={() => setBoard("points")}
               >
-                Войс
+                Очки
               </button>
-            )}
-            {data.birthdays.length > 0 && (
-              <button
-                role="tab"
-                aria-selected={board === "birthdays"}
-                className={`seg-item${board === "birthdays" ? " active" : ""}`}
-                onClick={() => setBoard("birthdays")}
-              >
-                Дни рождения
-              </button>
-            )}
+              {data.voice.length > 0 && (
+                <button
+                  role="tab"
+                  aria-selected={board === "voice"}
+                  className={`seg-item${board === "voice" ? " active" : ""}`}
+                  onClick={() => setBoard("voice")}
+                >
+                  Войс
+                </button>
+              )}
+              {data.birthdays.length > 0 && (
+                <button
+                  role="tab"
+                  aria-selected={board === "birthdays"}
+                  className={`seg-item${board === "birthdays" ? " active" : ""}`}
+                  onClick={() => setBoard("birthdays")}
+                >
+                  Дни рождения
+                </button>
+              )}
+            </div>
           </div>
-
-          <div className="card leader-card">
+          <div className="lb">
             {board === "points" &&
               (data.leaderboard.length === 0 ? (
-                <div className="pad muted">Пока никто не набрал очков.</div>
+                <div className="muted lb-empty">Пока никто не набрал очков.</div>
               ) : (
-                data.leaderboard.map((e, i) => <LeaderRow key={e.user_id} rank={i + 1} e={e} />)
+                <Coverflow entries={data.leaderboard} />
               ))}
-            {board === "voice" &&
-              (data.voice.length === 0 ? (
-                <div className="pad muted">Нет данных по войсу.</div>
-              ) : (
-                data.voice.map((v, i) => <VoiceRow key={v.user_id} rank={i + 1} v={v} />)
-              ))}
-            {board === "birthdays" &&
-              (data.birthdays.length === 0 ? (
-                <div className="pad muted">Ближайших дней рождения нет.</div>
-              ) : (
-                data.birthdays.map((b) => <BirthdayRow key={b.user_id} b={b} />)
-              ))}
+            {board === "voice" && (
+              <div className="lb-list">
+                {data.voice.map((v, i) => (
+                  <VoiceRow key={v.user_id} rank={i + 1} v={v} />
+                ))}
+              </div>
+            )}
+            {board === "birthdays" && (
+              <div className="lb-list">
+                {data.birthdays.map((b) => (
+                  <BirthdayRow key={b.user_id} b={b} />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </section>
 
         {data.distribution.length > 0 && (
-          <div className="board-side">
-            <h2 className="section-title">Роли сервера</h2>
-            <div className="card pad">
+          <section className="card">
+            <div className="card-head">
+              <div className="card-title">Роли сервера</div>
+            </div>
+            <div className="roles-body">
               <RoleDonut slices={data.distribution} />
             </div>
-          </div>
+          </section>
         )}
       </div>
-
-      {memberDeltas.length >= 5 && (
-        <>
-          <h2 className="section-title">Прирост участников</h2>
-          <div className="card pad">
-            <MiniBars series={memberDeltas} />
-            <div className="faint small" style={{ marginTop: 8 }}>
-              Изменение числа участников по дням за выбранный период
-            </div>
-          </div>
-        </>
-      )}
 
       {activity &&
         (activity.heatmap.some((row) => row.some((v) => v > 0)) ||
           activity.voice.some((row) => row.some((v) => v > 0))) && (
-          <>
-            <div className="section-head">
-              <h2 className="section-title">Активность по часам</h2>
+          <section className="card activity">
+            <div className="card-head">
+              <div className="card-title">Ритм активности</div>
               <div className="seg" role="group" aria-label="Тип активности">
-                <button
-                  className={`seg-item${heatMode === "messages" ? " active" : ""}`}
-                  onClick={() => setHeatMode("messages")}
-                >
-                  Сообщения
-                </button>
                 <button
                   className={`seg-item${heatMode === "voice" ? " active" : ""}`}
                   onClick={() => setHeatMode("voice")}
                 >
                   Войс
                 </button>
+                <button
+                  className={`seg-item${heatMode === "messages" ? " active" : ""}`}
+                  onClick={() => setHeatMode("messages")}
+                >
+                  Сообщения
+                </button>
               </div>
             </div>
-            <div className="card pad">
-              {heatMode === "messages" ? (
-                <Heatmap grid={activity.heatmap} unit="сообщ." />
-              ) : (
+            <div className="act-body">
+              {heatMode === "voice" ? (
                 <Heatmap grid={activity.voice} unit="мин" />
+              ) : (
+                <Heatmap grid={activity.heatmap} unit="сообщ." />
+              )}
+              {heatMode === "voice" && !activity.voice.some((row) => row.some((v) => v > 0)) && (
+                <div className="muted small">Пока нет времени в войсе за период.</div>
               )}
               {heatMode === "messages" &&
                 !activity.heatmap.some((row) => row.some((v) => v > 0)) && (
                   <div className="muted small">Пока нет сообщений за период.</div>
                 )}
-              {heatMode === "voice" &&
-                !activity.voice.some((row) => row.some((v) => v > 0)) && (
-                  <div className="muted small">Пока нет времени в войсе за период.</div>
-                )}
+
+              {memberDeltas.length >= 5 && (
+                <div className="growth">
+                  <div className="growth-title">Прирост участников по дням</div>
+                  <MiniBars series={memberDeltas} />
+                </div>
+              )}
             </div>
-          </>
+          </section>
         )}
     </div>
   );

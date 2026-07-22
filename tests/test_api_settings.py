@@ -246,7 +246,11 @@ async def test_overview_leaderboard_and_counts(client, uow_factory, monkeypatch)
     async def fake_users(_token, ids):
         return {uid: {"username": f"user{uid}", "avatar": None} for uid in ids}
 
+    async def fake_presence(_token, _gid):
+        return 3
+
     monkeypatch.setattr(guilds_router, "fetch_users", fake_users)
+    monkeypatch.setattr(guilds_router, "fetch_guild_presence", fake_presence)
     # два профиля с очками в этой гильдии
     async with uow_factory() as uow:
         for uid, pts in [(1, 300), (2, 100)]:
@@ -268,6 +272,7 @@ async def test_overview_leaderboard_and_counts(client, uow_factory, monkeypatch)
     assert dist == {0: 1, 1: 1}
     assert all("name" in d for d in data["distribution"])
     assert data["counts"] == {"watchlist": 0, "watched": 0, "playlists": 0}
+    assert data["online"] == 3  # approximate_presence_count из Discord (замокан)
     assert data["voice"] == [] and data["birthdays"] == []  # пусто без активности
 
 
@@ -279,7 +284,11 @@ async def test_overview_voice_and_birthdays(client, uow_factory, monkeypatch):
     async def fake_users(_token, ids):
         return {uid: {"username": f"user{uid}", "avatar": None} for uid in ids}
 
+    async def fake_presence(_token, _gid):
+        return None
+
     monkeypatch.setattr(guilds_router, "fetch_users", fake_users)
+    monkeypatch.setattr(guilds_router, "fetch_guild_presence", fake_presence)
     async with uow_factory() as uow:
         # войс: два часа юзеру 5 (total_minutes += accrued)
         await uow.voice_progress.save_many({(GUILD, 5): 0.0}, accrued_minutes=120.0)

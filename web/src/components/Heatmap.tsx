@@ -11,6 +11,18 @@ export function Heatmap({ grid, unit = "сообщ." }: { grid: number[][]; unit
   const max = Math.max(0, ...grid.flat());
   if (max === 0) return null;
 
+  // ячейка-пик (для подсветки и подписи): максимум по всей сетке
+  let peakD = 0;
+  let peakH = 0;
+  grid.forEach((row, d) =>
+    row.forEach((count, h) => {
+      if (count > grid[peakD][peakH]) {
+        peakD = d;
+        peakH = h;
+      }
+    }),
+  );
+
   return (
     <div className="heatmap">
       <div className="heatmap-grid">
@@ -27,10 +39,11 @@ export function Heatmap({ grid, unit = "сообщ." }: { grid: number[][]; unit
               // нелинейная шкала (sqrt): редкие пики не глушат слабую активность
               const intensity = count === 0 ? 0 : 0.12 + 0.88 * Math.sqrt(count / max);
               const style = { "--i": intensity.toFixed(3) } as CSSProperties;
+              const peak = d === peakD && h === peakH;
               return (
                 <span
                   key={`c${d}-${h}`}
-                  className={`heatmap-cell${count > 0 ? " on" : ""}`}
+                  className={`heatmap-cell${count > 0 ? " on" : ""}${peak ? " peak" : ""}`}
                   style={style}
                   title={`${DOW[d]} ${String(h).padStart(2, "0")}:00 — ${count} ${unit}`}
                 />
@@ -40,7 +53,11 @@ export function Heatmap({ grid, unit = "сообщ." }: { grid: number[][]; unit
         ))}
       </div>
       <div className="faint small heatmap-note">
-        {unit === "мин" ? "Минуты в войсе" : "Сообщения"} по дню недели и часу · время UTC
+        <span aria-hidden>🔥</span> Пик:{" "}
+        <b>
+          {DOW[peakD]} {String(peakH).padStart(2, "0")}:00
+        </b>{" "}
+        — {grid[peakD][peakH]} {unit} · время UTC
       </div>
     </div>
   );
