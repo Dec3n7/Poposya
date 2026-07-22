@@ -17,38 +17,11 @@ from src.config import Settings
 from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
 _REMINDER_CHECK_INTERVAL = 30
-
-_TOPICS = [
-    "Какая игра тебя по-настоящему удивила за последний год?",
-    "Кофе или чай — и почему твой выбор правильный?",
-    "Лучший саундтрек из игры, который ты слушаешь отдельно?",
-    "Есть ли фильм, который все хвалят, а тебе не зашёл?",
-    "Какую способность из игр ты бы забрал в реальную жизнь?",
-    "Самая переоценённая вещь в интернете сейчас?",
-    "Что ты умеешь делать лучше большинства здесь?",
-    "Идеальный вечер: расписание по пунктам.",
-    "Какой босс в играх заставил тебя страдать сильнее всего?",
-    "Если бы завтра переезд в любую страну — куда и почему?",
-    "Какая книга или манга изменила твой взгляд на что-то?",
-    "Дождь за окном: уют или тоска?",
-    "Какую еду ты можешь есть бесконечно?",
-    "Самый бесполезный факт, который ты знаешь?",
-    "Что бы ты сказал себе пять лет назад?",
-]
-
-_RULES_TEXT = (
-    "**Правила сервера** *(тестовый текст — заменить на настоящие правила)*\n\n"
-    "`1.` Уважай собеседников. Сарказм — можно, травля — нет.\n"
-    "`2.` Без NSFW, шок-контента и политики.\n"
-    "`3.` Спам и флуд караются мутом — я слежу. ✂️👁🖤\n"
-    "`4.` Реклама — только с разрешения администрации.\n"
-    "`5.` Ники и аватары — читаемые и приличные.\n"
-    "`6.` Споры решает администрация. Финально.\n"
-)
 
 
 class FunCog(commands.Cog):
@@ -63,6 +36,7 @@ class FunCog(commands.Cog):
         music=None,  # MusicContainer — лайки в /profile
         cinema=None,  # CinemaContainer — кино-статистика в /profile
         guild_settings=None,  # GuildSettingsService — имена ролей per-guild
+        persona=None,  # PersonaService — голос кога (каталог фраз)
     ):
         self.bot = bot
         self.activity = activity
@@ -73,12 +47,35 @@ class FunCog(commands.Cog):
         self.music = music
         self.cinema = cinema
         self.gs = guild_settings
+        self.persona = persona if persona is not None else RegistryPersona()
         self._reminder_task: asyncio.Task | None = None
         self._send_limiter = InMemoryRateLimiter()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # модуль «Развлечения» выключен на сервере -> команды не работают
         return await block_if_module_off(interaction, self.settings, self.gs, "fun_enabled")
+
+    # --- каталог фраз персоны сервера ---
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
+
+    async def _pick(self, guild_id: int, key: str, **vars: object) -> str:
+        """Случайный элемент фразы-списка (через render_block: режим/random)."""
+        return await self.persona.render_block(guild_id, key, None, **vars) or ""
+
+    def _pd(self, guild_id: int, key: str, sub: str, **vars: object) -> str:
+        """Элемент фразы-словаря с мягким форматированием (кривой override не
+        роняет ког — текст возвращается как есть)."""
+        value = self.persona.phrase(guild_id, key)
+        text = value.get(sub, "") if isinstance(value, dict) else ""
+        if vars:
+            try:
+                return text.format(**vars)
+            except (KeyError, IndexError, ValueError):
+                return text
+        return text
 
     def _names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
@@ -113,6 +110,7 @@ class FunCog(commands.Cog):
         sides: app_commands.Range[int, 2, 1000] = 6,
         users: str | None = None,
     ) -> None:
+        gid = interaction.guild_id
         mentioned: list[discord.Member] = []
         had_bots = False
         if users and interaction.guild is not None:
@@ -131,8 +129,7 @@ class FunCog(commands.Cog):
                 players.append(member)
         if len(players) > self._DICE_MAX_PLAYERS:
             await interaction.response.send_message(
-                f"Больше {self._DICE_MAX_PLAYERS} игроков — это уже лотерея, "
-                "а не кости. Сократи список.",
+                self._p(gid, "fun.dice_too_many", max=self._DICE_MAX_PLAYERS),
                 ephemeral=True,
             )
             return
@@ -140,8 +137,7 @@ class FunCog(commands.Cog):
         if len(players) < 2:
             if had_bots:
                 await interaction.response.send_message(
-                    "Боты в кости не играют — у них всё по алгоритму. Позови живых.",
-                    ephemeral=True,
+                    self._p(gid, "fun.dice_bots_only"), ephemeral=True
                 )
                 return
             result = random.randint(1, sides)
@@ -149,29 +145,27 @@ class FunCog(commands.Cog):
             return
 
         # дуэль: бросают все; ничья наверху — тайбрейк только между лидерами
-        lines: list[str] = [f"🎲 **Дуэль на кубиках** (d{sides})"]
+        lines: list[str] = [self._p(gid, "fun.dice_duel_title", sides=sides)]
         contenders = players
         winner: discord.Member | None = None
         for round_no in range(1, self._DICE_MAX_ROUNDS + 1):
             rolls = [(member, random.randint(1, sides)) for member in contenders]
             lines.append(
-                f"**Раунд {round_no}:** " + ", ".join(f"{m.display_name} — `{r}`" for m, r in rolls)
+                self._p(gid, "fun.dice_round", round=round_no)
+                + " "
+                + ", ".join(f"{m.display_name} — `{r}`" for m, r in rolls)
             )
             best = max(result for _, result in rolls)
             top = [member for member, result in rolls if result == best]
             if len(top) == 1:
                 winner = top[0]
-                lines.append(f"🏆 Победа: {winner.mention} — выбросил **{best}**!")
+                lines.append(self._p(gid, "fun.dice_winner", winner=winner.mention, best=best))
                 break
-            lines.append(
-                "Ничья между " + " и ".join(m.display_name for m in top) + " — перебрасываю. 🎲"
-            )
+            names = " и ".join(m.display_name for m in top)
+            lines.append(self._p(gid, "fun.dice_tie", names=names))
             contenders = top
         if winner is None:
-            lines.append(
-                f"{self._DICE_MAX_ROUNDS} раундов подряд ничья. Судьба говорит вам "
-                "дружить. Мне надоело."
-            )
+            lines.append(self._p(gid, "fun.dice_stalemate", rounds=self._DICE_MAX_ROUNDS))
         await interaction.response.send_message(
             "\n".join(lines)[:2000],
             allowed_mentions=discord.AllowedMentions(users=True),
@@ -179,12 +173,13 @@ class FunCog(commands.Cog):
 
     @app_commands.command(name="coinflip", description="Подбросить монетку")
     async def coinflip(self, interaction: discord.Interaction) -> None:
-        side = random.choice(("Орёл 🦅", "Решка 🪙"))
+        side = await self._pick(interaction.guild_id, "fun.coin_sides")
         await interaction.response.send_message(f"**{side}**")
 
     @app_commands.command(name="topic", description="Случайная тема для разговора")
     async def topic(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(f"💬 {random.choice(_TOPICS)}")
+        topic = await self._pick(interaction.guild_id, "fun.topics")
+        await interaction.response.send_message(f"💬 {topic}")
 
     # --- профиль глазами Попоси ---
 
@@ -203,33 +198,6 @@ class FunCog(commands.Cog):
         "ноября",
         "декабря",
     ]
-    _ATTITUDE = {
-        1: "настороженное",
-        2: "сдержанное",
-        3: "нейтральное",
-        4: "тёплое",
-        5: "доверительное",
-        6: "близкое",
-        7: "ты — единственный",
-    }
-    _OPENERS = {
-        1: "Это ты… Напомни, как тебя зовут?",
-        2: "Это ты, {name}… Я помню каждый твой шаг.",
-        3: "Это ты, {name}… Я помню каждый твой шаг.",
-        4: "О, {name}. Я как раз о тебе думала. Не льсти себе.",
-        5: "{name}. Кофе уже остыл, пока ты собирался зайти.",
-        6: "{name}. Моё вечернее расписание знает твоё имя.",
-        7: "{name}. Кресло у окна — твоё.",
-    }
-    _FOOTERS = {
-        1: "Пока ты просто имя в списке.",
-        2: "Ты уже не просто имя в списке.",
-        3: "Ты уже не просто имя в списке.",
-        4: "С тобой этот дом немного теплее.",
-        5: "С тобой этот дом немного теплее.",
-        6: "Виски на двоих — это про тебя.",
-        7: "✂️👁🖤",
-    }
 
     def _relationship_bar(self, points: int, next_threshold: int | None, width: int = 10) -> str:
         thresholds = self.relationship.policy.thresholds
@@ -240,16 +208,15 @@ class FunCog(commands.Cog):
         filled = min(width, int(width * (points - lower) / span))
         return "▰" * filled + "▱" * (width - filled)
 
-    @staticmethod
-    def _last_seen(last: datetime | None) -> str:
+    def _last_seen(self, guild_id: int, last: datetime | None) -> str:
         if last is None:
-            return "ещё ни разу не заговаривал со мной"
+            return self._p(guild_id, "fun.last_seen_never")
         days = (datetime.now(UTC) - last).days
         if days <= 0:
-            return "говорил со мной сегодня"
+            return self._p(guild_id, "fun.last_seen_today")
         if days == 1:
-            return "говорил со мной вчера"
-        return f"говорил со мной {days} дн. назад"
+            return self._p(guild_id, "fun.last_seen_yesterday")
+        return self._p(guild_id, "fun.last_seen_days", days=days)
 
     async def _build_showcase(self, guild_id: int, user_id: int) -> list[str]:
         """Сводка по всем модулям бота: находки, музыка, кино, войс.
@@ -268,27 +235,29 @@ class FunCog(commands.Cog):
                         f"{RARITY_EMOJI[r]}{by_rarity[r]}" for r in order if by_rarity[r]
                     )
                     gifted = sum(1 for e in collection if e.gifted_at is not None)
-                    line = f"🗃 Находки: {parts}"
+                    line = self._p(guild_id, "fun.showcase_finds", parts=parts)
                     if gifted:
-                        line += f" · 🎁 подарено мне: {gifted}"
+                        line += self._p(guild_id, "fun.showcase_finds_gifted", gifted=gifted)
                     lines.append(line)
             if self.music is not None:
                 liked = await self.music.list_liked.execute(user_id)
                 if liked:
-                    lines.append(f"🎧 Лайкнутых треков: **{len(liked)}**")
+                    lines.append(self._p(guild_id, "fun.showcase_music", count=len(liked)))
             if self.cinema is not None:
                 stats = await self.cinema.cinema_profile.execute(guild_id, user_id)
                 if stats.proposed or stats.ratings_count:
-                    line = (
-                        f"🎬 Кино: предложено **{stats.proposed}**, "
-                        f"оценок **{stats.ratings_count}**"
+                    line = self._p(
+                        guild_id,
+                        "fun.showcase_cinema",
+                        proposed=stats.proposed,
+                        ratings=stats.ratings_count,
                     )
                     if stats.avg_given is not None:
-                        line += f" (средняя {stats.avg_given})"
+                        line += self._p(guild_id, "fun.showcase_cinema_avg", avg=stats.avg_given)
                     lines.append(line)
             hours = await self.activity.get_voice_hours.execute(guild_id, user_id)
             if hours >= 0.5:
-                lines.append(f"🎙 В войсе со мной: **{hours:.1f} ч**")
+                lines.append(self._p(guild_id, "fun.showcase_voice", hours=f"{hours:.1f}"))
         except Exception:
             logger.exception("Витрина профиля не собралась")
         return lines
@@ -299,68 +268,99 @@ class FunCog(commands.Cog):
     async def profile(
         self, interaction: discord.Interaction, user: discord.Member | None = None
     ) -> None:
+        gid = interaction.guild_id
         target = user or interaction.user
         if target.bot:
-            await interaction.response.send_message("У ботов нет души. И профиля.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "fun.profile_bot"), ephemeral=True
+            )
             return
         await interaction.response.defer()
-        info = await self.relationship.get_rank.execute(target.id, interaction.guild_id)
+        info = await self.relationship.get_rank.execute(target.id, gid)
         role_name = (
-            self._names(interaction.guild_id)[info.role_index]
+            self._names(gid)[info.role_index]
             if info.role_index is not None
-            else "☕ Случайный прохожий (пока без статуса)"
+            else self._p(gid, "fun.profile_no_status")
         )
 
+        opener = self._p(gid, f"fun.profile_opener_{info.level}", name=target.display_name)
         embed = discord.Embed(
-            description=f"**{self._OPENERS[info.level].format(name=target.display_name)}**",
-            color=accent(interaction.guild_id),
+            description=f"**{opener}**",
+            color=accent(gid),
         )
         embed.set_thumbnail(url=target.display_avatar.url)
 
-        attachment = f"{role_name}\n`{self._relationship_bar(info.points, info.next_threshold)}` **{info.points}** очков"
+        attachment = self._p(
+            gid,
+            "fun.profile_attachment",
+            role_name=role_name,
+            bar=self._relationship_bar(info.points, info.next_threshold),
+            points=info.points,
+        )
         if info.next_threshold is not None:
-            attachment += f"\n*До следующего статуса: {info.next_threshold - info.points}*"
-        embed.add_field(name="Привязанность", value=attachment, inline=False)
+            attachment += "\n" + self._p(
+                gid, "fun.profile_to_next", remaining=info.next_threshold - info.points
+            )
+        embed.add_field(
+            name=self._p(gid, "fun.profile_field_attachment"), value=attachment, inline=False
+        )
 
-        activity_lines = [f"👁 {self._last_seen(info.last_dialog_at)}"]
+        activity_lines = [f"👁 {self._last_seen(gid, info.last_dialog_at)}"]
         if info.deep_dialogs:
-            activity_lines.insert(0, f"🍷 Долгих разговоров: **{info.deep_dialogs}**")
-        embed.add_field(name="Активность", value="\n".join(activity_lines), inline=False)
+            activity_lines.insert(
+                0, self._p(gid, "fun.profile_deep_dialogs", count=info.deep_dialogs)
+            )
+        embed.add_field(
+            name=self._p(gid, "fun.profile_field_activity"),
+            value="\n".join(activity_lines),
+            inline=False,
+        )
 
-        showcase = await self._build_showcase(interaction.guild_id, target.id)
+        showcase = await self._build_showcase(gid, target.id)
         if showcase:
-            embed.add_field(name="Витрина", value="\n".join(showcase)[:1000], inline=False)
+            embed.add_field(
+                name=self._p(gid, "fun.profile_field_showcase"),
+                value="\n".join(showcase)[:1000],
+                inline=False,
+            )
 
         known: list[str] = []
         if info.user_notes:
             known.extend(f"• {line}" for line in info.user_notes.splitlines() if line.strip())
         elif info.survey.interests:
-            known.append(f"• Интересы: {info.survey.interests}")
+            known.append(self._p(gid, "fun.profile_known_interests", interests=info.survey.interests))
         if info.survey.season:
-            known.append(f"• Любимое время года: {info.survey.season}")
+            known.append(self._p(gid, "fun.profile_known_season", season=info.survey.season))
         if not known:
-            known.append("• Пока почти ничего. Исправь это.")
-        embed.add_field(name="Что я знаю о тебе…", value="\n".join(known)[:1000], inline=False)
+            known.append(self._p(gid, "fun.profile_known_empty"))
+        embed.add_field(
+            name=self._p(gid, "fun.profile_field_known"),
+            value="\n".join(known)[:1000],
+            inline=False,
+        )
 
-        embed.add_field(name="Моё отношение", value=self._ATTITUDE[info.level])
+        embed.add_field(
+            name=self._p(gid, "fun.profile_field_attitude"),
+            value=self._pd(gid, "fun.profile_attitude", str(info.level)),
+        )
         birthday = (
             f"{info.birthday_day} {self._MONTHS_RU[info.birthday_month]}"
             if info.birthday_day and info.birthday_month
             else "—"
         )
-        embed.add_field(name="День рождения", value=birthday)
+        embed.add_field(name=self._p(gid, "fun.profile_field_birthday"), value=birthday)
         badges: list[str] = []
         if info.survey.completed:
-            badges.append("📋 Анкета")
+            badges.append(self._pd(gid, "fun.profile_badges", "survey"))
         if info.birthday_day:
-            badges.append("🎂 Дата в календаре")
+            badges.append(self._pd(gid, "fun.profile_badges", "birthday"))
         if info.deep_dialogs >= 5:
-            badges.append("🍷 Вечерние разговоры")
+            badges.append(self._pd(gid, "fun.profile_badges", "deep"))
         if info.is_exclusive:
-            badges.append("✂️👁🖤 Кресло у окна")
-        embed.add_field(name="✨ Отметки", value="\n".join(badges) or "—")
+            badges.append(self._pd(gid, "fun.profile_badges", "exclusive"))
+        embed.add_field(name=self._p(gid, "fun.profile_field_badges"), value="\n".join(badges) or "—")
 
-        embed.set_footer(text=self._FOOTERS[info.level])
+        embed.set_footer(text=self._pd(gid, "fun.profile_footers", str(info.level)))
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="birthday", description="Указать свой день рождения (без года)")
@@ -375,18 +375,17 @@ class FunCog(commands.Cog):
         # defer сразу: у Discord лимит 3 секунды на первый ответ,
         # а запись в БД на холодном старте может не успеть (ошибка 10062)
         await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild_id
         ok = await self.relationship.set_birthday.execute(
-            interaction.user.id, interaction.guild_id, day, month
+            interaction.user.id, gid, day, month
         )
         if not ok:
             await interaction.followup.send(
-                "Такой даты не существует. Попробуй ещё раз, календарь в помощь.",
-                ephemeral=True,
+                self._p(gid, "fun.birthday_invalid"), ephemeral=True
             )
             return
         await interaction.followup.send(
-            f"Записала: {day:02d}.{month:02d}. Я помню дни рождения своих гостей — "
-            "теперь и твой. ✂️👁🖤",
+            self._p(gid, "fun.birthday_saved", day=f"{day:02d}", month=f"{month:02d}"),
             ephemeral=True,
         )
 
@@ -395,8 +394,11 @@ class FunCog(commands.Cog):
     @app_commands.command(name="rules", description="Опубликовать правила сервера (разово)")
     @app_commands.default_permissions(administrator=True)
     async def rules(self, interaction: discord.Interaction) -> None:
+        gid = interaction.guild_id
         embed = discord.Embed(
-            title="📜 Правила", description=_RULES_TEXT, color=accent(interaction.guild_id)
+            title=self._p(gid, "fun.rules_title"),
+            description=self._p(gid, "fun.rules_text"),
+            color=accent(gid),
         )
         await interaction.response.send_message(embed=embed)
 
@@ -404,22 +406,40 @@ class FunCog(commands.Cog):
     @app_commands.guild_only()
     async def serverstats(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
+        gid = guild.id
         humans = sum(1 for m in guild.members if not m.bot)
         bots = guild.member_count - humans
-        embed = discord.Embed(title=f"📊 {guild.name}", color=accent(guild.id))
+        embed = discord.Embed(title=f"📊 {guild.name}", color=accent(gid))
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
-        embed.add_field(name="Участников", value=f"{humans} людей + {bots} ботов")
         embed.add_field(
-            name="Каналов",
-            value=f"{len(guild.text_channels)} текстовых, {len(guild.voice_channels)} голосовых",
+            name=self._p(gid, "fun.stats_field_members"),
+            value=self._p(gid, "fun.stats_members", humans=humans, bots=bots),
         )
         embed.add_field(
-            name="Бустов", value=f"{guild.premium_subscription_count} (ур. {guild.premium_tier})"
+            name=self._p(gid, "fun.stats_field_channels"),
+            value=self._p(
+                gid,
+                "fun.stats_channels",
+                text=len(guild.text_channels),
+                voice=len(guild.voice_channels),
+            ),
         )
-        embed.add_field(name="Создан", value=f"<t:{int(guild.created_at.timestamp())}:D>")
+        embed.add_field(
+            name=self._p(gid, "fun.stats_field_boosts"),
+            value=self._p(
+                gid,
+                "fun.stats_boosts",
+                count=guild.premium_subscription_count,
+                tier=guild.premium_tier,
+            ),
+        )
+        embed.add_field(
+            name=self._p(gid, "fun.stats_field_created"),
+            value=f"<t:{int(guild.created_at.timestamp())}:D>",
+        )
         if guild.owner:
-            embed.add_field(name="Владелец", value=str(guild.owner))
+            embed.add_field(name=self._p(gid, "fun.stats_field_owner"), value=str(guild.owner))
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="send", description="Передать сообщение через Попосю в ЛС")
@@ -436,21 +456,21 @@ class FunCog(commands.Cog):
         text: str,
         mode: Literal["открыто", "анонимно"] = "открыто",
     ) -> None:
+        gid = interaction.guild_id
         if user.bot:
             await interaction.response.send_message(
-                "Ботам письма не ношу. У них нет души — читать нечем.", ephemeral=True
+                self._p(gid, "fun.send_bot"), ephemeral=True
             )
             return
         if user.id == interaction.user.id:
             await interaction.response.send_message(
-                "Письмо самому себе? Займись чем-нибудь. ✂️👁🖤", ephemeral=True
+                self._p(gid, "fun.send_self"), ephemeral=True
             )
             return
-        key = f"send:{interaction.guild_id}:{interaction.user.id}"
+        key = f"send:{gid}:{interaction.user.id}"
         if not self._send_limiter.try_acquire(key, self.settings.send_per_hour):
             await interaction.response.send_message(
-                "Я курьер, а не почтовое отделение. На сегодня с тебя хватит — позже.",
-                ephemeral=True,
+                self._p(gid, "fun.send_rate_limited"), ephemeral=True
             )
             return
         # дальше — сетевые вызовы (ЛС получателю): отвечаем через defer
@@ -458,28 +478,25 @@ class FunCog(commands.Cog):
 
         text = text[:1500]
         if mode == "анонимно":
-            dm_text = (
-                f"📨 **Анонимное письмо** (сервер «{interaction.guild.name}»):\n\n"
-                f"{text}\n\n"
-                "-# Отправителя не выдам. Но я-то знаю, кто это. ✂️👁🖤"
-            )
+            dm_text = self._p(gid, "fun.send_dm_anon", guild=interaction.guild.name, text=text)
         else:
-            dm_text = (
-                f"📨 **Письмо от {interaction.user.display_name}** "
-                f"(сервер «{interaction.guild.name}»):\n\n"
-                f"{text}\n\n"
-                "-# Передала лично. Попося ✂️👁🖤"
+            dm_text = self._p(
+                gid,
+                "fun.send_dm_open",
+                sender=interaction.user.display_name,
+                guild=interaction.guild.name,
+                text=text,
             )
         try:
             await user.send(dm_text)
         except discord.Forbidden:
             await interaction.followup.send(
-                f"У {user.display_name} закрыты личные сообщения — письмо не доставить.",
+                self._p(gid, "fun.send_forbidden", name=user.display_name),
                 ephemeral=True,
             )
             return
         await interaction.followup.send(
-            f"Доставлено ({mode}). Содержимое я, разумеется, прочитала.", ephemeral=True
+            self._p(gid, "fun.send_delivered", mode=mode), ephemeral=True
         )
         # анонимность — для получателя; модерация всегда видит отправителя
         if self.settings.log_channel:
@@ -502,13 +519,18 @@ class FunCog(commands.Cog):
         minutes: app_commands.Range[int, 1, 10080],
         text: str,
     ) -> None:
+        gid = interaction.guild_id
         due_at = datetime.now(UTC) + timedelta(minutes=minutes)
         await self.activity.add_reminder.execute(
-            interaction.user.id, interaction.guild_id, text[:500], due_at
+            interaction.user.id, gid, text[:500], due_at
         )
         await interaction.response.send_message(
-            f"⏰ Напомню в ЛС <t:{int(due_at.timestamp())}:R>: {text[:200]}\n"
-            "Проверь, что личные сообщения от участников сервера открыты.",
+            self._p(
+                gid,
+                "fun.remind_scheduled",
+                when=f"<t:{int(due_at.timestamp())}:R>",
+                text=text[:200],
+            ),
             ephemeral=True,
         )
 
@@ -528,7 +550,9 @@ class FunCog(commands.Cog):
                         except discord.HTTPException:
                             continue
                     try:
-                        await user.send(f"⏰ Ты просил напомнить: {reminder.text}")
+                        await user.send(
+                            self._p(reminder.guild_id, "fun.remind_dm", text=reminder.text)
+                        )
                     except discord.Forbidden:
                         logger.info(
                             "ЛС закрыты — напоминание не доставлено",

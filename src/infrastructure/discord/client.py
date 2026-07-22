@@ -98,6 +98,7 @@ class PoposyaBot(commands.Bot):
                 music=self.container.music,
                 cinema=self.container.cinema,
                 guild_settings=gs,
+                persona=persona,
             )
         )
         await self.add_cog(

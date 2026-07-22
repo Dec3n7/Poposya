@@ -141,10 +141,10 @@ def test_relationship_bar_partial():
 
 def test_last_seen_variants():
     cog = make_cog()
-    assert "ни разу" in cog._last_seen(None)
-    assert "сегодня" in cog._last_seen(datetime.now(UTC))
-    assert "вчера" in cog._last_seen(datetime.now(UTC) - timedelta(days=1))
-    assert "3 дн" in cog._last_seen(datetime.now(UTC) - timedelta(days=3))
+    assert "ни разу" in cog._last_seen(10, None)
+    assert "сегодня" in cog._last_seen(10, datetime.now(UTC))
+    assert "вчера" in cog._last_seen(10, datetime.now(UTC) - timedelta(days=1))
+    assert "3 дн" in cog._last_seen(10, datetime.now(UTC) - timedelta(days=3))
 
 
 # --- profile ----------------------------------------------------------------
