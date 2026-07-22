@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { pl } from "../plural";
 import type { Guild, PersonaDetail, PersonaIdentity, PersonaSummary } from "../types";
+import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 import { PersonaPhrases } from "./PersonaPhrases";
 
@@ -202,38 +204,76 @@ export function Persona({ guild }: { guild: Guild }) {
     label: p.is_default ? `${p.name} (по умолчанию)` : p.name,
   }));
 
+  // сводки для свёрнутых заголовков (всё из уже загруженных данных)
+  const defaultName = list.find((p) => p.is_default)?.name;
+  const presenceCount = idPresence
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean).length;
+
   return (
     <div className="persona">
-      <p className="muted" style={{ marginTop: 0 }}>
-        Персона задаёт голос и характер бота: системный промпт для общения и решения о
-        вклинивании. Изменения применяются сразу, без перезапуска. Пустой промпт = встроенный
-        характер Попоси.
+      <p className="muted small persona-intro">
+        Голос и характер бота на «{guild.name}». Изменения применяются сразу, без перезапуска.
       </p>
 
       {error && <div className="error-banner">{error}</div>}
       {note && <div className="ok-banner">{note}</div>}
 
-      {/* назначение серверу */}
-      <div className="card pad" style={{ marginBottom: 16 }}>
-        <div className="row-between">
-          <div>
-            <div className="field-label">Активная персона на «{guild.name}»</div>
-            <div className="muted small">Что бот использует именно на этом сервере.</div>
-          </div>
+      {/* шапка контекста — всегда видна */}
+      <div className="card persona-context">
+        <div className="pc-who">
+          <div className="pc-k">Редактирую персону</div>
           <Dropdown
-            value={assignedId != null ? String(assignedId) : ""}
+            value={selectedId != null ? String(selectedId) : ""}
             options={options}
-            ariaLabel="Персона сервера"
-            onChange={(v) => assign(Number(v))}
+            ariaLabel="Выбрать персону для редактирования"
+            onChange={(v) => setSelectedId(Number(v))}
           />
         </div>
+        <div className="pc-spacer" />
+        {selectedId != null && selectedId === assignedId ? (
+          <span className="active-badge">
+            <span className="dot" /> активна на «{guild.name}»
+          </span>
+        ) : (
+          <button
+            className="btn primary small"
+            disabled={busy || selectedId == null}
+            onClick={() => selectedId != null && assign(selectedId)}
+          >
+            Сделать активной здесь
+          </button>
+        )}
       </div>
 
       {/* библиотека */}
-      <div className="card pad" style={{ marginBottom: 16 }}>
-        <div className="row-between" style={{ marginBottom: 12 }}>
-          <div className="field-label">Библиотека персон</div>
-          <div className="btn-row">
+      <Collapsible
+        outerClass="card acc"
+        headClass="acc-head"
+        bodyClass="acc-body"
+        storageKey="persona.sec.library"
+        defaultOpen={false}
+        header={
+          <>
+            <span className="acc-icon" aria-hidden>
+              📚
+            </span>
+            <span className="acc-titles">
+              <span className="acc-title">Библиотека персон</span>
+              <span className="acc-summary">
+                <span className="chip count">{pl(list.length, ["персона", "персоны", "персон"])}</span>
+                {defaultName && <span className="acc-sum-text">по умолчанию: {defaultName}</span>}
+              </span>
+            </span>
+            <span className="chev" aria-hidden>
+              ▸
+            </span>
+          </>
+        }
+      >
+        <div className="acc-pad">
+          <div className="btn-row acc-actions">
             <button className="btn ghost small" disabled={busy} onClick={create}>
               + Создать
             </button>
@@ -241,214 +281,318 @@ export function Persona({ guild }: { guild: Guild }) {
               Импорт
             </button>
           </div>
-        </div>
-
-        <div className="persona-list">
-          {list.map((p) => (
-            <button
-              key={p.id}
-              className={`persona-row${p.id === selectedId ? " active" : ""}`}
-              onClick={() => setSelectedId(p.id)}
-            >
-              <span className="persona-row-name">{p.name}</span>
-              {p.is_default && <span className="chip">по умолчанию</span>}
-              {p.id === assignedId && <span className="chip accent">активна здесь</span>}
-              {p.assigned_count > 0 && (
-                <span className="muted small">на {p.assigned_count} серв.</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {importOpen && (
-          <div style={{ marginTop: 12 }}>
-            <textarea
-              className="input mono"
-              rows={5}
-              placeholder="Вставьте JSON выгрузки персоны…"
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-            />
-            <div className="btn-row" style={{ marginTop: 8 }}>
-              <button className="btn primary small" disabled={busy || !importText.trim()} onClick={doImport}>
-                Импортировать
+          <div className="persona-list">
+            {list.map((p) => (
+              <button
+                key={p.id}
+                className={`persona-row${p.id === selectedId ? " active" : ""}`}
+                onClick={() => setSelectedId(p.id)}
+              >
+                <span className="persona-row-name">{p.name}</span>
+                {p.is_default && <span className="chip">по умолчанию</span>}
+                {p.id === assignedId && <span className="chip accent">активна здесь</span>}
+                {p.assigned_count > 0 && (
+                  <span className="muted small">на {p.assigned_count} серв.</span>
+                )}
               </button>
-            </div>
+            ))}
           </div>
-        )}
-      </div>
-
-      {/* редактор выбранной персоны */}
-      {detail && (
-        <div className="card pad">
-          <div className="row-between" style={{ marginBottom: 12 }}>
-            <input
-              className="input"
-              style={{ maxWidth: 320 }}
-              value={name}
-              disabled={busy}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <button
-              className="btn ghost small"
-              disabled={busy || !name.trim() || name === detail.name}
-              onClick={() =>
-                run(async () => refreshDetail(await api.renamePersona(detail.id, name.trim())))
-              }
-            >
-              Переименовать
-            </button>
-          </div>
-
-          <div className="field-label">Системный промпт</div>
-          <textarea
-            className="input mono"
-            rows={12}
-            value={prompt}
-            disabled={busy}
-            placeholder={detail.default_prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-          <div className="btn-row" style={{ margin: "8px 0 20px" }}>
-            <button
-              className="btn primary small"
-              disabled={busy || prompt === detail.prompt}
-              onClick={() =>
-                run(async () => refreshDetail(await api.setPersonaPrompt(detail.id, prompt)), "Промпт сохранён")
-              }
-            >
-              Сохранить
-            </button>
-            <button
-              className="btn ghost small"
-              disabled={busy || detail.prompt === ""}
-              onClick={() =>
-                run(async () => refreshDetail(await api.setPersonaPrompt(detail.id, "")), "Сброшено к дефолту")
-              }
-            >
-              Сбросить к дефолту
-            </button>
-          </div>
-
-          <div className="field-label">Промпт решения «вклиниться в разговор»</div>
-          <textarea
-            className="input mono"
-            rows={8}
-            value={chime}
-            disabled={busy}
-            placeholder={detail.default_chime_prompt}
-            onChange={(e) => setChime(e.target.value)}
-          />
-          <div className="btn-row" style={{ margin: "8px 0 20px" }}>
-            <button
-              className="btn primary small"
-              disabled={busy || chime === detail.chime_prompt}
-              onClick={() =>
-                run(
-                  async () => refreshDetail(await api.setPersonaChimePrompt(detail.id, chime)),
-                  "Промпт сохранён",
-                )
-              }
-            >
-              Сохранить
-            </button>
-            <button
-              className="btn ghost small"
-              disabled={busy || detail.chime_prompt === ""}
-              onClick={() =>
-                run(
-                  async () => refreshDetail(await api.setPersonaChimePrompt(detail.id, "")),
-                  "Сброшено к дефолту",
-                )
-              }
-            >
-              Сбросить к дефолту
-            </button>
-          </div>
-
-          {identity && (
-            <>
-              <div className="field-label">Мягкая личность</div>
-              <div className="identity-grid">
-                <label className="identity-field">
-                  <span className="muted small">Имя в тексте</span>
-                  <input
-                    className="input"
-                    value={idName}
-                    disabled={busy}
-                    placeholder={identity.default_display_name}
-                    onChange={(e) => setIdName(e.target.value)}
-                  />
-                </label>
-                <label className="identity-field">
-                  <span className="muted small">Подпись-эмодзи</span>
-                  <input
-                    className="input"
-                    value={idSignature}
-                    disabled={busy}
-                    placeholder={identity.default_signature}
-                    onChange={(e) => setIdSignature(e.target.value)}
-                  />
-                </label>
-                <label className="identity-field">
-                  <span className="muted small">Цвет эмбедов</span>
-                  <span className="identity-color">
-                    <input
-                      type="color"
-                      value={toHex(idAccent)}
-                      disabled={busy}
-                      onChange={(e) => setIdAccent(fromHex(e.target.value))}
-                    />
-                    <code className="muted small">{toHex(idAccent)}</code>
-                  </span>
-                </label>
-              </div>
-              <div className="field-label" style={{ marginTop: 12 }}>
-                Discord-статусы (по строке на статус)
-              </div>
+          {importOpen && (
+            <div style={{ marginTop: 12 }}>
               <textarea
                 className="input mono"
                 rows={5}
-                value={idPresence}
+                placeholder="Вставьте JSON выгрузки персоны…"
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+              />
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn primary small" disabled={busy || !importText.trim()} onClick={doImport}>
+                  Импортировать
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Collapsible>
+
+      {/* редактор выбранной персоны */}
+      {detail && (
+        <>
+          {/* Личность */}
+          <Collapsible
+            outerClass="card acc"
+            headClass="acc-head"
+            bodyClass="acc-body"
+            storageKey="persona.sec.identity"
+            defaultOpen
+            header={
+              <>
+                <span className="acc-icon" aria-hidden>
+                  🎭
+                </span>
+                <span className="acc-titles">
+                  <span className="acc-title">Личность</span>
+                  <span className="acc-summary">
+                    {identity ? (
+                      <>
+                        <span className="acc-sum-text">{idName || identity.default_display_name}</span>
+                        <span className="acc-swatch" style={{ background: toHex(idAccent) }} aria-hidden />
+                        <code className="acc-sum-code">{toHex(idAccent)}</code>
+                        {presenceCount > 0 && (
+                          <span className="acc-sum-text">
+                            · {pl(presenceCount, ["статус", "статуса", "статусов"])}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="acc-sum-text">имя, подпись, цвет, статусы</span>
+                    )}
+                  </span>
+                </span>
+                <span className="chev" aria-hidden>
+                  ▸
+                </span>
+              </>
+            }
+          >
+            <div className="acc-pad">
+              <label className="field-label">Имя персоны</label>
+              <div className="row-between" style={{ marginBottom: 4 }}>
+                <input
+                  className="input"
+                  style={{ maxWidth: 320 }}
+                  value={name}
+                  disabled={busy}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <button
+                  className="btn ghost small"
+                  disabled={busy || !name.trim() || name === detail.name}
+                  onClick={() =>
+                    run(async () => refreshDetail(await api.renamePersona(detail.id, name.trim())))
+                  }
+                >
+                  Переименовать
+                </button>
+              </div>
+
+              {identity && (
+                <>
+                  <hr className="acc-divider" />
+                  <div className="identity-grid">
+                    <label className="identity-field">
+                      <span className="muted small">Имя в тексте</span>
+                      <input
+                        className="input"
+                        value={idName}
+                        disabled={busy}
+                        placeholder={identity.default_display_name}
+                        onChange={(e) => setIdName(e.target.value)}
+                      />
+                    </label>
+                    <label className="identity-field">
+                      <span className="muted small">Подпись-эмодзи</span>
+                      <input
+                        className="input"
+                        value={idSignature}
+                        disabled={busy}
+                        placeholder={identity.default_signature}
+                        onChange={(e) => setIdSignature(e.target.value)}
+                      />
+                    </label>
+                    <label className="identity-field">
+                      <span className="muted small">Цвет эмбедов</span>
+                      <span className="identity-color">
+                        <input
+                          type="color"
+                          value={toHex(idAccent)}
+                          disabled={busy}
+                          onChange={(e) => setIdAccent(fromHex(e.target.value))}
+                        />
+                        <code className="muted small">{toHex(idAccent)}</code>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="field-label" style={{ marginTop: 12 }}>
+                    Discord-статусы (по строке на статус)
+                  </div>
+                  <textarea
+                    className="input mono"
+                    rows={5}
+                    value={idPresence}
+                    disabled={busy}
+                    placeholder={"пусто = встроенные занятия Попоси\nнапр.: читает Мураками"}
+                    onChange={(e) => setIdPresence(e.target.value)}
+                  />
+                  <div className="btn-row" style={{ marginTop: 8 }}>
+                    <button
+                      className="btn primary small"
+                      disabled={busy || !identityDirty}
+                      onClick={saveIdentity}
+                    >
+                      Сохранить
+                    </button>
+                    <button className="btn ghost small" disabled={busy} onClick={resetIdentity}>
+                      Сбросить к дефолту
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </Collapsible>
+
+          {/* Промпты */}
+          <Collapsible
+            outerClass="card acc"
+            headClass="acc-head"
+            bodyClass="acc-body"
+            storageKey="persona.sec.prompts"
+            defaultOpen={false}
+            header={
+              <>
+                <span className="acc-icon" aria-hidden>
+                  💬
+                </span>
+                <span className="acc-titles">
+                  <span className="acc-title">Промпты</span>
+                  <span className="acc-summary">
+                    <span className={`chip${detail.prompt ? " accent" : ""}`}>
+                      системный · {detail.prompt ? "изменён" : "дефолт"}
+                    </span>
+                    <span className={`chip${detail.chime_prompt ? " accent" : ""}`}>
+                      вклинивание · {detail.chime_prompt ? "изменён" : "дефолт"}
+                    </span>
+                  </span>
+                </span>
+                <span className="chev" aria-hidden>
+                  ▸
+                </span>
+              </>
+            }
+          >
+            <div className="acc-pad">
+              <label className="field-label">Системный промпт</label>
+              <p className="muted small acc-hint">
+                Голос и характер бота в общении. Пусто = встроенный характер Попоси.
+              </p>
+              <textarea
+                className="input mono"
+                rows={12}
+                value={prompt}
                 disabled={busy}
-                placeholder={"пусто = встроенные занятия Попоси\nнапр.: читает Мураками"}
-                onChange={(e) => setIdPresence(e.target.value)}
+                placeholder={detail.default_prompt}
+                onChange={(e) => setPrompt(e.target.value)}
               />
               <div className="btn-row" style={{ margin: "8px 0 20px" }}>
                 <button
                   className="btn primary small"
-                  disabled={busy || !identityDirty}
-                  onClick={saveIdentity}
+                  disabled={busy || prompt === detail.prompt}
+                  onClick={() =>
+                    run(async () => refreshDetail(await api.setPersonaPrompt(detail.id, prompt)), "Промпт сохранён")
+                  }
                 >
                   Сохранить
                 </button>
-                <button className="btn ghost small" disabled={busy} onClick={resetIdentity}>
+                <button
+                  className="btn ghost small"
+                  disabled={busy || detail.prompt === ""}
+                  onClick={() =>
+                    run(async () => refreshDetail(await api.setPersonaPrompt(detail.id, "")), "Сброшено к дефолту")
+                  }
+                >
                   Сбросить к дефолту
                 </button>
               </div>
-            </>
-          )}
 
-          <div className="row-between persona-footer">
-            <div className="btn-row">
-              <button className="btn ghost small" disabled={busy} onClick={duplicate}>
-                Дублировать
-              </button>
-              <button className="btn ghost small" disabled={busy} onClick={doExport}>
-                Экспорт JSON
-              </button>
+              <label className="field-label">Промпт решения «вклиниться в разговор»</label>
+              <p className="muted small acc-hint">
+                Когда бот сам решает вступить в чат. Пусто = встроенное поведение.
+              </p>
+              <textarea
+                className="input mono"
+                rows={8}
+                value={chime}
+                disabled={busy}
+                placeholder={detail.default_chime_prompt}
+                onChange={(e) => setChime(e.target.value)}
+              />
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button
+                  className="btn primary small"
+                  disabled={busy || chime === detail.chime_prompt}
+                  onClick={() =>
+                    run(
+                      async () => refreshDetail(await api.setPersonaChimePrompt(detail.id, chime)),
+                      "Промпт сохранён",
+                    )
+                  }
+                >
+                  Сохранить
+                </button>
+                <button
+                  className="btn ghost small"
+                  disabled={busy || detail.chime_prompt === ""}
+                  onClick={() =>
+                    run(
+                      async () => refreshDetail(await api.setPersonaChimePrompt(detail.id, "")),
+                      "Сброшено к дефолту",
+                    )
+                  }
+                >
+                  Сбросить к дефолту
+                </button>
+              </div>
             </div>
-            {!detail.is_default && (
-              <button className="btn danger small" disabled={busy} onClick={remove}>
-                Удалить персону
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+          </Collapsible>
 
-      {/* каталог фраз выбранной персоны (отдельная карточка) */}
-      {detail && <PersonaPhrases personaId={detail.id} />}
+          {/* Фразы бота (сам оборачивается в сворачиваемый блок) */}
+          <PersonaPhrases personaId={detail.id} />
+
+          {/* Управление персоной */}
+          <Collapsible
+            outerClass="card acc"
+            headClass="acc-head"
+            bodyClass="acc-body"
+            storageKey="persona.sec.manage"
+            defaultOpen={false}
+            header={
+              <>
+                <span className="acc-icon" aria-hidden>
+                  ⚙️
+                </span>
+                <span className="acc-titles">
+                  <span className="acc-title">Управление персоной</span>
+                  <span className="acc-summary">
+                    <span className="acc-sum-text">дублировать · экспорт · удалить</span>
+                  </span>
+                </span>
+                <span className="chev" aria-hidden>
+                  ▸
+                </span>
+              </>
+            }
+          >
+            <div className="acc-pad">
+              <div className="row-between" style={{ flexWrap: "wrap", gap: 10 }}>
+                <div className="btn-row" style={{ marginTop: 0 }}>
+                  <button className="btn ghost small" disabled={busy} onClick={duplicate}>
+                    Дублировать
+                  </button>
+                  <button className="btn ghost small" disabled={busy} onClick={doExport}>
+                    Экспорт JSON
+                  </button>
+                </div>
+                {!detail.is_default && (
+                  <button className="btn danger small" disabled={busy} onClick={remove}>
+                    Удалить персону
+                  </button>
+                )}
+              </div>
+            </div>
+          </Collapsible>
+        </>
+      )}
     </div>
   );
 }

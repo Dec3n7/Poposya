@@ -1,16 +1,27 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
+import { pl } from "../plural";
 import type { PersonaPhrase, PhraseChange } from "../types";
+import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 
 // Каталог фраз персоны (P4): категории → строки «дефолт → override», режим на
 // блок, сброс по ключу и глобальный find-and-replace с предпросмотром.
 // Наполняется волнами по когам — здесь только отрисовка того, что в реестре.
+// Весь каталог живёт в сворачиваемом блоке «Фразы бота»; каждая категория —
+// свой под-блок со сводкой «N фраз · M изменено».
 
 const CATEGORY_LABELS: Record<string, string> = {
   activity: "Активность",
   ai_chat: "Общение (AI)",
+  moderation: "Модерация",
+  tempvoice: "Каморки (голосовые)",
+  cinema: "Кино",
+  fun: "Веселье",
+  finds: "Находки",
+  relationship: "Отношения",
+  config: "Настройки",
 };
 
 const MODE_LABELS: Record<string, string> = {
@@ -177,80 +188,137 @@ export function PersonaPhrases({ personaId }: { personaId: number }) {
       setPhrases(await api.personaPhrases(personaId));
     });
 
-  if (error && !phrases) return <div className="error-banner">{error}</div>;
-  if (!phrases) return <p className="muted">Загружаю каталог фраз…</p>;
-
-  const categories = [...new Set(phrases.map((p) => p.category))];
+  const categories = phrases ? [...new Set(phrases.map((p) => p.category))] : [];
+  const totalOverrides = phrases ? phrases.filter((p) => p.is_override).length : 0;
 
   return (
-    <div className="card pad" style={{ marginTop: 16 }}>
-      <div className="field-label">Фразы бота</div>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Весь текст, которым говорит бот. Пустое поле = молчать; «Сбросить» возвращает
-        встроенный дефолт. Каталог пополняется по мере выноса текста из модулей.
-      </p>
+    <Collapsible
+      outerClass="card acc"
+      headClass="acc-head"
+      bodyClass="acc-body"
+      storageKey="persona.sec.phrases"
+      defaultOpen={false}
+      header={
+        <>
+          <span className="acc-icon" aria-hidden>
+            🗂️
+          </span>
+          <span className="acc-titles">
+            <span className="acc-title">Фразы бота</span>
+            <span className="acc-summary">
+              {phrases ? (
+                <>
+                  <span className="chip count">
+                    {pl(categories.length, ["категория", "категории", "категорий"])}
+                  </span>
+                  {totalOverrides > 0 && <span className="chip accent">{totalOverrides} изменено</span>}
+                  <span className="acc-sum-text">весь текст, которым говорит бот</span>
+                </>
+              ) : (
+                <span className="acc-sum-text">загрузка…</span>
+              )}
+            </span>
+          </span>
+          <span className="chev" aria-hidden>
+            ▸
+          </span>
+        </>
+      }
+    >
+      <div className="acc-pad">
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Пустое поле = молчать; «Сбросить» возвращает встроенный дефолт. Каталог пополняется по
+          мере выноса текста из модулей.
+        </p>
 
-      {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner">{error}</div>}
+        {!phrases && !error && <p className="muted">Загружаю каталог фраз…</p>}
 
-      {/* find-and-replace по всем фразам */}
-      <div className="phrase-replace">
-        <input
-          className="input"
-          placeholder="Найти…"
-          value={find}
-          disabled={busy}
-          onChange={(e) => setFind(e.target.value)}
-        />
-        <input
-          className="input"
-          placeholder="Заменить на…"
-          value={replace}
-          disabled={busy}
-          onChange={(e) => setReplace(e.target.value)}
-        />
-        <button className="btn ghost small" disabled={busy || !find} onClick={doPreview}>
-          Предпросмотр
-        </button>
-        <button
-          className="btn primary small"
-          disabled={busy || !find || !preview || preview.length === 0}
-          onClick={doReplace}
-        >
-          Заменить
-        </button>
-      </div>
-      {preview && (
-        <div className="phrase-preview">
-          {preview.length === 0 && <span className="muted small">Совпадений нет.</span>}
-          {preview.map((c) => (
-            <div key={c.key} className="phrase-preview-row">
-              <code className="muted small">{c.key}</code>
-              <div className="small">
-                <s>{previewText(c.before)}</s>
-                {" → "}
-                {previewText(c.after)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {categories.map((cat) => (
-        <div key={cat} className="phrase-cat">
-          <div className="group-head">{CATEGORY_LABELS[cat] ?? cat}</div>
-          {phrases
-            .filter((p) => p.category === cat)
-            .map((p) => (
-              <PhraseRow
-                key={p.key}
-                phrase={p}
-                busy={busy}
-                onSave={(value, mode) => save(p, value, mode)}
-                onReset={() => reset(p)}
+        {phrases && (
+          <>
+            {/* find-and-replace по всем фразам */}
+            <div className="phrase-replace">
+              <input
+                className="input"
+                placeholder="Найти…"
+                value={find}
+                disabled={busy}
+                onChange={(e) => setFind(e.target.value)}
               />
-            ))}
-        </div>
-      ))}
-    </div>
+              <input
+                className="input"
+                placeholder="Заменить на…"
+                value={replace}
+                disabled={busy}
+                onChange={(e) => setReplace(e.target.value)}
+              />
+              <button className="btn ghost small" disabled={busy || !find} onClick={doPreview}>
+                Предпросмотр
+              </button>
+              <button
+                className="btn primary small"
+                disabled={busy || !find || !preview || preview.length === 0}
+                onClick={doReplace}
+              >
+                Заменить
+              </button>
+            </div>
+            {preview && (
+              <div className="phrase-preview">
+                {preview.length === 0 && <span className="muted small">Совпадений нет.</span>}
+                {preview.map((c) => (
+                  <div key={c.key} className="phrase-preview-row">
+                    <code className="muted small">{c.key}</code>
+                    <div className="small">
+                      <s>{previewText(c.before)}</s>
+                      {" → "}
+                      {previewText(c.after)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* категории — под-блоки */}
+            {categories.map((cat) => {
+              const items = phrases.filter((p) => p.category === cat);
+              const overrides = items.filter((p) => p.is_override).length;
+              return (
+                <Collapsible
+                  key={cat}
+                  outerClass="subacc"
+                  headClass="subhead"
+                  bodyClass="subbody"
+                  storageKey={`persona.cat.${cat}`}
+                  defaultOpen={false}
+                  header={
+                    <>
+                      <span className="chev" aria-hidden>
+                        ▸
+                      </span>
+                      <span className="subhead-name">{CATEGORY_LABELS[cat] ?? cat}</span>
+                      <span className="chip count">{pl(items.length, ["фраза", "фразы", "фраз"])}</span>
+                      {overrides > 0 && <span className="chip accent">{overrides} изменено</span>}
+                    </>
+                  }
+                >
+                  <div className="subpad">
+                    {items.map((p) => (
+                      <PhraseRow
+                        key={p.key}
+                        phrase={p}
+                        busy={busy}
+                        onSave={(value, mode) => save(p, value, mode)}
+                        onReset={() => reset(p)}
+                      />
+                    ))}
+                  </div>
+                </Collapsible>
+              );
+            })}
+          </>
+        )}
+      </div>
+    </Collapsible>
   );
 }

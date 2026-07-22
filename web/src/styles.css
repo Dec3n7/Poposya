@@ -455,6 +455,247 @@ a {
   font-size: 13px;
 }
 
+/* --- Персона: шапка контекста + сворачиваемые блоки (аккордеон) --- */
+.persona-intro {
+  margin: 0 0 var(--sp-4);
+}
+
+/* шапка контекста — всегда видна (.card даёт стекло/радиус) */
+.persona-context {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: var(--sp-4);
+}
+.pc-who {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-k {
+  font-size: 11px;
+  color: var(--fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pc-spacer {
+  flex: 1 1 30px;
+}
+.active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--success);
+  background: rgba(70, 224, 160, 0.1);
+  border: 1px solid rgba(70, 224, 160, 0.35);
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.active-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+/* блок-раздел (.acc идёт вместе с .card) */
+.acc {
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.acc-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  text-align: left;
+  padding: 15px 18px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.acc-head:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.acc-head:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -3px;
+}
+.acc-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+}
+.acc-titles {
+  margin-right: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.acc-title {
+  font-weight: 600;
+}
+.acc-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.acc-sum-text {
+  color: var(--fg-faint);
+}
+.acc-sum-code {
+  font-family: var(--mono, monospace);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.acc-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  display: inline-block;
+}
+.chev {
+  flex: none;
+  color: var(--fg-dim);
+  font-size: 12px;
+  display: inline-grid;
+  place-items: center;
+  transition: transform 0.3s var(--ease);
+}
+.acc.open > .acc-head .chev {
+  transform: rotate(90deg);
+}
+
+/* тело раздела — плавное раскрытие через grid-template-rows */
+.acc-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--ease);
+}
+.acc.open > .acc-body {
+  grid-template-rows: 1fr;
+}
+.acc-inner {
+  overflow: hidden;
+}
+.acc-pad {
+  padding: 2px 18px 18px;
+}
+.acc-actions {
+  justify-content: flex-end;
+  margin-top: 0;
+  margin-bottom: var(--sp-3);
+}
+.acc-hint {
+  margin: -2px 0 8px;
+}
+.acc-divider {
+  height: 1px;
+  background: var(--border-soft);
+  border: 0;
+  margin: var(--sp-4) 0;
+}
+.chip.count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent-hover);
+  background: rgba(139, 92, 246, 0.14);
+  border-color: var(--accent-ring);
+}
+
+/* под-блок: категория фраз (лёгкий, не стеклянный) */
+.subacc {
+  margin-top: var(--sp-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.35);
+}
+.subhead {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.subhead:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.subhead:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -3px;
+}
+.subhead-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-right: auto;
+}
+.subbody {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s var(--ease);
+}
+.subacc.open > .subbody {
+  grid-template-rows: 1fr;
+}
+.subacc.open > .subhead .chev {
+  transform: rotate(90deg);
+}
+.subpad {
+  padding: 4px 14px 10px;
+}
+
+@media (max-width: 560px) {
+  .acc-head {
+    padding: 13px 14px;
+  }
+  .acc-pad {
+    padding: 2px 14px 14px;
+  }
+  .subhead {
+    padding: 10px 12px;
+  }
+  .subpad {
+    padding: 4px 12px 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acc-body,
+  .subbody,
+  .chev {
+    transition: none;
+  }
+}
+
 /* --- login --- */
 .login-card {
   max-width: 420px;
