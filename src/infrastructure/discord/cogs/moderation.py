@@ -13,6 +13,7 @@ from src.application.moderation.di import ModerationContainer
 from src.config import Settings
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
+from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,13 @@ class ModerationCog(commands.Cog):
         container: ModerationContainer,
         settings: Settings,
         guild_settings=None,
+        persona=None,  # PersonaService — голос кога (каталог фраз)
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
         self.gs = guild_settings
+        self.persona = persona if persona is not None else RegistryPersona()
         # (guild_id, user_id) -> отметки времени последних сообщений
         self._spam_tracker: dict[tuple[int, int], deque[float]] = defaultdict(deque)
         # (guild_id, user_id) -> monotonic-время первого предупреждения за спам
@@ -46,6 +49,10 @@ class ModerationCog(commands.Cog):
         """Значение настройки сервера или глобальный дефолт из .env."""
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
+
+    def _p(self, guild_id: int, key: str, **vars: object) -> str:
+        """Строковая фраза каталога персоны сервера."""
+        return str(self.persona.phrase(guild_id, key, **vars))
 
     def _feature(self, guild_id: int, sub: str | None = None) -> bool:
         """Модуль «Модерация» (мастер) и подфункция (вкладка «Модули»). Флаг,
@@ -118,10 +125,14 @@ class ModerationCog(commands.Cog):
             )
         except discord.Forbidden:
             await interaction.response.send_message(
-                f"Нет прав писать в {target.mention}.", ephemeral=True
+                self._p(interaction.guild_id, "moderation.say_no_perm", channel=target.mention),
+                ephemeral=True,
             )
             return
-        await interaction.response.send_message(f"Отправлено в {target.mention}.", ephemeral=True)
+        await interaction.response.send_message(
+            self._p(interaction.guild_id, "moderation.say_sent", channel=target.mention),
+            ephemeral=True,
+        )
         await self._log(
             interaction.guild, f"💬 /say от {interaction.user} в #{target.name}: {text[:200]}"
         )
@@ -160,8 +171,9 @@ class ModerationCog(commands.Cog):
             self._spam_warned[key] = now
             try:
                 await message.channel.send(
-                    f"{member.mention} — я всё вижу. Ещё раз так — помолчишь "
-                    f"{spam_mute} мин. Это предупреждение. ✂️👁🖤",
+                    self._p(
+                        gid, "moderation.spam_warning", mention=member.mention, minutes=spam_mute
+                    ),
                     allowed_mentions=discord.AllowedMentions(users=True),
                 )
             except discord.HTTPException:
@@ -173,7 +185,9 @@ class ModerationCog(commands.Cog):
         if await self._timeout(member, spam_mute, "Спам (повторно)"):
             try:
                 await message.channel.send(
-                    f"{member.mention} — я предупреждала. {spam_mute} мин тишины. ✂️👁🖤",
+                    self._p(
+                        gid, "moderation.spam_muted", mention=member.mention, minutes=spam_mute
+                    ),
                     allowed_mentions=discord.AllowedMentions(users=True),
                 )
             except discord.HTTPException:
@@ -192,18 +206,27 @@ class ModerationCog(commands.Cog):
     async def warn(
         self, interaction: discord.Interaction, user: discord.Member, reason: str = "без причины"
     ) -> None:
+        gid = interaction.guild_id
         if user.bot:
-            await interaction.response.send_message("Ботов не варним.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.warn_bot"), ephemeral=True
+            )
             return
         result = await self.container.warn_user.execute(
-            user.id, interaction.guild_id, interaction.user.id, reason, _now()
+            user.id, gid, interaction.user.id, reason, _now()
         )
         if result.mute_triggered:
-            mute_min = self._cfg(interaction.guild_id, "warn_mute_minutes")
+            mute_min = self._cfg(gid, "warn_mute_minutes")
             await self._timeout(user, mute_min, f"{result.threshold} варна")
             await interaction.response.send_message(
-                f"⚠️ {user.mention}: {result.count}/{result.threshold} варнов — мут на "
-                f"{mute_min} мин, счётчик обнулён.",
+                self._p(
+                    gid,
+                    "moderation.warn_muted",
+                    mention=user.mention,
+                    count=result.count,
+                    threshold=result.threshold,
+                    minutes=mute_min,
+                ),
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
             await self._log(
@@ -213,7 +236,14 @@ class ModerationCog(commands.Cog):
             )
         else:
             await interaction.response.send_message(
-                f"⚠️ {user.mention}: варн {result.count}/{result.threshold}. Причина: {reason}",
+                self._p(
+                    gid,
+                    "moderation.warn_added",
+                    mention=user.mention,
+                    count=result.count,
+                    threshold=result.threshold,
+                    reason=reason,
+                ),
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
             await self._log(
@@ -227,10 +257,11 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     async def warnings(self, interaction: discord.Interaction, user: discord.Member) -> None:
-        items = await self.container.get_warns.execute(user.id, interaction.guild_id)
+        gid = interaction.guild_id
+        items = await self.container.get_warns.execute(user.id, gid)
         if not items:
             await interaction.response.send_message(
-                f"У {user.display_name} нет активных предупреждений.", ephemeral=True
+                self._p(gid, "moderation.warnings_none", name=user.display_name), ephemeral=True
             )
             return
         lines = [
@@ -238,10 +269,15 @@ class ModerationCog(commands.Cog):
             for i, w in enumerate(items, 1)
         ]
         embed = discord.Embed(
-            title=f"⚠️ Предупреждения: {user.display_name} "
-            f"({len(items)}/{self.settings.warn_threshold})",
+            title=self._p(
+                gid,
+                "moderation.warnings_title",
+                name=user.display_name,
+                count=len(items),
+                threshold=self.settings.warn_threshold,
+            ),
             description="\n".join(lines),
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -252,7 +288,9 @@ class ModerationCog(commands.Cog):
     async def clearwarns(self, interaction: discord.Interaction, user: discord.Member) -> None:
         count = await self.container.clear_warns.execute(user.id, interaction.guild_id)
         await interaction.response.send_message(
-            f"Сброшено предупреждений у {user.mention}: {count}.",
+            self._p(
+                interaction.guild_id, "moderation.warns_cleared", mention=user.mention, count=count
+            ),
             ephemeral=True,
         )
         if count:
@@ -277,7 +315,13 @@ class ModerationCog(commands.Cog):
         # рестарт бота на таймер не влияет
         if await self._timeout(user, minutes, reason):
             await interaction.response.send_message(
-                f"🔇 {user.mention} замучен на {minutes} мин. Причина: {reason}",
+                self._p(
+                    interaction.guild_id,
+                    "moderation.muted",
+                    mention=user.mention,
+                    minutes=minutes,
+                    reason=reason,
+                ),
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
             await self._log(
@@ -286,7 +330,7 @@ class ModerationCog(commands.Cog):
             )
         else:
             await interaction.response.send_message(
-                "Не получилось: нет права Timeout Members или роль участника выше моей.",
+                self._p(interaction.guild_id, "moderation.mute_failed"),
                 ephemeral=True,
             )
 
@@ -298,10 +342,12 @@ class ModerationCog(commands.Cog):
         try:
             await user.timeout(None, reason=f"Снято {interaction.user}")
         except discord.HTTPException:
-            await interaction.response.send_message("Не получилось снять мут.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(interaction.guild_id, "moderation.unmute_failed"), ephemeral=True
+            )
             return
         await interaction.response.send_message(
-            f"🔊 Мут снят с {user.mention}.",
+            self._p(interaction.guild_id, "moderation.unmuted", mention=user.mention),
             allowed_mentions=discord.AllowedMentions(users=True),
         )
         await self._log(interaction.guild, f"🔊 Анмут: {user} — {interaction.user}")
@@ -328,14 +374,20 @@ class ModerationCog(commands.Cog):
             )
         except discord.Forbidden:
             await interaction.followup.send(
-                "Нет права Ban Members (или роль участника выше моей).", ephemeral=True
+                self._p(interaction.guild_id, "moderation.ban_no_perm"), ephemeral=True
             )
             return
         expires_at = await self.container.temp_ban.execute(
             user.id, interaction.guild_id, interaction.user.id, reason, minutes, _now()
         )
         await interaction.followup.send(
-            f"🔨 {user.mention} забанен до <t:{int(expires_at.timestamp())}:f>. Причина: {reason}",
+            self._p(
+                interaction.guild_id,
+                "moderation.tempbanned",
+                mention=user.mention,
+                when=f"<t:{int(expires_at.timestamp())}:f>",
+                reason=reason,
+            ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         await self._log(
@@ -348,24 +400,32 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     async def unban(self, interaction: discord.Interaction, user_id: str) -> None:
+        gid = interaction.guild_id
         try:
             uid = int(user_id)
         except ValueError:
-            await interaction.response.send_message("Это не ID.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.unban_bad_id"), ephemeral=True
+            )
             return
         try:
             await interaction.guild.unban(
                 discord.Object(id=uid), reason=f"Досрочно: {interaction.user}"
             )
         except discord.NotFound:
-            await interaction.response.send_message("Этот пользователь не в бане.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.unban_not_banned"), ephemeral=True
+            )
             return
         except discord.Forbidden:
-            await interaction.response.send_message("Нет права Ban Members.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.unban_no_perm"), ephemeral=True
+            )
             return
-        await self.container.remove_ban.execute(uid, interaction.guild_id)
+        await self.container.remove_ban.execute(uid, gid)
         await interaction.response.send_message(
-            f"✅ <@{uid}> разбанен.", allowed_mentions=discord.AllowedMentions.none()
+            self._p(gid, "moderation.unbanned", user_id=uid),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
         await self._log(interaction.guild, f"✅ Досрочный разбан: <@{uid}> — {interaction.user}")
 
@@ -373,18 +433,28 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     async def bans(self, interaction: discord.Interaction) -> None:
-        active = await self.container.list_bans.execute(interaction.guild_id, _now())
+        gid = interaction.guild_id
+        active = await self.container.list_bans.execute(gid, _now())
         if not active:
-            await interaction.response.send_message("Активных временных банов нет.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.bans_none"), ephemeral=True
+            )
             return
         lines = [
-            f"`{i}.` <@{b.user_id}> — до <t:{int(b.expires_at.timestamp())}:f> ({b.reason})"
+            self._p(
+                gid,
+                "moderation.bans_row",
+                index=i,
+                user_id=b.user_id,
+                when=f"<t:{int(b.expires_at.timestamp())}:f>",
+                reason=b.reason,
+            )
             for i, b in enumerate(active, 1)
         ]
         embed = discord.Embed(
-            title=f"🔨 Временные баны ({len(active)})",
+            title=self._p(gid, "moderation.bans_title", count=len(active)),
             description="\n".join(lines)[:4000],
-            color=accent(interaction.guild_id),
+            color=accent(gid),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -423,9 +493,13 @@ class ModerationCog(commands.Cog):
         try:
             deleted = await interaction.channel.purge(limit=amount)
         except discord.Forbidden:
-            await interaction.followup.send("Нет права Manage Messages.", ephemeral=True)
+            await interaction.followup.send(
+                self._p(interaction.guild_id, "moderation.clear_no_perm"), ephemeral=True
+            )
             return
-        await interaction.followup.send(f"🧹 Удалено сообщений: {len(deleted)}.", ephemeral=True)
+        await interaction.followup.send(
+            self._p(interaction.guild_id, "moderation.cleared", count=len(deleted)), ephemeral=True
+        )
         await self._log(
             interaction.guild,
             f"🧹 /clear: {len(deleted)} сообщений в #{interaction.channel.name} — {interaction.user}",
@@ -438,16 +512,25 @@ class ModerationCog(commands.Cog):
     async def slowmode(
         self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 21600]
     ) -> None:
+        gid = interaction.guild_id
         try:
             await interaction.channel.edit(slowmode_delay=seconds)
         except discord.Forbidden:
-            await interaction.response.send_message("Нет права Manage Channels.", ephemeral=True)
+            await interaction.response.send_message(
+                self._p(gid, "moderation.slowmode_no_perm"), ephemeral=True
+            )
             return
-        text = "выключен" if seconds == 0 else f"{seconds} c"
-        await interaction.response.send_message(f"🐢 Slowmode: {text}.")
+        state = (
+            self._p(gid, "moderation.slowmode_off")
+            if seconds == 0
+            else self._p(gid, "moderation.slowmode_on", seconds=seconds)
+        )
+        await interaction.response.send_message(
+            self._p(gid, "moderation.slowmode_set", state=state)
+        )
         await self._log(
             interaction.guild,
-            f"🐢 Slowmode {text} в #{interaction.channel.name} — {interaction.user}",
+            f"🐢 Slowmode {state} в #{interaction.channel.name} — {interaction.user}",
         )
 
     # --- /rage ---
@@ -459,12 +542,15 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     async def rage(self, interaction: discord.Interaction, user: discord.Member) -> None:
+        gid = interaction.guild_id
         if user.voice is None or user.voice.channel is None:
             await interaction.response.send_message(
-                "Он не в голосовом канале. Ярость откладывается.", ephemeral=True
+                self._p(gid, "moderation.rage_no_voice"), ephemeral=True
             )
             return
-        await interaction.response.send_message(f"😤 Так. {user.mention}. Иди сюда.")
+        await interaction.response.send_message(
+            self._p(gid, "moderation.rage_start", mention=user.mention)
+        )
         voice_channels = [c for c in interaction.guild.voice_channels if c != user.voice.channel]
         random.shuffle(voice_channels)
         try:
@@ -472,9 +558,7 @@ class ModerationCog(commands.Cog):
                 await user.move_to(channel, reason="/rage")
                 await asyncio.sleep(1)
             await interaction.guild.kick(user, reason=f"/rage — {interaction.user}")
-            await interaction.channel.send("Вышвырнула. Пусть подумает о своём поведении. ✂️👁🖤")
+            await interaction.channel.send(self._p(gid, "moderation.rage_kicked"))
             await self._log(interaction.guild, f"😤 /rage: {user} кикнут — {interaction.user}")
         except discord.Forbidden:
-            await interaction.channel.send(
-                "Не хватило прав дожать (Move Members / Kick Members). Скучно."
-            )
+            await interaction.channel.send(self._p(gid, "moderation.rage_no_perm"))

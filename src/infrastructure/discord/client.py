@@ -73,7 +73,9 @@ class PoposyaBot(commands.Bot):
         music_cog.presence.set_lines_provider(persona.presence_lines)
         persona.add_reload_hook(music_cog.presence.refresh)
         await self.add_cog(
-            ModerationCog(self, self.container.moderation, self.container.settings, gs)
+            ModerationCog(
+                self, self.container.moderation, self.container.settings, gs, persona=persona
+            )
         )
         await self.add_cog(
             ActivityCog(
