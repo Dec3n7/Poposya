@@ -112,8 +112,10 @@ services:
       - "8081:80"
     healthcheck:
       # раздача статики жива? (busybox wget есть в nginx:alpine). Не завязано на
-      # api — панель отвечает index.html даже при недоступном бэкенде
-      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      # api — панель отвечает index.html даже при недоступном бэкенде.
+      # 127.0.0.1, НЕ localhost: localhost в alpine резолвится в ::1, а nginx
+      # слушает только IPv4 0.0.0.0:80 -> по ::1 отказ и ложный unhealthy.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
