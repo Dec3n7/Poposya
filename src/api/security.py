@@ -36,23 +36,33 @@ class Session:
         return any(g.id == guild_id for g in self.guilds)
 
 
-def encode_session(secret: str, session: Session, ttl_hours: int) -> str:
+def encode_session(secret: str, session: Session, ttl_hours: int, version: int = 1) -> str:
     now = int(time.time())
     payload = {
         "sub": str(session.user_id),
         "username": session.username,
         "avatar": session.avatar,
         "guilds": [{"id": str(g.id), "name": g.name, "icon": g.icon} for g in session.guilds],
+        # sv — версия сессии для серверного отзыва (см. web_session_version)
+        "sv": version,
         "iat": now,
         "exp": now + ttl_hours * 3600,
     }
     return jwt.encode(payload, secret, algorithm=_ALGO)
 
 
-def decode_session(secret: str, token: str) -> Session | None:
+def decode_session(secret: str, token: str, version: int = 1) -> Session | None:
     try:
         payload = jwt.decode(token, secret, algorithms=[_ALGO])
     except jwt.PyJWTError:
+        return None
+    # Серверный отзыв: токены со старой версией сессии больше не действительны.
+    # Отсутствие claim (легаси-токен) трактуем как версию 1 — не гасим зря при
+    # первом деплое рубильника.
+    try:
+        if int(payload.get("sv", 1)) != version:
+            return None
+    except (TypeError, ValueError):
         return None
     try:
         guilds = [

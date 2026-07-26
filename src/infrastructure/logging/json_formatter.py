@@ -32,8 +32,15 @@ _STANDARD_ATTRS = {
     "asctime",
 }
 
-# Правило ТЗ 9.1: секрет, попавший в Settings, не должен утечь через логи
-_SECRET_KEY_RE = re.compile(r"(_api_key|_token|password|database_url|^token)$", re.IGNORECASE)
+# Правило ТЗ 9.1: секрет, попавший в extra-поля лога, не должен утечь. Совпадение
+# по ПОДСТРОКЕ имени ключа (в любом месте, регистр не важен) — лучше перередачить
+# безобидное поле, чем упустить токен/секрет/куку. Покрывает discord_token,
+# *_secret (client/session), *_api_key, cookie/authorization/jwt, database_url.
+_SECRET_KEY_RE = re.compile(
+    r"(api_key|token|password|passwd|secret|cookie|authorization|credential"
+    r"|private_key|database_url|\bjwt\b)",
+    re.IGNORECASE,
+)
 
 
 class JsonFormatter(logging.Formatter):

@@ -20,7 +20,9 @@ def current_session(request: Request) -> Session:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "не авторизован")
-    session = decode_session(container.settings.web_session_secret, token)
+    session = decode_session(
+        container.settings.web_session_secret, token, container.settings.web_session_version
+    )
     if session is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия недействительна")
     return session

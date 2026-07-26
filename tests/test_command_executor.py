@@ -70,6 +70,16 @@ def patch_image_session(monkeypatch, response=None, get_error=None):
     return session
 
 
+@pytest.fixture(autouse=True)
+def _bypass_ssrf_guard(monkeypatch):
+    # SSRF-щит _download_image резолвит хост в сеть; в юнит-тестах его глушим,
+    # чтобы не зависеть от DNS. Сам щит проверяется в test_ssrf_guard.py.
+    monkeypatch.setattr(
+        "src.infrastructure.discord.command_executor._assert_public_url",
+        AsyncMock(),
+    )
+
+
 @total_ordering
 class FakeRole:
     def __init__(self, guild, role_id, name="Role", position=1, managed=False, permissions=0):

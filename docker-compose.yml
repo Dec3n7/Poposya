@@ -22,6 +22,13 @@ services:
   bot:
     build: .
     restart: unless-stopped
+    # Изоляция: процесс уже под непривилегированным пользователем (Dockerfile),
+    # снимаем и все Linux-capabilities (нашему коду они не нужны) и запрещаем
+    # повышение прав через setuid-бинарники. Побег ограничен максимально.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     # Без лимита утечка в боте съедает весь хост — вместе со сторожем (WARDEN),
     # и авария остаётся никем не замеченной. С лимитом отказ локален и точно
     # назван: Docker выставляет OOMKilled, мониторинг читает его напрямую.
@@ -41,7 +48,11 @@ services:
         condition: service_healthy
         required: false   # без профиля postgres сервиса db нет — и это нормально
     ports:
-      - "8080:8080"   # /health и /ready (проверка в браузере: http://localhost:8080/health)
+      # Только loopback: на 8080 висит /health/full с внутренними метриками
+      # (коги/задачи/outbox/ошибки/листенеры) — наружу его публиковать нельзя.
+      # WARDEN читает бот по docker-сети (bot:8080), ему эта публикация не нужна;
+      # порт остаётся лишь для ручной проверки с самого хоста.
+      - "127.0.0.1:8080:8080"   # /health и /ready (в браузере на хосте: http://localhost:8080/health)
     healthcheck:
       # urlopen кидает исключение на HTTP 503 -> ненулевой код выхода -> unhealthy
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
@@ -61,6 +72,10 @@ services:
     profiles: ["postgres"]
     build: .
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     mem_limit: 256m
     env_file: .env
     environment:
@@ -86,17 +101,34 @@ services:
     profiles: ["postgres"]
     build: ./web
     restart: unless-stopped
+    # nginx мастер стартует под root (штатно), воркеры — под nginx; снимаем хотя
+    # бы повышение прав. Полный rootless — опция nginx-unprivileged (см. RUNBOOK).
+    security_opt:
+      - no-new-privileges:true
     mem_limit: 128m
     depends_on:
       - api
     ports:
       - "8081:80"
+    healthcheck:
+      # раздача статики жива? (busybox wget есть в nginx:alpine). Не завязано на
+      # api — панель отвечает index.html даже при недоступном бэкенде
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Поднимается только с профилем: docker compose --profile postgres up -d
   db:
     profiles: ["postgres"]
     image: postgres:16-alpine
     restart: unless-stopped
+    # Энтрипойнт postgres стартует под root, чинит права на data-каталог и
+    # gosu-дропает в пользователя postgres — это понижение прав, no-new-privileges
+    # его не ломает. cap_drop НЕ ставим: инициализации нужны setuid/chown.
+    security_opt:
+      - no-new-privileges:true
     # Намеренно щедро (×20 к рабочим ~105 МБ): здесь лимит — предохранитель от
     # разгона, а не рабочая граница. Причины две. Page cache считается в лимит
     # cgroup, а Postgres держит на нём производительность (shared_buffers всего

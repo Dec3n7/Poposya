@@ -1,4 +1,9 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Минимальная длина ключа подписи сессий. token_urlsafe(32) даёт 43 символа —
+# с запасом; всё короче считаем ошибкой конфигурации, а не рабочим секретом.
+_MIN_SESSION_SECRET_LEN = 32
 
 
 class Settings(BaseSettings):
@@ -35,6 +40,15 @@ class Settings(BaseSettings):
     web_allowed_origin: str = "http://localhost:5173"  # адрес фронта для CORS
     web_api_port: int = 8081
     web_session_ttl_hours: int = 24
+    # серверный «рубильник» сессий: версия вшивается в JWT (claim sv), при
+    # расшифровке сверяется. Увеличить на 1 в .env -> все выданные токены
+    # мгновенно недействительны (аварийный logout всех, без ротации секрета
+    # подписи и без стора на сервере). Украденный токен так гасится до TTL.
+    web_session_version: int = 1
+    # интерактивная схема FastAPI (/docs, /redoc, /openapi.json). По умолчанию
+    # ВЫКЛ — на публике не светим карту эндпоинтов; для локальной разработки
+    # можно включить в .env: WEB_DOCS_ENABLED=true
+    web_docs_enabled: bool = False
     # сколько ждать результат команды моста (бан/мут/музыка) перед ответом
     # «отправлено, применяется»; бот обычно исполняет за доли секунды
     web_command_wait_seconds: float = 5.0
@@ -317,3 +331,27 @@ class Settings(BaseSettings):
     # либо путь к файлу cookies в формате Netscape
     ytdlp_cookies_from_browser: str | None = None
     ytdlp_cookies_file: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_web_panel_secrets(self) -> "Settings":
+        # Веб-панель разворачивают тогда, когда задан DISCORD_CLIENT_ID (без него
+        # /login не стартует). Раз панель поднимается — подпись сессий обязана
+        # быть стойкой: пустой/короткий секрет делает JWT подделываемыми (любой
+        # соберёт токен с нужным claim guilds и обойдёт require_guild_manager).
+        # Поэтому падаем на старте, а не работаем дырявыми. Чисто ботовый профиль
+        # (без CLIENT_ID) валидатора не касается — секрет ему не нужен.
+        if self.discord_client_id:
+            if len(self.web_session_secret) < _MIN_SESSION_SECRET_LEN:
+                raise ValueError(
+                    "WEB_SESSION_SECRET обязателен и должен быть не короче "
+                    f"{_MIN_SESSION_SECRET_LEN} символов, когда включена веб-панель "
+                    "(задан DISCORD_CLIENT_ID) — иначе сессии подделываемы. "
+                    'Сгенерируйте: python -c "import secrets; '
+                    "print(secrets.token_urlsafe(32))\""
+                )
+            if not self.discord_client_secret:
+                raise ValueError(
+                    "DISCORD_CLIENT_SECRET обязателен, когда включена веб-панель "
+                    "(задан DISCORD_CLIENT_ID)."
+                )
+        return self

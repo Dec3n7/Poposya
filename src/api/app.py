@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.container import ApiContainer
 from src.api.routers import (
@@ -27,14 +28,41 @@ from src.api.routers import (
 
 logger = logging.getLogger(__name__)
 
+# Холодный старт: миграции применяет БОТ, а api-процесс может подняться раньше
+# и стукнуться в ещё несуществующие таблицы. Вместо crash-restart цикла ждём
+# готовности схемы с бэкоффом (bot: start_period 60с). Здоровье БД проверяем
+# самой рабочей загрузкой — не завязываясь на имя таблицы alembic.
+_SCHEMA_WAIT_ATTEMPTS = 45
+_SCHEMA_WAIT_DELAY = 2.0
+
+
+async def _load_state_when_ready(container: ApiContainer) -> None:
+    for attempt in range(1, _SCHEMA_WAIT_ATTEMPTS + 1):
+        try:
+            await container.guild_settings.load_all()
+            await container.persona.load_all()
+            return
+        except SQLAlchemyError as exc:
+            if attempt == _SCHEMA_WAIT_ATTEMPTS:
+                logger.error("API: схема БД так и не готова — сдаюсь, перезапуск")
+                raise
+            logger.warning(
+                "API: схема БД ещё не готова (попытка %d/%d, %s) — жду %.0fс",
+                attempt,
+                _SCHEMA_WAIT_ATTEMPTS,
+                exc.__class__.__name__,
+                _SCHEMA_WAIT_DELAY,
+            )
+            await asyncio.sleep(_SCHEMA_WAIT_DELAY)
+
 
 def create_app(container: ApiContainer) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # поднять переопределения настроек и персоны в память + слушать чужие
-        # записи (бот/другой инстанс) через тот же Postgres NOTIFY, что и бот
-        await container.guild_settings.load_all()
-        await container.persona.load_all()
+        # записи (бот/другой инстанс) через тот же Postgres NOTIFY, что и бот.
+        # С ожиданием готовности схемы: api может стартовать раньше миграций бота.
+        await _load_state_when_ready(container)
         listener_tasks: list[asyncio.Task] = []
         if container.settings_listener is not None:
             listener_tasks.append(asyncio.create_task(container.settings_listener.run_forever()))
@@ -49,7 +77,14 @@ def create_app(container: ApiContainer) -> FastAPI:
                 task.cancel()
             await container.engine.dispose()
 
-    app = FastAPI(title="Poposya Web Panel API", version="0.1.0", lifespan=lifespan)
+    # Интерактивную схему (/docs, /redoc, /openapi.json) на публике не отдаём:
+    # url=None полностью снимает роут. Включается только флагом в .env (dev).
+    docs_kwargs = (
+        {}
+        if container.settings.web_docs_enabled
+        else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    )
+    app = FastAPI(title="Poposya Web Panel API", version="0.1.0", lifespan=lifespan, **docs_kwargs)
     app.state.container = container
 
     # CORS: фронт (Vite) на другом origin шлёт куку-сессию -> нужен точный origin

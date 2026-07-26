@@ -78,7 +78,9 @@ async def callback(
         avatar=user.get("avatar"),
         guilds=discord_oauth.manageable_guilds(guilds),
     )
-    jwt_token = encode_session(s.web_session_secret, session, s.web_session_ttl_hours)
+    jwt_token = encode_session(
+        s.web_session_secret, session, s.web_session_ttl_hours, s.web_session_version
+    )
     resp = RedirectResponse(s.web_allowed_origin)
     resp.delete_cookie(OAUTH_STATE_COOKIE)
     resp.set_cookie(
@@ -116,8 +118,7 @@ async def me(
         username=session.username,
         avatar=avatar_url(session.user_id, session.avatar),
         guilds=[
-            GuildDTO(id=str(g.id), name=g.name, icon=guild_icon_url(g.id, g.icon))
-            for g in guilds
+            GuildDTO(id=str(g.id), name=g.name, icon=guild_icon_url(g.id, g.icon)) for g in guilds
         ],
         is_operator=session.user_id in container.settings.web_operator_ids,
     )

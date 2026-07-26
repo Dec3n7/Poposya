@@ -10,3 +10,7 @@ RUN npm run build
 FROM nginx:alpine AS serve
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Заголовки безопасности отдельным файлом: nginx.conf включает его в каждый
+# location. Кладём ВНЕ conf.d — иначе штатный `include conf.d/*.conf` в http{}
+# подхватил бы снипет вторично на http-уровне.
+COPY security-headers.conf /etc/nginx/security-headers.conf

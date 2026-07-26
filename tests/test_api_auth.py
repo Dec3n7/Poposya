@@ -6,12 +6,15 @@ Discord замокан (без реальной сети). Проверяем: �
 тестам БД не нужна.
 """
 
+import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 
 from src.api import discord_oauth
 from src.api.app import create_app
 from src.api.container import build_api_container
+from src.api.security import Session, decode_session, encode_session
 from src.config import Settings
 
 
@@ -151,7 +154,106 @@ async def test_logout_clears_session(client, mock_discord):
 
 
 async def test_login_500_when_oauth_not_configured():
-    app = create_app(build_api_container(make_settings(discord_client_id="", web_session_secret="")))
+    app = create_app(
+        build_api_container(make_settings(discord_client_id="", web_session_secret=""))
+    )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/api/auth/login", follow_redirects=False)
         assert resp.status_code == 500
+
+
+# --- серверный отзыв сессий через версию (web_session_version) ---------------
+
+_SECRET = "test-session-secret-at-least-32-bytes!!"
+
+
+def test_session_version_kill_switch():
+    token = encode_session(_SECRET, Session(user_id=1, username="u", avatar=None, guilds=[]), 24, 1)
+    assert decode_session(_SECRET, token, version=1) is not None
+    # тот же секрет, но версия сессий поднята -> токен недействителен
+    assert decode_session(_SECRET, token, version=2) is None
+
+
+def test_legacy_token_without_sv_valid_at_v1():
+    # токен, выпущенный до рубильника (без claim sv)
+    payload = {"sub": "7", "username": "u", "avatar": None, "guilds": [], "exp": 9_999_999_999}
+    legacy = jwt.encode(payload, _SECRET, algorithm="HS256")
+    assert decode_session(_SECRET, legacy, version=1) is not None  # не гасим зря
+    assert decode_session(_SECRET, legacy, version=2) is None  # но рубильник ловит
+
+
+async def test_me_rejected_after_session_version_bump(mock_discord):
+    c1 = build_api_container(make_settings(web_session_version=1))
+    c1.bot_guilds.prime({10, 20})
+    app1 = create_app(c1)
+    async with AsyncClient(transport=ASGITransport(app=app1), base_url="http://test") as client:
+        await client.get("/api/auth/login", follow_redirects=False)
+        state = client.cookies["poposya_oauth_state"]
+        await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+        assert (await client.get("/api/auth/me")).status_code == 200
+        cookie = client.cookies["poposya_session"]
+
+    # тот же секрет, но версия поднята на новом инстансе -> старая кука отвергнута
+    c2 = build_api_container(make_settings(web_session_version=2))
+    c2.bot_guilds.prime({10, 20})
+    app2 = create_app(c2)
+    async with AsyncClient(transport=ASGITransport(app=app2), base_url="http://test") as client2:
+        client2.cookies.set("poposya_session", cookie)
+        assert (await client2.get("/api/auth/me")).status_code == 401
+
+
+# --- интерактивная схема FastAPI выключена по умолчанию (web_docs_enabled) ----
+
+
+async def test_docs_disabled_by_default(client):
+    assert (await client.get("/openapi.json")).status_code == 404
+    assert (await client.get("/docs")).status_code == 404
+
+
+async def test_docs_enabled_by_flag():
+    app = create_app(build_api_container(make_settings(web_docs_enabled=True)))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.get("/openapi.json")).status_code == 200
+
+
+# --- fail-fast: слабый секрет сессий при включённой панели роняет старт --------
+
+
+def test_weak_session_secret_rejected_when_panel_enabled():
+    # панель включена (есть client_id), но секрет короткий -> Settings не соберётся
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            discord_token="t",
+            discord_client_id="cid",
+            discord_client_secret="csec",
+            web_session_secret="short",
+        )
+
+
+def test_empty_session_secret_rejected_when_panel_enabled():
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            discord_token="t",
+            discord_client_id="cid",
+            discord_client_secret="csec",
+            web_session_secret="",
+        )
+
+
+def test_missing_client_secret_rejected_when_panel_enabled():
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            discord_token="t",
+            discord_client_id="cid",
+            discord_client_secret="",
+            web_session_secret="test-session-secret-at-least-32-bytes!!",
+        )
+
+
+def test_bot_only_profile_needs_no_web_secret():
+    # чисто ботовый профиль (без client_id) валиден и с пустым секретом
+    s = Settings(_env_file=None, discord_token="t")
+    assert s.web_session_secret == ""
