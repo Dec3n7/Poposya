@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api";
 import type { WardenSnapshot, WardenTarget } from "../types";
+import { EmptyState } from "./EmptyState";
+import { SkeletonCards } from "./Skeleton";
 
 // Опрос чаще, чем сторож проверяет цели (10с), смысла не имеет: новых данных
 // между его циклами не появляется.
@@ -115,8 +117,8 @@ export function Warden() {
   }
   if (!snap) {
     return (
-      <div className="center" style={{ padding: 48 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div style={{ padding: 8 }}>
+        <SkeletonCards count={5} height={120} />
       </div>
     );
   }
@@ -180,7 +182,7 @@ export function Warden() {
           <span className="muted small"> · проверка {ago(snap.last_check ?? null)}</span>
         </div>
         {snap.transitions!.length === 0 ? (
-          <div className="muted">Переходов не было</div>
+          <EmptyState compact title="Переходов не было" hint="Здесь появятся смены состояния целей — как только сторож их заметит." />
         ) : (
           <ul className="warden-log">
             {snap.transitions!.map((t, i) => (

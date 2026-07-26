@@ -6,6 +6,7 @@ import type { Guild, PersonaDetail, PersonaIdentity, PersonaSummary } from "../t
 import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 import { PersonaPhrases } from "./PersonaPhrases";
+import { SkeletonRows } from "./Skeleton";
 
 // int-цвет ↔ hex для <input type="color">
 const toHex = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
@@ -194,8 +195,8 @@ export function Persona({ guild }: { guild: Guild }) {
   if (error && !list) return <div className="error-banner">{error}</div>;
   if (!list)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div className="pad">
+        <SkeletonRows rows={4} avatar={false} />
       </div>
     );
 
