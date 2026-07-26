@@ -120,49 +120,6 @@ function PlaylistRow({
   );
 }
 
-const CONTROLS: { action: "pause" | "resume" | "skip" | "stop"; label: string }[] = [
-  { action: "pause", label: "⏸️ Пауза" },
-  { action: "resume", label: "▶️ Играть" },
-  { action: "skip", label: "⏭️ Пропустить" },
-  { action: "stop", label: "⏹️ Стоп" },
-];
-
-function PlayerControls({ guildId }: { guildId: string }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const toast = useToast();
-
-  async function send(action: "pause" | "resume" | "skip" | "stop") {
-    setBusy(action);
-    try {
-      const r = await api.musicControl(guildId, action);
-      if (r.status === "done") toast.success(r.result ?? "Готово");
-      else if (r.status === "failed") toast.error(r.result ?? "Не вышло");
-      else toast.info("Отправлено — применяется…");
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Ошибка");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <div className="card pad player-controls">
-      <div className="control-buttons">
-        {CONTROLS.map((c) => (
-          <button
-            key={c.action}
-            className="btn"
-            onClick={() => send(c.action)}
-            disabled={busy !== null}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function Music({ guild }: { guild: Guild }) {
   const [list, setList] = useState<PlaylistItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,9 +158,6 @@ export function Music({ guild }: { guild: Guild }) {
     <div>
       <h2 className="section-title">Сейчас играет</h2>
       <NowPlaying guild={guild} />
-
-      <h2 className="section-title">Управление плеером</h2>
-      <PlayerControls guildId={guild.id} />
 
       <h2 className="section-title">Плейлисты</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>

@@ -15,6 +15,7 @@ import aiohttp
 import discord
 import pytest
 
+from src.domain.music.entities import RepeatMode
 from src.infrastructure.commands.bridge import Command, CommandError
 from src.infrastructure.discord.command_executor import (
     DiscordCommandExecutor,
@@ -429,6 +430,101 @@ async def test_skip():
     result = await executor.execute(cmd("music.skip"))
     player.skip.assert_awaited_once()
     assert result == "Пропущено."
+
+
+# --- панель-пульт: previous / shuffle / repeat / volume / seek / remove -------
+
+
+def _exec_with_player(player):
+    cog, _service = make_music_cog(player)
+    return make_executor(guild=FakeGuild(), music_cog=cog)[0]
+
+
+async def test_previous_ok():
+    player = make_player()
+    player.previous = AsyncMock(return_value=True)
+    result = await _exec_with_player(player).execute(cmd("music.previous"))
+    player.previous.assert_awaited_once()
+    assert result == "Предыдущий трек."
+
+
+async def test_previous_no_history():
+    player = make_player()
+    player.previous = AsyncMock(return_value=False)
+    result = await _exec_with_player(player).execute(cmd("music.previous"))
+    assert "истории нет" in result
+
+
+async def test_shuffle_ok():
+    player = make_player()
+    player.queue = [1, 2, 3]
+    player.shuffle = AsyncMock()
+    result = await _exec_with_player(player).execute(cmd("music.shuffle"))
+    player.shuffle.assert_awaited_once()
+    assert result == "Очередь перемешана."
+
+
+async def test_shuffle_empty_queue():
+    player = make_player()
+    player.queue = []
+    player.shuffle = AsyncMock()
+    result = await _exec_with_player(player).execute(cmd("music.shuffle"))
+    player.shuffle.assert_not_awaited()
+    assert "пуста" in result
+
+
+async def test_repeat_cycles():
+    player = make_player()
+    player.cycle_repeat = AsyncMock(return_value=RepeatMode.ALL)
+    result = await _exec_with_player(player).execute(cmd("music.repeat"))
+    player.cycle_repeat.assert_awaited_once()
+    assert result == "Повтор: очередь."
+
+
+async def test_volume_ok():
+    player = make_player()
+    player.set_volume = AsyncMock()
+    player.volume = 0.5
+    result = await _exec_with_player(player).execute(cmd("music.volume", {"volume": 0.5}))
+    player.set_volume.assert_awaited_once_with(0.5)
+    assert result == "Громкость: 50%."
+
+
+async def test_volume_invalid():
+    player = make_player()
+    player.set_volume = AsyncMock()
+    with pytest.raises(CommandError, match="громкости"):
+        await _exec_with_player(player).execute(cmd("music.volume", {"volume": "abc"}))
+
+
+async def test_seek_ok():
+    player = make_player()
+    player.seek = AsyncMock(return_value=True)
+    result = await _exec_with_player(player).execute(cmd("music.seek", {"position": 83}))
+    player.seek.assert_awaited_once_with(83)
+    assert result == "Перемотано на 1:23."
+
+
+async def test_seek_rejected():
+    player = make_player()
+    player.seek = AsyncMock(return_value=False)
+    result = await _exec_with_player(player).execute(cmd("music.seek", {"position": 5}))
+    assert "нельзя" in result
+
+
+async def test_remove_ok():
+    player = make_player()
+    player.remove_at = AsyncMock(return_value=SimpleNamespace(title="Song"))
+    result = await _exec_with_player(player).execute(cmd("music.remove", {"position": 2}))
+    player.remove_at.assert_awaited_once_with(2)
+    assert "Song" in result
+
+
+async def test_remove_not_found():
+    player = make_player()
+    player.remove_at = AsyncMock(return_value=None)
+    result = await _exec_with_player(player).execute(cmd("music.remove", {"position": 99}))
+    assert "нет трека с таким номером" in result
 
 
 async def test_stop_cleans_up_service():

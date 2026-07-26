@@ -22,6 +22,7 @@ import discord
 from discord.ext import commands as discord_commands
 
 from src.application.moderation.di import ModerationContainer
+from src.domain.music.entities import RepeatMode
 from src.infrastructure.commands.bridge import Command, CommandError
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,55 @@ class DiscordCommandExecutor:
         service, _player = self._player(guild.id)
         await service.cleanup(guild.id, "⏹️ Остановлено из панели.")
         return "Остановлено."
+
+    async def _previous(self, guild: discord.Guild, _command: Command) -> str:
+        _service, player = self._player(guild.id)
+        if not await player.previous():
+            return "Некуда возвращаться — истории нет."
+        return "Предыдущий трек."
+
+    async def _shuffle(self, guild: discord.Guild, _command: Command) -> str:
+        _service, player = self._player(guild.id)
+        if not player.queue:
+            return "Очередь пуста — нечего перемешивать."
+        await player.shuffle()
+        return "Очередь перемешана."
+
+    async def _repeat(self, guild: discord.Guild, _command: Command) -> str:
+        _service, player = self._player(guild.id)
+        mode = await player.cycle_repeat()
+        labels = {RepeatMode.OFF: "выключен", RepeatMode.ONE: "трек", RepeatMode.ALL: "очередь"}
+        return f"Повтор: {labels.get(mode, mode.value)}."
+
+    async def _volume(self, guild: discord.Guild, command: Command) -> str:
+        _service, player = self._player(guild.id)
+        try:
+            value = float(command.payload["volume"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CommandError("Неверное значение громкости.") from exc
+        await player.set_volume(value)  # клампит 0.0–2.0
+        return f"Громкость: {round(player.volume * 100)}%."
+
+    async def _seek(self, guild: discord.Guild, command: Command) -> str:
+        _service, player = self._player(guild.id)
+        try:
+            position = int(command.payload["position"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CommandError("Неверная позиция перемотки.") from exc
+        if not await player.seek(position):
+            return "Перемотать нельзя (прямой эфир или позиция вне трека)."
+        return f"Перемотано на {position // 60}:{position % 60:02d}."
+
+    async def _remove(self, guild: discord.Guild, command: Command) -> str:
+        _service, player = self._player(guild.id)
+        try:
+            position = int(command.payload["position"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CommandError("Неверный номер трека.") from exc
+        removed = await player.remove_at(position)
+        if removed is None:
+            return "В очереди нет трека с таким номером."
+        return f"Убрано из очереди: {removed.title[:80]}"
 
     # --- профиль бота на сервере (ник/аватар/баннер) ---
 
@@ -508,6 +558,12 @@ _HANDLERS = {
     "music.resume": DiscordCommandExecutor._resume,
     "music.skip": DiscordCommandExecutor._skip,
     "music.stop": DiscordCommandExecutor._stop,
+    "music.previous": DiscordCommandExecutor._previous,
+    "music.shuffle": DiscordCommandExecutor._shuffle,
+    "music.repeat": DiscordCommandExecutor._repeat,
+    "music.volume": DiscordCommandExecutor._volume,
+    "music.seek": DiscordCommandExecutor._seek,
+    "music.remove": DiscordCommandExecutor._remove,
     "profile.apply": DiscordCommandExecutor._profile_apply,
     "role.assign": DiscordCommandExecutor._role_assign,
     "role.unassign": DiscordCommandExecutor._role_unassign,

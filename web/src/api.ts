@@ -259,10 +259,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ user_id: userId }),
     }),
-  musicControl: (guildId: string, action: "pause" | "resume" | "skip" | "stop"): Promise<CommandResult> =>
+  musicControl: (
+    guildId: string,
+    action: "pause" | "resume" | "skip" | "stop" | "previous" | "shuffle" | "repeat",
+  ): Promise<CommandResult> =>
     req<CommandResult>(`/api/guilds/${guildId}/music/control`, {
       method: "POST",
       body: JSON.stringify({ action }),
+    }),
+  musicVolume: (guildId: string, volume: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/music/volume`, {
+      method: "POST",
+      body: JSON.stringify({ volume }),
+    }),
+  musicSeek: (guildId: string, position: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/music/seek`, {
+      method: "POST",
+      body: JSON.stringify({ position }),
+    }),
+  musicRemove: (guildId: string, position: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/music/queue/${position}`, {
+      method: "DELETE",
     }),
 
   // --- персоны (только оператор) ---

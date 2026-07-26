@@ -134,3 +134,74 @@ export function IconGrip() {
     </svg>
   );
 }
+
+// --- медиа-контролы плеера (заливка, а не контур — так читаются как в плеере) --
+
+/** Треугольник: играть. */
+export function IconPlay() {
+  return (
+    <svg {...I} strokeWidth={0} fill="currentColor">
+      <path d="M8 5.5v13a1 1 0 0 0 1.5.87l11-6.5a1 1 0 0 0 0-1.74l-11-6.5A1 1 0 0 0 8 5.5z" />
+    </svg>
+  );
+}
+
+/** Две полоски: пауза. */
+export function IconPause() {
+  return (
+    <svg {...I} strokeWidth={0} fill="currentColor">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+
+/** Квадрат: стоп. */
+export function IconStop() {
+  return (
+    <svg {...I} strokeWidth={0} fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+/** Треугольник + полоска: следующий. */
+export function IconSkipNext() {
+  return (
+    <svg {...I} strokeWidth={0} fill="currentColor">
+      <path d="M6 5.5v13a1 1 0 0 0 1.5.87L16 14v4.5a1 1 0 0 0 2 0v-13a1 1 0 0 0-2 0V10L7.5 4.63A1 1 0 0 0 6 5.5z" />
+    </svg>
+  );
+}
+
+/** Полоска + треугольник: предыдущий. */
+export function IconSkipPrev() {
+  return (
+    <svg {...I} strokeWidth={0} fill="currentColor">
+      <path d="M18 5.5v13a1 1 0 0 1-1.5.87L8 14v4.5a1 1 0 0 1-2 0v-13a1 1 0 0 1 2 0V10l8.5-5.37A1 1 0 0 1 18 5.5z" />
+    </svg>
+  );
+}
+
+/** Перекрещенные стрелки: перемешать. */
+export function IconShuffle() {
+  return (
+    <svg {...I}>
+      <path d="M4 6h3.2c1 0 2 .5 2.6 1.4L14 12.6c.6.9 1.6 1.4 2.6 1.4H20" />
+      <path d="M4 18h3.2c1 0 2-.5 2.6-1.4l.7-1M13.5 8.4l.7-1c.6-.9 1.6-1.4 2.6-1.4H20" />
+      <path d="M17.5 3.5L20 6l-2.5 2.5M17.5 15.5L20 18l-2.5 2.5" />
+    </svg>
+  );
+}
+
+/** Петля со стрелкой: повтор. */
+export function IconRepeat() {
+  return (
+    <svg {...I}>
+      <path d="M17 3l3 3-3 3" />
+      <path d="M20 6H9a5 5 0 0 0-5 5v.5" />
+      <path d="M7 21l-3-3 3-3" />
+      <path d="M4 18h11a5 5 0 0 0 5-5v-.5" />
+    </svg>
+  );
+}

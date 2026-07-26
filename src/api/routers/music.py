@@ -8,7 +8,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api.audit import record_audit
 from src.api.command_client import run_command
@@ -21,7 +21,17 @@ router = APIRouter(prefix="/api/guilds/{guild_id}/music", tags=["music"])
 
 
 class ControlBody(BaseModel):
-    action: Literal["pause", "resume", "skip", "stop"]
+    # действия без параметров, работают с текущей сессией плеера
+    action: Literal["pause", "resume", "skip", "stop", "previous", "shuffle", "repeat"]
+
+
+class VolumeBody(BaseModel):
+    # доля 0..1 в UI = 0..100%; плеер сам клампит до 0..2 (200%)
+    volume: float = Field(ge=0.0, le=2.0)
+
+
+class SeekBody(BaseModel):
+    position: int = Field(ge=0)  # секунды от начала трека
 
 
 @router.get("/playlists")
@@ -136,5 +146,61 @@ async def control(
     )
     await record_audit(
         container, guild_id, session.user_id, f"music.{body.action}", result=cmd.get("status")
+    )
+    return cmd
+
+
+@router.post("/volume")
+async def set_volume(
+    body: VolumeBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Громкость живой сессии (0..2 = 0..200%)."""
+    cmd = await run_command(
+        container, guild_id, "music.volume", {"volume": body.volume}, session.user_id
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "music.volume", result=cmd.get("status")
+    )
+    return cmd
+
+
+@router.post("/seek")
+async def seek(
+    body: SeekBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Перемотка текущего трека на position секунд."""
+    cmd = await run_command(
+        container, guild_id, "music.seek", {"position": body.position}, session.user_id
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "music.seek", result=cmd.get("status")
+    )
+    return cmd
+
+
+@router.delete("/queue/{position}")
+async def remove_from_queue(
+    position: int,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Убрать трек из очереди по 1-based номеру (как показывает /queue)."""
+    cmd = await run_command(
+        container, guild_id, "music.remove", {"position": position}, session.user_id
+    )
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "music.remove",
+        target=str(position),
+        result=cmd.get("status"),
     )
     return cmd

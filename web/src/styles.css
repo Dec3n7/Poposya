@@ -1379,10 +1379,10 @@ a {
   margin-top: var(--sp-2);
 }
 .np-progress {
+  position: relative;
   height: 6px;
   border-radius: 999px;
   background: var(--elevated);
-  overflow: hidden;
   margin-top: var(--sp-4);
 }
 .np-bar {
@@ -1391,11 +1391,200 @@ a {
   background: linear-gradient(90deg, var(--accent), var(--magenta));
   transition: width 1s linear;
 }
+/* перемотка кликом: курсор + расширенная по вертикали зона клика + бегунок */
+.np-progress.seekable {
+  cursor: pointer;
+}
+.np-progress.seekable::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0; /* клики чуть выше/ниже тонкой полоски тоже ловятся */
+}
+.np-knob {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition:
+    opacity 0.15s var(--ease),
+    left 1s linear;
+}
+.np-progress.seekable:hover .np-knob,
+.np-progress.seekable:focus-visible .np-knob {
+  opacity: 1;
+}
 .np-times {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
   margin-top: 4px;
+}
+
+/* --- медиа-пульт плеера: тёмные кнопки с иконками (как в проигрывателе) --- */
+.np-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+.mc-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 38px;
+  color: var(--fg);
+  background: #17181d; /* уголь, без синевы базового --elevated */
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease),
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+.mc-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.mc-btn:hover {
+  background: #1f2027;
+  border-color: var(--accent);
+}
+.mc-btn:active {
+  transform: scale(0.94);
+}
+.mc-btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+.mc-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+/* играть/пауза — главная кнопка, чуть крупнее и светлее */
+.mc-btn.main {
+  width: 52px;
+  height: 44px;
+  background: #202128;
+}
+.mc-btn.main:hover {
+  background: #282a33;
+}
+.mc-btn.main svg {
+  width: 20px;
+  height: 20px;
+}
+/* повтор включён — подсветка акцентом + бейдж «1» для повтора трека */
+.mc-btn.active {
+  color: var(--accent-hover);
+  border-color: var(--accent-ring);
+}
+.mc-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-hover);
+}
+
+/* громкость */
+.np-volume {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.np-vol-ic {
+  font-size: 13px;
+  flex: none;
+}
+.np-vol-slider {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--elevated);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.np-vol-slider:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.np-vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-hover);
+  border: none;
+  cursor: pointer;
+}
+.np-vol-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-hover);
+  cursor: pointer;
+}
+.np-vol-val {
+  flex: none;
+  min-width: 4ch;
+  text-align: right;
+  font-size: 12px;
+}
+
+/* ✕ убрать трек из очереди — проявляется на наведении на строку */
+.np-queue .track-item {
+  justify-content: flex-start;
+}
+.np-queue .track-title {
+  flex: 1;
+}
+.mc-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--fg-faint);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s var(--ease),
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+.np-queue .track-item:hover .mc-remove,
+.mc-remove:focus-visible {
+  opacity: 1;
+}
+.mc-remove:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.mc-remove:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* --- music / playlists --- */
@@ -1794,18 +1983,7 @@ a {
   gap: var(--sp-3);
 }
 
-/* --- командный мост: контролы плеера и модерации --- */
-.player-controls {
-  margin-bottom: var(--sp-4);
-}
-.control-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.control-msg {
-  margin-top: var(--sp-2);
-}
+/* --- командный мост: контролы модерации --- */
 .mod-actions {
   display: flex;
   flex-wrap: wrap;
