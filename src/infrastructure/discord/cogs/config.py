@@ -138,7 +138,9 @@ class ConfigCog(commands.Cog):
     async def _key_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        return self._choices(current, {"int", "float", "bool", "channel"})
+        # text-ключи (напр. роль-новичок) редактируются в панели; но показать и
+        # сбросить их через /config можно, поэтому в общий автокомплит их включаем
+        return self._choices(current, {"int", "float", "bool", "channel", "text"})
 
     async def _channel_key_ac(
         self, interaction: discord.Interaction, current: str

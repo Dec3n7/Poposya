@@ -19,6 +19,7 @@ import logging
 import asyncpg
 
 from src.infrastructure.guild_settings import SETTINGS_NOTIFY_CHANNEL, GuildSettingsService
+from src.infrastructure.listener_health import ListenerHealth
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,9 @@ def make_settings_listener(
     return SettingsChangeListener(_asyncpg_dsn(database_url), service)
 
 
-class SettingsChangeListener:
+class SettingsChangeListener(ListenerHealth):
     def __init__(self, dsn: str, service: GuildSettingsService):
+        super().__init__()
         self._dsn = dsn
         self._service = service
         # держим ссылки на задачи перечитывания, чтобы их не собрал GC до конца
@@ -67,10 +69,12 @@ class SettingsChangeListener:
             # NOTIFY, пришедшие пока соединения не было, не буферизуются —
             # после (пере)подключения синхронизируем весь кэш заново
             await self._service.load_all()
+            self.mark_connected()
             logger.info("Листенер настроек: подключён, слушаю канал %s", SETTINGS_NOTIFY_CHANNEL)
             while not conn.is_closed():
                 await asyncio.sleep(_HEARTBEAT)
         finally:
+            self.mark_disconnected()
             await conn.close()
 
     def _on_notify(self, _conn, _pid: int, _channel: str, payload: str) -> None:

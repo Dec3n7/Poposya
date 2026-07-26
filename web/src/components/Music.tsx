@@ -4,7 +4,10 @@ import { ApiError, api } from "../api";
 import { IconTrash } from "../icons";
 import type { Guild, PlaylistDetail, PlaylistItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { EmptyState } from "./EmptyState";
 import { NowPlaying } from "./NowPlaying";
+import { Skeleton, SkeletonRows } from "./Skeleton";
+import { useToast } from "./Toast";
 
 function fmtDuration(sec: number | null): string {
   if (sec == null) return "—";
@@ -27,6 +30,7 @@ function PlaylistRow({
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
+  const toast = useToast();
 
   function toggle() {
     const next = !open;
@@ -43,8 +47,10 @@ function PlaylistRow({
     setBusy(true);
     try {
       await api.deletePlaylist(guildId, pl.name);
+      toast.success(`Плейлист удалён — «${pl.name}»`);
       onDeleted(); // на успехе строка размонтируется — диалог уходит вместе с ней
-    } catch {
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Не удалось удалить плейлист");
       setBusy(false);
       setAsking(false);
     }
@@ -88,8 +94,10 @@ function PlaylistRow({
           {err ? (
             <div className="muted small pad">{err}</div>
           ) : detail === null ? (
-            <div className="center" style={{ minHeight: 60 }}>
-              <div className="spinner" aria-label="Загрузка" />
+            <div className="skeleton-text pad">
+              <Skeleton h={12} w="80%" />
+              <Skeleton h={12} w="65%" />
+              <Skeleton h={12} w="72%" />
             </div>
           ) : detail.tracks.length === 0 ? (
             <div className="muted small pad">Плейлист пуст.</div>
@@ -121,18 +129,17 @@ const CONTROLS: { action: "pause" | "resume" | "skip" | "stop"; label: string }[
 
 function PlayerControls({ guildId }: { guildId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
 
   async function send(action: "pause" | "resume" | "skip" | "stop") {
     setBusy(action);
-    setMsg(null);
     try {
       const r = await api.musicControl(guildId, action);
-      if (r.status === "done") setMsg(r.result ?? "Готово");
-      else if (r.status === "failed") setMsg(r.result ?? "Не вышло");
-      else setMsg("Отправлено — применяется…");
+      if (r.status === "done") toast.success(r.result ?? "Готово");
+      else if (r.status === "failed") toast.error(r.result ?? "Не вышло");
+      else toast.info("Отправлено — применяется…");
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(null);
     }
@@ -152,7 +159,6 @@ function PlayerControls({ guildId }: { guildId: string }) {
           </button>
         ))}
       </div>
-      {msg && <div className="control-msg faint small">{msg}</div>}
     </div>
   );
 }
@@ -181,8 +187,13 @@ export function Music({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!list)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div>
+        <h2 className="section-title">Плейлисты</h2>
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={4} avatar={false} />
+          </div>
+        </div>
       </div>
     );
 
@@ -201,7 +212,11 @@ export function Music({ guild }: { guild: Guild }) {
       </p>
       <div className="card leader-card">
         {list.length === 0 ? (
-          <div className="pad muted">На сервере пока нет плейлистов.</div>
+          <EmptyState
+            compact
+            title="На сервере пока нет плейлистов"
+            hint="Сохраните текущую очередь в Discord командой /playlist save — плейлисты появятся здесь."
+          />
         ) : (
           list.map((pl) => (
             <PlaylistRow key={pl.name} guildId={guild.id} pl={pl} onDeleted={load} />

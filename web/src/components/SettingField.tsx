@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ApiError, api } from "../api";
 import type { Channel, SettingField as Field } from "../types";
 import { Dropdown, type Option } from "./Dropdown";
+import { useToast } from "./Toast";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -47,6 +48,7 @@ export function SettingField({
   const [status, setStatus] = useState<Status>("idle");
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState(String(field.value));
+  const toast = useToast();
 
   async function commit(value: boolean | number | string) {
     setStatus("saving");
@@ -57,8 +59,11 @@ export function SettingField({
       setDraft(String(updated.value));
       flashSaved();
     } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Ошибка сохранения";
       setStatus("error");
-      setErr(e instanceof ApiError ? e.message : "Ошибка сохранения");
+      setErr(message);
+      // ошибку легко пропустить в длинной форме — дублируем тостом
+      toast.error(`${field.label}: ${message}`);
     }
   }
 
@@ -71,8 +76,10 @@ export function SettingField({
       setDraft(String(updated.value));
       flashSaved();
     } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Ошибка сброса";
       setStatus("error");
-      setErr(e instanceof ApiError ? e.message : "Ошибка сброса");
+      setErr(message);
+      toast.error(`${field.label}: ${message}`);
     }
   }
 
@@ -115,6 +122,15 @@ export function SettingField({
           </button>
         ) : field.kind === "channel" && channels ? (
           <ChannelSelect value={String(field.value)} channels={channels} onPick={commit} />
+        ) : field.kind === "text" ? (
+          <input
+            className="input text-setting"
+            value={draft}
+            placeholder="пусто = выключено"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => draft !== String(field.value) && commit(draft)}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          />
         ) : (
           <div className="input-wrap">
             <input
@@ -136,7 +152,7 @@ export function SettingField({
             </span>
           )}
           {field.kind === "channel" && !channels && <span className="faint">ID канала (0 — выкл)</span>}
-          {field.kind !== "channel" && (
+          {field.kind !== "channel" && field.kind !== "text" && (
             <span className="faint">
               по умолчанию: <span className="mono">{String(field.default)}</span>
             </span>

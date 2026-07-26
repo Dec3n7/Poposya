@@ -25,7 +25,10 @@ import type {
   RolesView,
   SavedRoleTemplate,
 } from "../types";
+import { EmptyState } from "./EmptyState";
 import { RolePermsEditor } from "./RolePerms";
+import { SkeletonRows, SkeletonText } from "./Skeleton";
+import { useToast } from "./Toast";
 
 // битовое поле прав не влезает в number — сравниваем через BigInt.
 // 0x8 = Administrator: единственное право, которое стоит подсветить даже в
@@ -368,8 +371,8 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
   const [templates, setTemplates] = useState<SavedRoleTemplate[] | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const toast = useToast();
 
   const load = useCallback(() => {
     api
@@ -383,14 +386,13 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
     const n = name.trim();
     if (!n) return;
     setBusy(true);
-    setMsg(null);
     try {
       await api.saveRoleTemplate(guild.id, n);
       setName("");
-      setMsg("Сохранено.");
+      toast.success(`Шаблон «${n}» сохранён`);
       load();
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -398,19 +400,14 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
 
   async function apply(id: number) {
     setBusy(true);
-    setMsg(null);
     try {
       const r = await api.applyRoleTemplate(guild.id, id);
-      setMsg(
-        r.status === "failed"
-          ? (r.result ?? "Не вышло")
-          : r.status === "done"
-            ? (r.result ?? "Готово")
-            : "Отправлено — применяется…",
-      );
+      if (r.status === "failed") toast.error(r.result ?? "Не вышло");
+      else if (r.status === "done") toast.success(r.result ?? "Шаблон применён");
+      else toast.info("Отправлено — применяется…");
       if (r.status !== "failed") window.setTimeout(onApplied, 1200);
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -418,13 +415,13 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
 
   async function remove(id: number) {
     setBusy(true);
-    setMsg(null);
     try {
       await api.deleteRoleTemplate(guild.id, id);
       setConfirmDel(null);
+      toast.success("Шаблон удалён");
       load();
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -434,7 +431,6 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
     <div className="saved-templates">
       <div className="role-panel-head">
         <div className="role-panel-title">Мои шаблоны</div>
-        {msg && <span className="faint small">{msg}</span>}
       </div>
       <div className="saved-save-row">
         <input
@@ -451,9 +447,9 @@ function SavedTemplates({ guild, onApplied }: { guild: Guild; onApplied: () => v
         </button>
       </div>
       {templates === null ? (
-        <div className="muted small">Загрузка…</div>
+        <SkeletonText lines={2} />
       ) : templates.length === 0 ? (
-        <div className="muted small">Пока нет сохранённых шаблонов.</div>
+        <EmptyState compact title="Пока нет сохранённых шаблонов" hint="Сохрани текущий набор ролей под именем — появится здесь." />
       ) : (
         <div className="template-grid">
           {templates.map((t) => (
@@ -521,7 +517,7 @@ function AutoRoleSection({ guild, roles }: { guild: Guild; roles: GuildRole[] })
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     let alive = true;
@@ -554,16 +550,15 @@ function AutoRoleSection({ guild, roles }: { guild: Guild; roles: GuildRole[] })
 
   async function save() {
     setBusy(true);
-    setMsg(null);
     try {
       // сохраняем в порядке списка сверху вниз; неактуальные (уехали выше бота) отсеются
       const ordered = editable.filter((r) => selected.has(r.id)).map((r) => r.id);
       const res = await api.setAutorole(guild.id, ordered);
       setSelected(new Set(res.role_ids));
       setSaved(new Set(res.role_ids));
-      setMsg(ordered.length ? "Сохранено." : "Автовыдача выключена.");
+      toast.success(ordered.length ? "Автовыдача сохранена" : "Автовыдача выключена");
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -581,10 +576,9 @@ function AutoRoleSection({ guild, roles }: { guild: Guild; roles: GuildRole[] })
             Доступны только роли ниже линии Попоси.
           </p>
         </div>
-        {msg && <span className="faint small">{msg}</span>}
       </div>
       {editable.length === 0 ? (
-        <div className="muted small">Нет ролей, доступных боту для выдачи.</div>
+        <EmptyState compact title="Нет ролей, доступных боту для выдачи" hint="Создай роль ниже линии Попоси — её можно будет выдавать автоматически." />
       ) : (
         <div className="autorole-list">
           {editable.map((r) => {
@@ -632,7 +626,6 @@ export function Roles({ guild }: { guild: Guild }) {
   // копия порядка до первой перестановки; null = порядок совпадает с сервером
   const [snapshot, setSnapshot] = useState<GuildRole[] | null>(null);
   const [err, setErr] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [permsId, setPermsId] = useState<string | null>(null);
@@ -644,11 +637,11 @@ export function Roles({ guild }: { guild: Guild }) {
   const [importData, setImportData] = useState<RoleInput[] | null>(null);
   const [importError, setImportError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   const load = useCallback(() => {
     setView(null);
     setErr("");
-    setMsg(null);
     setSnapshot(null);
     setEditingId(null);
     setPermsId(null);
@@ -682,9 +675,9 @@ export function Roles({ guild }: { guild: Guild }) {
   }, [guild.id]);
 
   function report(r: CommandResult): boolean {
-    if (r.status === "failed") setMsg(r.result ?? "Не вышло");
-    else if (r.status === "done") setMsg(r.result ?? "Готово");
-    else setMsg("Отправлено — применяется…");
+    if (r.status === "failed") toast.error(r.result ?? "Не вышло");
+    else if (r.status === "done") toast.success(r.result ?? "Готово");
+    else toast.info("Отправлено — применяется…");
     return r.status !== "failed";
   }
 
@@ -728,12 +721,11 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function saveOrder() {
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.reorderRoles(guild.id, editableIds));
       if (ok) setSnapshot(null);
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -748,7 +740,6 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function doCreate(input: RoleInput) {
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.createRole(guild.id, input));
       if (ok) {
@@ -756,7 +747,7 @@ export function Roles({ guild }: { guild: Guild }) {
         window.setTimeout(refresh, 900); // дать зеркалу догнать gateway-событие
       }
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -764,7 +755,6 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function doEdit(role: GuildRole, input: RoleInput) {
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.editRole(guild.id, role.id, input));
       if (ok) {
@@ -784,7 +774,7 @@ export function Roles({ guild }: { guild: Guild }) {
         setEditingId(null);
       }
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -792,12 +782,11 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function doBulk(role: GuildRole, op: "assign" | "unassign") {
     setBusy(true);
-    setMsg(null);
     try {
       report(await api.bulkRole(guild.id, role.id, op));
       window.setTimeout(refresh, 900); // носители изменились — подтянуть счётчики
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -805,7 +794,6 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function doDelete(role: GuildRole) {
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.deleteRole(guild.id, role.id));
       if (ok) {
@@ -813,7 +801,7 @@ export function Roles({ guild }: { guild: Guild }) {
         setEditingId(null);
       }
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -842,7 +830,7 @@ export function Roles({ guild }: { guild: Guild }) {
     a.download = `roles-${guild.id}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setMsg(`Экспортировано ролей: ${data.roles.length}.`);
+    toast.success(`Экспортировано ролей: ${data.roles.length}`);
   }
 
   function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -881,7 +869,6 @@ export function Roles({ guild }: { guild: Guild }) {
 
   async function applyRoles(toAdd: RoleInput[]) {
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.importRoles(guild.id, toAdd));
       if (ok) {
@@ -890,7 +877,7 @@ export function Roles({ guild }: { guild: Guild }) {
         window.setTimeout(refresh, 1200); // дать зеркалу догнать создание
       }
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
     }
@@ -899,8 +886,8 @@ export function Roles({ guild }: { guild: Guild }) {
   if (err) return <div className="error-banner">{err}</div>;
   if (!view)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div className="card pad">
+        <SkeletonRows rows={6} avatar={false} />
       </div>
     );
 
@@ -914,7 +901,6 @@ export function Roles({ guild }: { guild: Guild }) {
       <div className="roles-head">
         <div className="h1">Роли сервера</div>
         <div className="roles-head-right">
-          {msg && <span className="faint small">{msg}</span>}
           <span className="faint small">
             {roles.length} ролей · зеркало {syncedAgo(view.synced_at)}
           </span>
@@ -1076,11 +1062,14 @@ export function Roles({ guild }: { guild: Guild }) {
       )}
 
       {roles.length === 0 ? (
-        <div className="muted small pad">
-          {botTop == null
-            ? "Зеркало ещё не синхронизировано — загляни через минуту после перезапуска бота."
-            : "Ролей нет."}
-        </div>
+        <EmptyState
+          title={botTop == null ? "Зеркало ещё не синхронизировано" : "Ролей нет"}
+          hint={
+            botTop == null
+              ? "Загляни через минуту после перезапуска бота."
+              : undefined
+          }
+        />
       ) : (
         <div className="roles-list">
           {roles.map((r, i) => {

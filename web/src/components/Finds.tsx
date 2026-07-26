@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { FindsOverview, Guild } from "../types";
+import { EmptyState } from "./EmptyState";
+import { Skeleton, SkeletonRows } from "./Skeleton";
 
 function fmtExpires(iso: string): string {
   const d = new Date(iso);
@@ -32,8 +34,17 @@ export function Finds({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!data)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div>
+        <h2 className="section-title">Сейчас на сервере</h2>
+        <div className="card pad">
+          <Skeleton h={64} r={16} />
+        </div>
+        <h2 className="section-title">Коллекционеры</h2>
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={4} />
+          </div>
+        </div>
       </div>
     );
 
@@ -55,13 +66,19 @@ export function Finds({ guild }: { guild: Guild }) {
           <div className="faint small">Пропадёт {fmtExpires(data.active.expires_at)}</div>
         </div>
       ) : (
-        <div className="card pad muted">Сейчас активных находок нет.</div>
+        <div className="card">
+          <EmptyState
+            compact
+            title="Сейчас активных находок нет"
+            hint="Попося выходит на ночные прогулки и приносит редкие предметы — следующая находка появится здесь."
+          />
+        </div>
       )}
 
       <h2 className="section-title">Коллекционеры</h2>
       <div className="card leader-card">
         {data.collectors.length === 0 ? (
-          <div className="pad muted">Пока никто ничего не нашёл.</div>
+          <EmptyState compact title="Пока никто ничего не нашёл" />
         ) : (
           data.collectors.map((c, i) => {
             const name = c.username ?? `ID ${c.user_id}`;

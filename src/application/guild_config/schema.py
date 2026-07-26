@@ -73,6 +73,10 @@ class GuildSettings(BaseModel):
     # на вкладке «Роли», не в /config. Валидность ролей (ниже бота, не managed)
     # проверяет API при записи и бот при выдаче — модель их знать не может.
     autorole_ids: list[int] = Field(default=[], max_length=20)
+    # роль-«ступень 0» (0–99 очков): имя роли, которую держат все до первой
+    # статус-роли. Пусто = выключено. Отдельно от relationship_role_names (тот
+    # жёстко = число порогов + 1); эта роль соответствует role_index None.
+    relationship_newcomer_role: str = Field(default="", max_length=100)
     secret_room_min_level: int = Field(5, ge=1, le=7)
     secret_room_hours: int = Field(12, ge=1, le=168)
     survey_bonus_points: int = Field(5, ge=0, le=500)
@@ -202,7 +206,7 @@ class GuildSettings(BaseModel):
 SETTING_KEYS: tuple[str, ...] = tuple(GuildSettings.model_fields.keys())
 
 
-def _kind(key: str) -> Literal["bool", "channel", "float", "list", "dict", "int"]:
+def _kind(key: str) -> Literal["bool", "channel", "float", "list", "dict", "text", "int"]:
     """Категория ключа для UX /config (какой пикер показать)."""
     field = GuildSettings.model_fields[key]
     ann = field.annotation
@@ -212,6 +216,8 @@ def _kind(key: str) -> Literal["bool", "channel", "float", "list", "dict", "int"
         return "channel"
     if ann is float:
         return "float"
+    if ann is str:
+        return "text"
     origin = getattr(ann, "__origin__", None)
     if origin is list:
         return "list"

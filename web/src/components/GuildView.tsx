@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { api } from "../api";
 import type { Guild, GuildSummary, Me } from "../types";
@@ -13,6 +13,7 @@ import { Music } from "./Music";
 import { People } from "./People";
 import { Persona } from "./Persona";
 import { Roles } from "./Roles";
+import { Warden } from "./Warden";
 
 type Tab =
   | "overview"
@@ -25,7 +26,8 @@ type Tab =
   | "audit"
   | "modules"
   | "settings"
-  | "persona";
+  | "persona"
+  | "warden";
 
 const I = { fill: "none", stroke: "currentColor", strokeWidth: 2, viewBox: "0 0 24 24" } as const;
 
@@ -112,6 +114,15 @@ const OPERATOR_TABS: { id: Tab; label: string; icon: ReactNode }[] = [
       <svg {...I}><path d="M4 5c0 6 3 9 8 9s8-3 8-9c-3 1.5-5 2-8 2s-5-.5-8-2Z" /><path d="M9 9h.01M15 9h.01M9.5 12.5c.8.7 4.2.7 5 0" /></svg>
     ),
   },
+  {
+    // Состояние инфраструктуры общее для всех серверов, но рельса у панели
+    // одна — держим здесь, показывая только оператору.
+    id: "warden",
+    label: "WARDEN",
+    icon: (
+      <svg {...I}><circle cx="12" cy="12" r="8.2" /><circle cx="12" cy="12" r="3" /></svg>
+    ),
+  },
 ];
 
 // бейдж-счётчик на пункте рельса для вкладки (null = без бейджа)
@@ -142,7 +153,6 @@ export function GuildView({
   const tabs = me.is_operator ? [...TABS, ...OPERATOR_TABS] : TABS;
   const tab: Tab = tabs.find((t) => t.id === tabProp)?.id ?? "overview";
   const active = tabs.find((t) => t.id === tab)!;
-  const setTab = onTab;
 
   const [summary, setSummary] = useState<GuildSummary | null>(null);
   useEffect(() => {
@@ -153,10 +163,91 @@ export function GuildView({
       .catch(() => setSummary(null)); // бейджи не критичны
   }, [guild.id]);
 
+  // мобильная навигация: рельс превращается в шторку (drawer), открываемую бургером
+  const [navOpen, setNavOpen] = useState(false);
+  const railRef = useRef<HTMLElement>(null);
+
+  // переход по вкладке закрывает шторку; бренд ведёт на «Обзор»
+  function go(id: Tab) {
+    onTab(id);
+    setNavOpen(false);
+  }
+
+  // пока шторка открыта: фокус внутрь, ловушка Tab, Esc закрывает, блок скролла фона
+  useEffect(() => {
+    if (!navOpen) return;
+    const rail = railRef.current;
+    if (!rail) return;
+    const focusables = () =>
+      Array.from(
+        rail.querySelectorAll<HTMLElement>(
+          'button, a[href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    focusables()[0]?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setNavOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [navOpen]);
+
+  // красная точка на бургере, если есть что-то тревожное (баны) — дублирует бейдж в шторке
+  const hasAlert = (summary?.bans ?? 0) > 0;
+
   return (
-    <div className="shell">
-      <aside className="rail">
-        <button className="rail-brand" onClick={() => setTab("overview")} title="На обзор">
+    <div className={`shell${navOpen ? " nav-open" : ""}`}>
+      <header className="m-topbar">
+        <button
+          className="m-burger"
+          onClick={() => setNavOpen(true)}
+          aria-label="Открыть меню"
+          aria-expanded={navOpen}
+        >
+          <svg {...I} width="22" height="22" strokeLinecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+          {hasAlert && <span className="m-burger-dot" aria-hidden />}
+        </button>
+        <div className="m-heading">
+          <div className="m-eyebrow">{active.label}</div>
+          <div className="m-guild">{guild.name}</div>
+        </div>
+        {me.avatar ? (
+          <img className="m-av" src={me.avatar} alt="" />
+        ) : (
+          <span className="m-av fallback">{(me.username ?? "?").slice(0, 1).toUpperCase()}</span>
+        )}
+      </header>
+
+      <button
+        className="scrim"
+        aria-label="Закрыть меню"
+        tabIndex={navOpen ? 0 : -1}
+        onClick={() => setNavOpen(false)}
+      />
+
+      <aside className="rail" ref={railRef} aria-label="Меню сервера">
+        <button className="rail-brand" onClick={() => go("overview")} title="На обзор">
           <span className="rail-mark">🖤</span>
           <div>
             <div className="rail-name">Попося</div>
@@ -172,7 +263,7 @@ export function GuildView({
               <button
                 key={t.id}
                 className={`rail-item${tab === t.id ? " active" : ""}`}
-                onClick={() => setTab(t.id)}
+                onClick={() => go(t.id)}
               >
                 {t.icon}
                 {t.label}
@@ -238,6 +329,7 @@ export function GuildView({
           {tab === "modules" && <Modules guild={guild} />}
           {tab === "settings" && <GuildSettings guild={guild} />}
           {tab === "persona" && <Persona guild={guild} />}
+          {tab === "warden" && <Warden />}
         </div>
       </main>
     </div>

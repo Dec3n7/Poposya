@@ -4,6 +4,9 @@ import { ApiError, api } from "../api";
 import { IconX } from "../icons";
 import type { Cinema as CinemaData, Guild, MovieRating, WatchedItem, WatchlistItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { EmptyState } from "./EmptyState";
+import { Skeleton, SkeletonRows } from "./Skeleton";
+import { useToast } from "./Toast";
 
 function Rater({ r }: { r: MovieRating }) {
   const name = r.username ?? `ID ${r.user_id}`;
@@ -55,7 +58,10 @@ function WatchedRow({ guildId, m }: { guildId: string; m: WatchedItem }) {
           {error ? (
             <div className="error-banner">{error}</div>
           ) : ratings === null ? (
-            <div className="muted small">Загрузка…</div>
+            <div className="skeleton-text" style={{ padding: "4px 0" }}>
+              <Skeleton h={12} w="70%" />
+              <Skeleton h={12} w="50%" />
+            </div>
           ) : ratings.length === 0 ? (
             <div className="muted small">Пока никто не оценил.</div>
           ) : (
@@ -82,13 +88,16 @@ function WatchlistRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
+  const toast = useToast();
 
   async function remove() {
     setBusy(true);
     try {
       await api.removeMovie(guildId, m.id);
+      toast.success(`Убрано из вотчлиста — «${m.title}»`);
       onRemoved(); // на успехе строка размонтируется — диалог уходит вместе с ней
-    } catch {
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Не удалось убрать фильм");
       setBusy(false);
       setAsking(false);
     }
@@ -155,8 +164,13 @@ export function Cinema({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!data)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div>
+        <h2 className="section-title">Вотчлист</h2>
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={3} avatar={false} />
+          </div>
+        </div>
       </div>
     );
 
@@ -165,7 +179,11 @@ export function Cinema({ guild }: { guild: Guild }) {
       <h2 className="section-title">Вотчлист</h2>
       <div className="card leader-card">
         {data.watchlist.length === 0 ? (
-          <div className="pad muted">Вотчлист пуст.</div>
+          <EmptyState
+            compact
+            title="Вотчлист пуст"
+            hint="Ведущий добавляет кандидатов командой /movie add — они появятся здесь."
+          />
         ) : (
           data.watchlist.map((m) => (
             <WatchlistRow key={m.id} guildId={guild.id} m={m} onRemoved={load} />
@@ -176,7 +194,11 @@ export function Cinema({ guild }: { guild: Guild }) {
       <h2 className="section-title">Золотой фонд</h2>
       <div className="card leader-card">
         {data.watched.length === 0 ? (
-          <div className="pad muted">Пока ничего не досмотрели.</div>
+          <EmptyState
+            compact
+            title="Пока ничего не досмотрели"
+            hint="Просмотренные фильмы с оценками участников соберутся здесь."
+          />
         ) : (
           data.watched.map((m) => <WatchedRow key={m.id} guildId={guild.id} m={m} />)
         )}

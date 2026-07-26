@@ -50,7 +50,17 @@ async def overview(
     users = await fetch_users(container.settings.discord_token, list(ids))
     # приблизительный онлайн для счётчика «в сети» в хиро (устойчиво к сбою -> None)
     online = await fetch_guild_presence(container.settings.discord_token, guild_id)
-    role_names = container.guild_settings.resolved(guild_id).relationship_role_names
+    resolved = container.guild_settings.resolved(guild_id)
+    role_names = resolved.relationship_role_names
+
+    # роль-«ступень 0»: число носителей из зеркала ролей (ловит и молчунов, у кого
+    # нет профиля). Пусто/роль ещё не отзеркалена -> None, панель просто не покажет.
+    newcomers: dict[str, object] | None = None
+    newcomer_name = resolved.relationship_newcomer_role
+    if newcomer_name:
+        roles, _meta, counts = await container.list_roles.execute(guild_id)
+        match = next((r for r in roles if r.name == newcomer_name), None)
+        newcomers = {"name": newcomer_name, "count": counts.get(match.role_id, 0) if match else 0}
 
     def role_name(idx: int | None) -> str | None:
         return role_names[idx] if idx is not None and 0 <= idx < len(role_names) else None
@@ -83,6 +93,7 @@ async def overview(
         "distribution": [
             {"index": idx, "name": role_name(idx), "count": dist[idx]} for idx in sorted(dist)
         ],
+        "newcomers": newcomers,
         "counts": {
             "watchlist": len(watchlist),
             "watched": len(watched),

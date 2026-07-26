@@ -5,6 +5,7 @@ import type { Channel, Guild, SettingField as Field } from "../types";
 import { BotProfileCard } from "./BotProfileCard";
 import { ComplexSettings } from "./ComplexSettings";
 import { SettingField } from "./SettingField";
+import { Skeleton } from "./Skeleton";
 
 const SECTIONS: { title: string; match: (k: string) => boolean }[] = [
   { title: "Модерация", match: (k) => k.startsWith("warn_") || k.startsWith("spam_") },
@@ -81,11 +82,19 @@ export function GuildSettings({ guild }: { guild: Guild }) {
 
       {!error && <BotProfileCard guildId={guild.id} />}
 
-      {!error && !fields && (
-        <div className="center" style={{ minHeight: 200 }}>
-          <div className="spinner" aria-label="Загрузка" />
-        </div>
-      )}
+      {!error && !fields &&
+        [0, 1].map((s) => (
+          <section key={s}>
+            <h2 className="section-title">
+              <Skeleton h={12} w={120} />
+            </h2>
+            <div className="card fields-card" style={{ padding: 16, display: "grid", gap: 14 }}>
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} h={38} r={12} />
+              ))}
+            </div>
+          </section>
+        ))}
 
       {fields &&
         group(fields).map((section) => (

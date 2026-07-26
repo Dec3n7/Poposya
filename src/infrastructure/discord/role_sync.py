@@ -7,7 +7,12 @@ logger = logging.getLogger(__name__)
 
 class RoleSyncService:
     """Создание и выдача ролей-статусов. Сверка вызывается при каждом
-    начислении очков (самовосстановление после потерянных событий, ТЗ 8.5)."""
+    начислении очков (самовосстановление после потерянных событий, ТЗ 8.5).
+
+    Роль-«ступень 0» (`relationship_newcomer_role`) — часть того же управляемого
+    набора: её держат все, у кого ещё нет статус-роли (role_index None, 0–99
+    очков). Снимается тем же механизмом, что и прочие, как только человек берёт
+    первую статус-роль; при угасании ниже порога — возвращается. Пусто = выкл."""
 
     def __init__(self, bot: discord.Client, role_names: list[str], settings_provider=None):
         self._bot = bot
@@ -19,6 +24,24 @@ class RoleSyncService:
         if self._settings is not None:
             return self._settings.resolved(guild_id).relationship_role_names
         return self._role_names
+
+    def _newcomer_for(self, guild_id: int) -> str:
+        """Имя роли-«ступень 0» сервера или "" (функция выключена)."""
+        if self._settings is not None:
+            # getattr со значением по умолчанию: провайдер-заглушка без этого
+            # поля (или старый) означает «функция выключена», а не падение
+            return getattr(self._settings.resolved(guild_id), "relationship_newcomer_role", "")
+        return ""
+
+    def _managed_names(self, guild_id: int) -> list[str]:
+        """Полный набор управляемых ролей: статус-роли + (опц.) роль-новичок.
+        Роль-новичок держим отдельным именем, поэтому дубли (если её назвали как
+        статус-роль) схлопываются в dict вызывающего — это безопасно."""
+        names = list(self._names_for(guild_id))
+        newcomer = self._newcomer_for(guild_id)
+        if newcomer and newcomer not in names:
+            names.append(newcomer)
+        return names
 
     def _sync_enabled(self, guild_id: int) -> bool:
         """Физическая выдача Discord-ролей включена на сервере: модуль «Отношения»
@@ -37,7 +60,8 @@ class RoleSyncService:
         if not self._sync_enabled(guild.id):
             return
         existing = {role.name for role in guild.roles}
-        for name in self._names_for(guild.id):
+        # статус-роли + роль-новичок создаём одним проходом
+        for name in self._managed_names(guild.id):
             if name in existing:
                 continue
             try:
@@ -54,7 +78,10 @@ class RoleSyncService:
 
     async def sync_member(self, guild: discord.Guild, user_id: int, role_index: int | None) -> None:
         """Приводит роли-статусы участника к вычисленному состоянию:
-        ровно одна нужная роль, остальные из набора снимаются."""
+        ровно одна нужная роль, остальные из набора снимаются.
+
+        `role_index is None` (0–99 очков) означает «ступень 0»: желаемая роль —
+        роль-новичок, если она настроена; иначе — никакой (как раньше)."""
         if not self._sync_enabled(guild.id):
             return
         member = guild.get_member(user_id)
@@ -65,12 +92,15 @@ class RoleSyncService:
                 return
 
         names = self._names_for(guild.id)
-        managed = {name: discord.utils.get(guild.roles, name=name) for name in names}
-        desired = (
-            managed.get(names[role_index])
-            if role_index is not None and 0 <= role_index < len(names)
-            else None
-        )
+        newcomer = self._newcomer_for(guild.id)
+        managed = {name: discord.utils.get(guild.roles, name=name) for name in self._managed_names(guild.id)}
+
+        if role_index is not None and 0 <= role_index < len(names):
+            desired = managed.get(names[role_index])
+        elif newcomer:
+            desired = managed.get(newcomer)  # ступень 0
+        else:
+            desired = None
 
         to_remove = [
             role
@@ -89,3 +119,41 @@ class RoleSyncService:
             )
         except discord.HTTPException:
             logger.warning("Не удалось синхронизировать роли", exc_info=True)
+
+    async def backfill_newcomers(self, guild: discord.Guild) -> None:
+        """Разовая раздача роли-новичка всем, у кого ещё нет ни одной статус-роли.
+
+        Нужна, чтобы «ступень 0» была и у молчунов, которые ни разу не писали (и
+        потому не проходили через sync_member). Только добавляет; редкий случай
+        «100+ очков, но статус-роль снята руками» самоисправится следующим
+        начислением через sync_member. Вызывается на старте (on_ready)."""
+        if not self._sync_enabled(guild.id):
+            return
+        newcomer = self._newcomer_for(guild.id)
+        if not newcomer:
+            return
+        role = discord.utils.get(guild.roles, name=newcomer)
+        if role is None:
+            return
+        status_names = set(self._names_for(guild.id))
+        added = 0
+        for member in guild.members:
+            if member.bot:
+                continue
+            if role in member.roles:
+                continue
+            if any(r.name in status_names for r in member.roles):
+                continue  # уже есть статус-роль — новичком не считается
+            try:
+                await member.add_roles(role, reason="Роль-новичок (бэкфилл)")
+                added += 1
+            except discord.Forbidden:
+                logger.warning(
+                    "Нет права выдать роль-новичок при бэкфилле",
+                    extra={"guild_id": guild.id},
+                )
+                return  # прав нет — дальше смысла нет
+            except discord.HTTPException:
+                logger.warning("Не удалось выдать роль-новичок", exc_info=True)
+        if added:
+            logger.info("Бэкфилл роли-новичка", extra={"guild_id": guild.id, "added": added})

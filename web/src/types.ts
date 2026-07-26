@@ -66,7 +66,7 @@ export interface PersonaIdentity {
   default_accent_color: number;
 }
 
-export type SettingKind = "bool" | "channel" | "float" | "int";
+export type SettingKind = "bool" | "channel" | "float" | "int" | "text";
 
 export interface SettingField {
   key: string;
@@ -163,6 +163,8 @@ export interface Overview {
   voice: VoiceEntry[];
   birthdays: BirthdayEntry[];
   distribution: RoleSlice[];
+  // роль-«ступень 0» (Смутный силуэт): число носителей; null = функция выключена
+  newcomers: { name: string; count: number } | null;
 }
 
 // серия суточных снапшотов: [день-ISO, значение][]; ключ — имя метрики
@@ -425,4 +427,64 @@ export interface PermCatalog {
   categories: PermCategory[];
   bot_mask: string; // права, доступные самому боту (остальные тумблеры гасим)
   admin_bit: string; // бит Administrator — показываем как замок, не редактируем
+}
+
+// --- WARDEN (внешний сторож-монитор) ---
+// Панель ничего не вычисляет: она показывает то, что отдал сторож. Оценка
+// живёт в одном месте, иначе панель и сторож разойдутся в диагнозе.
+
+export interface WardenPenalty {
+  label: string;
+  points: number;
+}
+
+export interface WardenGate {
+  label: string;
+  cap: number;
+}
+
+export interface WardenTarget {
+  name: string;
+  status: string;
+  score: number | null; // null — шкалы нет (у nginx и Postgres метрик нет)
+  score_mode: string;
+  victim: boolean;
+  in_grace: boolean;
+  restart_allowed: boolean;
+  changed_at: number;
+  last_check: number | null;
+  penalties: WardenPenalty[];
+  gates: WardenGate[];
+}
+
+export interface WardenTransition {
+  at: number;
+  target: string;
+  old: string;
+  new: string;
+  score: number | null;
+  reason: string;
+}
+
+export interface WardenSelf {
+  status: string;
+  version: string;
+  uptime_seconds: number;
+  dry_run: boolean;
+  interval_seconds: number;
+  gateway_connected: boolean;
+  notifier_ready: boolean;
+  queued_notifications: number;
+}
+
+export interface WardenSnapshot {
+  available: boolean;
+  error?: string;
+  warden?: WardenSelf;
+  targets?: WardenTarget[];
+  incidents_open?: number;
+  last_check?: number | null;
+  next_check_in?: number;
+  transitions?: WardenTransition[];
+  generated_at?: number;
 }

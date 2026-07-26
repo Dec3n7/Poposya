@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api";
 import type { AuditEntry, Guild } from "../types";
 import { Dropdown } from "./Dropdown";
+import { EmptyState } from "./EmptyState";
+import { SkeletonRows } from "./Skeleton";
 
 // человекочитаемые названия действий
 const ACTION_LABELS: Record<string, string> = {
@@ -161,8 +163,13 @@ export function Audit({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!entries)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div>
+        <h2 className="section-title">Действия через панель</h2>
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={6} avatar={false} />
+          </div>
+        </div>
       </div>
     );
 
@@ -194,11 +201,15 @@ export function Audit({ guild }: { guild: Guild }) {
 
       <div className="card leader-card">
         {shown.length === 0 ? (
-          <div className="pad muted">
-            {entries.length === 0
-              ? "Пока пусто — действий через панель не было."
-              : "Под фильтр ничего не попало."}
-          </div>
+          <EmptyState
+            compact
+            title={entries.length === 0 ? "Журнал пуст" : "Под фильтр ничего не попало"}
+            hint={
+              entries.length === 0
+                ? "Здесь появятся действия через панель: роли, модерация, очки, настройки."
+                : "Сбрось фильтр по типу действия, чтобы увидеть все записи."
+            }
+          />
         ) : (
           shown.map((e) => <AuditRow key={e.id} e={e} />)
         )}

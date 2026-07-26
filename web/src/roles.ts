@@ -18,6 +18,7 @@ const ROLE_COLORS = [
 
 export function roleColor(index: number | null): string {
   if (index == null) return "var(--fg-faint)";
+  if (index < 0) return "#5b6470"; // ступень 0 «Смутный силуэт» — туман, ниже слейта
   return ROLE_COLORS[Math.min(Math.max(index, 0), ROLE_COLORS.length - 1)];
 }
 

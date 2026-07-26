@@ -274,6 +274,33 @@ async def test_overview_leaderboard_and_counts(client, uow_factory, monkeypatch)
     assert data["counts"] == {"watchlist": 0, "watched": 0, "playlists": 0}
     assert data["online"] == 3  # approximate_presence_count из Discord (замокан)
     assert data["voice"] == [] and data["birthdays"] == []  # пусто без активности
+    assert data["newcomers"] is None  # роль-новичок не настроена по умолчанию
+
+
+async def test_overview_newcomers_count(client, container, monkeypatch):
+    """Когда роль-новичок настроена — «Обзор» отдаёт число её носителей из
+    зеркала ролей (для оценки «сколько новеньких»)."""
+    from types import SimpleNamespace
+
+    from src.api.routers import guilds as guilds_router
+
+    async def fake_users(_token, ids):
+        return {}
+
+    async def fake_presence(_token, _gid):
+        return None
+
+    async def fake_roles(_gid):
+        # (роли, meta, счётчики носителей по role_id) — поле сущности GuildRole.role_id
+        return ([SimpleNamespace(role_id=777, name="🌫️ Смутный силуэт")], None, {777: 4})
+
+    monkeypatch.setattr(guilds_router, "fetch_users", fake_users)
+    monkeypatch.setattr(guilds_router, "fetch_guild_presence", fake_presence)
+    monkeypatch.setattr(container.list_roles, "execute", fake_roles)
+    await container.guild_settings.set(GUILD, "relationship_newcomer_role", "🌫️ Смутный силуэт")
+
+    data = (await client.get(f"/api/guilds/{GUILD}/overview")).json()
+    assert data["newcomers"] == {"name": "🌫️ Смутный силуэт", "count": 4}
 
 
 async def test_overview_voice_and_birthdays(client, uow_factory, monkeypatch):

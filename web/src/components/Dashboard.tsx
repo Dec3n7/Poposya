@@ -11,10 +11,12 @@ import type {
   VoiceEntry,
 } from "../types";
 import { Coverflow } from "./Coverflow";
+import { EmptyState } from "./EmptyState";
 import { Heatmap } from "./Heatmap";
 import { MiniBars } from "./MiniBars";
 import { PulseHero, type PulseItem } from "./PulseHero";
 import { RoleDonut } from "./RoleDonut";
+import { Skeleton, SkeletonCards, SkeletonRows } from "./Skeleton";
 import { Spark } from "./Spark";
 
 type BoardTab = "points" | "voice" | "birthdays";
@@ -143,8 +145,12 @@ export function Dashboard({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!data)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div aria-busy="true">
+        <Skeleton h={148} r={20} style={{ marginBottom: 16 }} />
+        <SkeletonCards count={4} height={88} />
+        <div className="card" style={{ marginTop: 16, padding: 16 }}>
+          <SkeletonRows rows={5} />
+        </div>
       </div>
     );
 
@@ -286,7 +292,11 @@ export function Dashboard({ guild }: { guild: Guild }) {
           <div className="lb">
             {board === "points" &&
               (data.leaderboard.length === 0 ? (
-                <div className="muted lb-empty">Пока никто не набрал очков.</div>
+                <EmptyState
+                  compact
+                  title="Пока никто не набрал очков"
+                  hint="Очки капают за общение с Попосей — лидерборд оживёт, как только пойдут разговоры."
+                />
               ) : (
                 <Coverflow entries={data.leaderboard} />
               ))}
@@ -307,13 +317,24 @@ export function Dashboard({ guild }: { guild: Guild }) {
           </div>
         </section>
 
-        {data.distribution.length > 0 && (
+        {(data.distribution.length > 0 || (data.newcomers?.count ?? 0) > 0) && (
           <section className="card">
             <div className="card-head">
               <div className="card-title">Роли сервера</div>
             </div>
             <div className="roles-body">
-              <RoleDonut slices={data.distribution} />
+              <RoleDonut
+                slices={
+                  // «ступень 0» (Смутный силуэт) — первым слайсом (туман), чтобы
+                  // сразу оценить долю новичков против продвинувшихся
+                  data.newcomers && data.newcomers.count > 0
+                    ? [
+                        { index: -1, name: data.newcomers.name, count: data.newcomers.count },
+                        ...data.distribution,
+                      ]
+                    : data.distribution
+                }
+              />
             </div>
           </section>
         )}

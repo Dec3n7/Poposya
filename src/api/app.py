@@ -22,6 +22,7 @@ from src.api.routers import (
     personas,
     roles,
     settings,
+    warden,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,4 +75,5 @@ def create_app(container: ApiContainer) -> FastAPI:
     app.include_router(music.router)
     app.include_router(finds.router)
     app.include_router(personas.router)
+    app.include_router(warden.router)
     return app

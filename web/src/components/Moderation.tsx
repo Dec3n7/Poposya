@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Ban, Guild, GuildWarn } from "../types";
+import { EmptyState } from "./EmptyState";
+import { SkeletonRows } from "./Skeleton";
+import { useToast } from "./Toast";
 
 function fmtExpires(iso: string): string {
   const d = new Date(iso);
@@ -19,14 +22,17 @@ function fmtDate(iso: string): string {
 
 function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const name = w.username ?? `ID ${w.user_id}`;
 
   async function clear() {
     setBusy(true);
     try {
-      await api.clearWarns(guildId, w.user_id);
+      const r = await api.clearWarns(guildId, w.user_id);
+      toast.success(`Варны сброшены (${r.cleared}) — ${name}`);
       onDone();
-    } catch {
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Не удалось сбросить варны");
       setBusy(false);
     }
   }
@@ -54,21 +60,26 @@ function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone
 
 function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
   const name = ban.username ?? `ID ${ban.user_id}`;
 
   async function unban() {
     setBusy(true);
-    setMsg(null);
     try {
       const r = await api.unban(guildId, ban.user_id);
       if (r.status === "done") {
+        toast.success(`Разбанен — ${name}`);
         onDone();
         return;
       }
-      setMsg(r.status === "failed" ? (r.result ?? "Не вышло") : "Отправлено — применяется…");
+      if (r.status === "failed") {
+        toast.error(r.result ?? "Разбан не удался");
+      } else {
+        // команда ушла боту через мост — результат придёт асинхронно
+        toast.info(`Отправлено — ${name} разбанится в течение пары секунд`);
+      }
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка разбана");
     } finally {
       setBusy(false);
     }
@@ -85,7 +96,6 @@ function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: (
         {name}
         {ban.reason && <span className="cine-review">«{ban.reason}»</span>}
         {ban.moderator_name && <span className="faint"> · выдал {ban.moderator_name}</span>}
-        {msg && <span className="faint small"> · {msg}</span>}
       </span>
       <span className="cine-side">
         <span className="mono faint">до {fmtExpires(ban.expires_at)}</span>
@@ -121,15 +131,10 @@ export function Moderation({ guild }: { guild: Guild }) {
     setWarns(null);
     setError(null);
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
 
   if (error) return <div className="error-banner">{error}</div>;
-  if (!bans)
-    return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
-      </div>
-    );
 
   return (
     <div>
@@ -139,8 +144,16 @@ export function Moderation({ guild }: { guild: Guild }) {
         разбан по истечении срока ведёт бот.
       </p>
       <div className="card leader-card">
-        {bans.length === 0 ? (
-          <div className="pad muted">Активных временных банов нет.</div>
+        {bans === null ? (
+          <div className="pad">
+            <SkeletonRows rows={3} />
+          </div>
+        ) : bans.length === 0 ? (
+          <EmptyState
+            compact
+            title="Активных банов нет"
+            hint="Временные баны появятся здесь. Разбан по истечении срока бот делает сам."
+          />
         ) : (
           bans.map((b) => <BanRow key={b.user_id} guildId={guild.id} ban={b} onDone={load} />)
         )}
@@ -149,9 +162,11 @@ export function Moderation({ guild }: { guild: Guild }) {
       <h2 className="section-title">С варнами</h2>
       <div className="card leader-card">
         {warns === null ? (
-          <div className="pad muted">Загрузка…</div>
+          <div className="pad">
+            <SkeletonRows rows={3} />
+          </div>
         ) : warns.length === 0 ? (
-          <div className="pad muted">Ни у кого нет активных варнов.</div>
+          <EmptyState compact title="Ни у кого нет активных варнов" />
         ) : (
           warns.map((w) => <WarnRow key={w.user_id} guildId={guild.id} w={w} onDone={load} />)
         )}

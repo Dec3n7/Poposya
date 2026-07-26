@@ -76,10 +76,22 @@ class RelationshipCog(commands.Cog):
     async def on_ready(self) -> None:
         for guild in self.bot.guilds:
             await self.role_sync.ensure_roles(guild)
+            # роль-новичок молчунам, которые ни разу не писали (no-op, если выкл)
+            await self.role_sync.backfill_newcomers(guild)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await self.role_sync.ensure_roles(guild)
+        await self.role_sync.backfill_newcomers(guild)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        # сразу поставить роль по текущим очкам: у новичка это «ступень 0»
+        # (role_index None → роль-новичок), у вернувшегося — его статус-роль
+        if member.bot:
+            return
+        rank = await self.container.get_rank.execute(member.id, member.guild.id)
+        await self.role_sync.sync_member(member.guild, member.id, rank.role_index)
 
     # --- команды ---
 

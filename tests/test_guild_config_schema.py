@@ -42,6 +42,8 @@ def test_kinds_cover_all_keys():
     assert KEY_KINDS["relationship_role_names"] == "list"
     assert KEY_KINDS["ai_rate_limits_by_level"] == "dict"
     assert KEY_KINDS["warn_threshold"] == "int"
+    # строковое поле (имя роли-новичка) — новый kind «text», не «int»
+    assert KEY_KINDS["relationship_newcomer_role"] == "text"
     # ключи-каналы попадают в kind только через CHANNEL_KEYS: забыть их там —
     # значит молча получить "int" и текстовый ввод ID вместо пикера канала
     assert KEY_KINDS["tempvoice_hub_channel"] == "channel"

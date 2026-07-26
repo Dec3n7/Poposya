@@ -85,3 +85,9 @@ def setup_logging(level: str = "INFO", fmt: str = "json", log_file: str = "") ->
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.INFO)
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    # Запрос к health-серверу — единственное, что попадает в access-лог: бот
+    # обслуживает по HTTP только /health, /ready и /health/full. За неделю это
+    # дало 85% всех строк лога (17692 из 20767), а с внешним мониторингом,
+    # опрашивающим раз в 10с, доля выросла бы до ~95%. Полезного там нет:
+    # ошибки бот пишет сам, а неудачу зонда фиксирует тот, кто зондирует.
+    logging.getLogger("aiohttp.access").setLevel(logging.WARNING)

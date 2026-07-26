@@ -1,4 +1,6 @@
 import logging
+import time
+from collections import deque
 
 import discord
 from discord.ext import commands
@@ -6,6 +8,8 @@ from discord.ext import commands
 from src.application.di.root_container import RootContainer
 
 logger = logging.getLogger(__name__)
+
+_CONNECTION_WINDOW = 3600.0  # окно счётчиков разрывов/возобновлений, секунды
 
 
 class PoposyaBot(commands.Bot):
@@ -20,6 +24,16 @@ class PoposyaBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self.container = container
         self._was_connected = False  # для дедупликации логов разрыва связи
+        # --- наблюдаемость соединения (метрики для WARDEN) ---
+        # окно на час: важна не общая сумма разрывов с запуска, а то, штормит ли
+        # соединение прямо сейчас
+        self._disconnect_times: deque[float] = deque()
+        self._resume_times: deque[float] = deque()
+        self._ready_at: float | None = None
+        # набор когов, поднявшихся при старте; часть подключается условно
+        # (ai_chat — только с ключом Groq), поэтому эталон снимается фактом
+        # успешной загрузки, а не константой
+        self._expected_cogs: frozenset[str] = frozenset()
 
     async def close(self) -> None:
         # перед остановкой сливаем накопленные буферы активности (сообщения/войс):
@@ -198,6 +212,8 @@ class PoposyaBot(commands.Bot):
 
         names = sorted(c.__class__.__name__.replace("Cog", "").lower() for c in self.cogs.values())
         logger.info("Коги подключены (%d): %s", len(self.cogs), ", ".join(names))
+        # эталон для health-метрики: всё, что поднялось здесь, обязано остаться
+        self._expected_cogs = frozenset(self.cogs.keys())
 
         dev_guild_id = self.container.settings.dev_guild_id
         if dev_guild_id:
@@ -213,6 +229,7 @@ class PoposyaBot(commands.Bot):
 
     async def on_ready(self) -> None:
         self._was_connected = True
+        self._ready_at = time.monotonic()
         logger.info(
             "Бот запущен как %s · серверов: %d",
             self.user,
@@ -227,11 +244,55 @@ class PoposyaBot(commands.Bot):
 
     async def on_disconnect(self) -> None:
         # on_disconnect дёргается и при штатных переподключениях; логируем
-        # только первый разрыв, пока связь не восстановится (без спама)
+        # только первый разрыв, пока связь не восстановится (без спама).
+        # Счётчик, в отличие от лога, считает все разрывы: частые «штатные»
+        # переподключения — это и есть картина деградирующей связи
+        self._disconnect_times.append(time.monotonic())
+        self._trim_connection_windows()
         if self._was_connected:
             self._was_connected = False
             logger.warning("Связь с Discord потеряна — переподключаюсь…")
 
     async def on_resumed(self) -> None:
         self._was_connected = True
+        self._resume_times.append(time.monotonic())
+        self._trim_connection_windows()
         logger.info("Связь с Discord восстановлена (сессия возобновлена)")
+
+    # --- метрики для внешнего мониторинга ---
+
+    def _trim_connection_windows(self) -> None:
+        cutoff = time.monotonic() - _CONNECTION_WINDOW
+        for window in (self._disconnect_times, self._resume_times):
+            while window and window[0] < cutoff:
+                window.popleft()
+
+    def gateway_stats(self) -> dict:
+        """Состояние связи с Discord. `latency` — время подтверждения heartbeat
+        шлюзом, главный признак деградации до того, как бот перестанет отвечать.
+        NaN до первого heartbeat (discord.py отдаёт inf/nan) отдаём как None,
+        иначе json_response выдаст невалидный JSON с литералом NaN."""
+        self._trim_connection_windows()
+        latency = self.latency
+        latency_ms = round(latency * 1000, 1) if latency == latency and latency != float("inf") else None
+        return {
+            "ready": self.is_ready(),
+            "latency_ms": latency_ms,
+            "guilds": len(self.guilds),
+            "voice_clients": len(self.voice_clients),
+            "seconds_since_ready": (
+                round(time.monotonic() - self._ready_at, 1) if self._ready_at is not None else None
+            ),
+            "disconnects_last_hour": len(self._disconnect_times),
+            "resumes_last_hour": len(self._resume_times),
+        }
+
+    def cogs_stats(self) -> dict:
+        """Расхождение с эталоном значит, что модуль отвалился на ходу: бот жив,
+        а часть функций молча исчезла."""
+        loaded = frozenset(self.cogs.keys())
+        return {
+            "loaded": len(loaded),
+            "expected": len(self._expected_cogs),
+            "missing": sorted(self._expected_cogs - loaded),
+        }

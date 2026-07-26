@@ -4,6 +4,7 @@ import { ApiError, api } from "../api";
 import { IconX } from "../icons";
 import type { BotProfile } from "../types";
 import { ImageCropper } from "./ImageCropper";
+import { useToast } from "./Toast";
 
 const EMPTY: BotProfile = {
   nick: "",
@@ -20,13 +21,11 @@ const BANNER = { w: 600, h: 240 };
 export function BotProfileCard({ guildId }: { guildId: string }) {
   const [form, setForm] = useState<BotProfile | null>(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
   const [cropping, setCropping] = useState<null | "avatar" | "banner">(null);
+  const toast = useToast();
 
   useEffect(() => {
     setForm(null);
-    setMsg(null);
     api
       .botProfile(guildId)
       .then(setForm)
@@ -40,21 +39,14 @@ export function BotProfileCard({ guildId }: { guildId: string }) {
   async function save() {
     if (!form) return;
     setBusy(true);
-    setMsg(null);
     try {
       const r = await api.setBotProfile(guildId, form);
       const s = r.command.status;
-      setOk(s === "done");
-      setMsg(
-        s === "done"
-          ? (r.command.result ?? "Применено.")
-          : s === "failed"
-            ? (r.command.result ?? "Не вышло применить.")
-            : "Сохранено — применяется… (мост доступен только на Postgres)",
-      );
+      if (s === "done") toast.success(r.command.result ?? "Профиль применён");
+      else if (s === "failed") toast.error(r.command.result ?? "Не вышло применить профиль");
+      else toast.info("Сохранено — применяется… (мост доступен только на Postgres)");
     } catch (e) {
-      setOk(false);
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка сохранения профиля");
     } finally {
       setBusy(false);
     }
@@ -139,7 +131,6 @@ export function BotProfileCard({ guildId }: { guildId: string }) {
           <button className="btn primary" onClick={save} disabled={busy}>
             Сохранить и применить
           </button>
-          {msg && <span className={`bp-msg ${ok ? "ok" : "bad"}`}>{msg}</span>}
         </div>
       </div>
 

@@ -32,6 +32,7 @@ import type {
   SavedRoleTemplate,
   SettingField,
   Trends,
+  WardenSnapshot,
   Warn,
 } from "./types";
 
@@ -332,4 +333,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ persona_id: personaId }),
     }),
+  wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
+  wardenEnabled: (): Promise<{ enabled: boolean }> =>
+    req<{ enabled: boolean }>("/api/warden/enabled"),
 };

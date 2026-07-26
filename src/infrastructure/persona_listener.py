@@ -15,6 +15,7 @@ import logging
 
 import asyncpg
 
+from src.infrastructure.listener_health import ListenerHealth
 from src.infrastructure.persona_service import PERSONAS_NOTIFY_CHANNEL, PersonaService
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,9 @@ def make_persona_listener(
     return PersonaChangeListener(_asyncpg_dsn(database_url), service)
 
 
-class PersonaChangeListener:
+class PersonaChangeListener(ListenerHealth):
     def __init__(self, dsn: str, service: PersonaService):
+        super().__init__()
         self._dsn = dsn
         self._service = service
         self._tasks: set[asyncio.Task] = set()
@@ -62,10 +64,12 @@ class PersonaChangeListener:
             # NOTIFY, пришедшие пока соединения не было, не буферизуются —
             # после (пере)подключения синхронизируем весь кэш заново
             await self._service.reload()
+            self.mark_connected()
             logger.info("Листенер персон: подключён, слушаю канал %s", PERSONAS_NOTIFY_CHANNEL)
             while not conn.is_closed():
                 await asyncio.sleep(_HEARTBEAT)
         finally:
+            self.mark_disconnected()
             await conn.close()
 
     def _on_notify(self, _conn, _pid: int, _channel: str, _payload: str) -> None:

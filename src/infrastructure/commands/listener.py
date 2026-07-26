@@ -17,6 +17,7 @@ from src.infrastructure.commands.bridge import (
     CommandProcessor,
     Executor,
 )
+from src.infrastructure.listener_health import ListenerHealth
 from src.infrastructure.settings_listener import _asyncpg_dsn
 
 logger = logging.getLogger(__name__)
@@ -36,8 +37,9 @@ def make_command_listener(
     return CommandListener(_asyncpg_dsn(database_url), processor)
 
 
-class CommandListener:
+class CommandListener(ListenerHealth):
     def __init__(self, dsn: str, processor: CommandProcessor):
+        super().__init__()
         self._dsn = dsn
         self._processor = processor
         self._tasks: set[asyncio.Task] = set()
@@ -65,10 +67,12 @@ class CommandListener:
             # NOTIFY, пришедшие пока соединения не было, не буферизуются — но их
             # добьёт sweep-цикл, поэтому просто подчищаем очередь при подключении
             await self._processor.process_pending()
+            self.mark_connected()
             logger.info("Листенер команд: подключён, слушаю канал %s", COMMANDS_NOTIFY_CHANNEL)
             while not conn.is_closed():
                 await asyncio.sleep(5.0)
         finally:
+            self.mark_disconnected()
             await conn.close()
 
     def _on_notify(self, _conn, _pid: int, _channel: str, payload: str) -> None:

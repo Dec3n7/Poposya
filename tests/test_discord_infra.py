@@ -200,13 +200,14 @@ async def test_sync_member_gives_up_if_fetch_fails():
     await svc.sync_member(guild, 1, role_index=0)  # не должно пробросить
 
 
-def _role_flags_provider(*, enabled=True, role_sync=True, names=("A", "B")):
+def _role_flags_provider(*, enabled=True, role_sync=True, names=("A", "B"), newcomer=""):
     """Заглушка провайдера настроек: resolved(guild_id) с флагами отношений."""
     return SimpleNamespace(
         resolved=lambda gid: SimpleNamespace(
             relationship_role_names=list(names),
             relationship_enabled=enabled,
             relationship_role_sync=role_sync,
+            relationship_newcomer_role=newcomer,
         )
     )
 
@@ -231,6 +232,102 @@ async def test_ensure_roles_skipped_when_module_off():
     svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(enabled=False))
     await svc.ensure_roles(guild)
     guild.create_role.assert_not_awaited()
+
+
+# --- роль-«ступень 0» (Смутный силуэт) ---
+
+
+async def test_ensure_roles_creates_newcomer():
+    """ensure_roles создаёт и роль-новичка, если она настроена."""
+    guild = make_guild(role_names=[])
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer="Fog"))
+    await svc.ensure_roles(guild)
+    assert {"A", "Fog"} <= {r.name for r in guild.roles}
+
+
+async def test_sync_member_none_index_assigns_newcomer():
+    """role_index None + роль-новичок настроена → выдаётся «ступень 0»."""
+    role_a = SimpleNamespace(name="A")
+    fog = SimpleNamespace(name="Fog")
+    member = MagicMock()
+    member.roles = []
+    member.add_roles = AsyncMock()
+    member.remove_roles = AsyncMock()
+    guild = make_guild(members={1: member})
+    guild.roles = [role_a, fog]
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer="Fog"))
+    await svc.sync_member(guild, 1, role_index=None)
+    member.add_roles.assert_awaited_once()
+    assert member.add_roles.await_args.args[0] is fog
+
+
+async def test_sync_member_graduates_from_newcomer():
+    """Взял первую статус-роль → роль-новичок снимается, статус-роль выдаётся."""
+    role_a = SimpleNamespace(name="A")
+    fog = SimpleNamespace(name="Fog")
+    member = MagicMock()
+    member.roles = [fog]  # сейчас новичок
+    member.add_roles = AsyncMock()
+    member.remove_roles = AsyncMock()
+    guild = make_guild(members={1: member})
+    guild.roles = [role_a, fog]
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer="Fog"))
+    await svc.sync_member(guild, 1, role_index=0)  # хотим «A»
+    member.remove_roles.assert_awaited_once()
+    assert fog in member.remove_roles.await_args.args
+    member.add_roles.assert_awaited_once()
+    assert member.add_roles.await_args.args[0] is role_a
+
+
+async def test_sync_member_none_index_no_newcomer_configured():
+    """role_index None, роль-новичка нет → прежнее поведение: снять всё, не выдавать."""
+    role_a = SimpleNamespace(name="A")
+    member = MagicMock()
+    member.roles = [role_a]
+    member.add_roles = AsyncMock()
+    member.remove_roles = AsyncMock()
+    guild = make_guild(members={1: member})
+    guild.roles = [role_a]
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer=""))
+    await svc.sync_member(guild, 1, role_index=None)
+    member.remove_roles.assert_awaited_once()
+    member.add_roles.assert_not_awaited()
+
+
+async def test_backfill_newcomers_adds_only_to_roleless():
+    """Бэкфилл выдаёт роль-новичка безролевым людям; статусных, ботов и уже
+    отмеченных пропускает."""
+    role_a = SimpleNamespace(name="A")
+    fog = SimpleNamespace(name="Fog")
+    m_roleless = MagicMock(bot=False, roles=[])
+    m_roleless.add_roles = AsyncMock()
+    m_status = MagicMock(bot=False, roles=[role_a])
+    m_status.add_roles = AsyncMock()
+    m_bot = MagicMock(bot=True, roles=[])
+    m_bot.add_roles = AsyncMock()
+    m_has_fog = MagicMock(bot=False, roles=[fog])
+    m_has_fog.add_roles = AsyncMock()
+    guild = make_guild()
+    guild.roles = [role_a, fog]
+    guild.members = [m_roleless, m_status, m_bot, m_has_fog]
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer="Fog"))
+    await svc.backfill_newcomers(guild)
+    m_roleless.add_roles.assert_awaited_once()
+    m_status.add_roles.assert_not_awaited()
+    m_bot.add_roles.assert_not_awaited()
+    m_has_fog.add_roles.assert_not_awaited()
+
+
+async def test_backfill_newcomers_noop_when_unset():
+    """Роль-новичок не настроена → бэкфилл ничего не делает."""
+    m = MagicMock(bot=False, roles=[])
+    m.add_roles = AsyncMock()
+    guild = make_guild()
+    guild.roles = []
+    guild.members = [m]
+    svc = RoleSyncService(MagicMock(), ["A"], _role_flags_provider(names=("A",), newcomer=""))
+    await svc.backfill_newcomers(guild)
+    m.add_roles.assert_not_awaited()
 
 
 # --- Health web handler -----------------------------------------------------

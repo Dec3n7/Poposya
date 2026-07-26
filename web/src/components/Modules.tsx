@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import type { Guild, GuildModule } from "../types";
+import { SkeletonRows } from "./Skeleton";
+import { useToast } from "./Toast";
 
 function Toggle({
   on,
@@ -32,6 +34,7 @@ export function Modules({ guild }: { guild: Guild }) {
   const [mods, setMods] = useState<GuildModule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     setMods(null);
@@ -58,7 +61,8 @@ export function Modules({ guild }: { guild: Guild }) {
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить");
+      // ошибка действия (сохранение тумблера) → тост; загруженный список не рушим
+      toast.error(e instanceof ApiError ? e.message : "Не удалось сохранить");
     } finally {
       setSaving(null);
     }
@@ -67,8 +71,8 @@ export function Modules({ guild }: { guild: Guild }) {
   if (error) return <div className="error-banner">{error}</div>;
   if (!mods)
     return (
-      <div className="center" style={{ minHeight: 200 }}>
-        <div className="spinner" aria-label="Загрузка" />
+      <div className="pad">
+        <SkeletonRows rows={4} avatar={false} />
       </div>
     );
 

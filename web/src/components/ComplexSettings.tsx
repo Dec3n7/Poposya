@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import { IconX } from "../icons";
 import type { ComplexSettings as CS } from "../types";
+import { useToast } from "./Toast";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
 function useSaver() {
   const [status, setStatus] = useState<Status>("idle");
   const [err, setErr] = useState("");
+  const toast = useToast();
   async function run(fn: () => Promise<void>) {
     setStatus("saving");
     setErr("");
@@ -17,8 +19,10 @@ function useSaver() {
       setStatus("saved");
       window.setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 1600);
     } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Ошибка";
       setStatus("error");
-      setErr(e instanceof ApiError ? e.message : "Ошибка");
+      setErr(message);
+      toast.error(message);
     }
   }
   return { status, err, run };

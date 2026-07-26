@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, useRef, useState } from "react";
 
 import { roleColor } from "../roles";
 import type { RoleSlice } from "../types";
@@ -6,6 +6,7 @@ import type { RoleSlice } from "../types";
 // Пончик распределения по ролям-статусам («пирамида сервера»). Чистый SVG без
 // внешних либ (CSP-дружелюбно): сектора кольца по долям + легенда. Один сектор
 // (все в одной роли) рисуем полным кольцом — дуга из точки в себя вырождается.
+// При наведении на сектор — мини-тултип с ролью и числом носителей.
 const CX = 60;
 const CY = 60;
 const R = 52; // внешний радиус
@@ -16,6 +17,10 @@ function polar(angle: number, radius: number): [number, number] {
 }
 
 export function RoleDonut({ slices }: { slices: RoleSlice[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+
   const total = slices.reduce((s, x) => s + x.count, 0);
   if (total === 0) return null;
 
@@ -38,9 +43,23 @@ export function RoleDonut({ slices }: { slices: RoleSlice[] }) {
     return { key: s.index, color: roleColor(s.index), frac, d };
   });
 
+  const hovered = hover != null ? (slices.find((s) => s.index === hover) ?? null) : null;
+  const dim = (key: number): number => (hover != null && hover !== key ? 0.4 : 1);
+
   return (
-    <div className="donut-wrap">
-      <svg width="120" height="120" viewBox="0 0 120 120" className="donut" aria-hidden="true">
+    <div className="donut-wrap" ref={wrapRef}>
+      <svg
+        width="120"
+        height="120"
+        viewBox="0 0 120 120"
+        className="donut"
+        aria-hidden="true"
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(e) => {
+          const rect = wrapRef.current?.getBoundingClientRect();
+          if (rect) setPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        }}
+      >
         {arcs.map((a) =>
           a.frac >= 0.999 ? (
             <circle
@@ -51,9 +70,17 @@ export function RoleDonut({ slices }: { slices: RoleSlice[] }) {
               fill="none"
               stroke={a.color}
               strokeWidth={R - RI}
+              style={{ opacity: dim(a.key), cursor: "pointer" }}
+              onMouseEnter={() => setHover(a.key)}
             />
           ) : (
-            <path key={a.key} d={a.d} fill={a.color} />
+            <path
+              key={a.key}
+              d={a.d}
+              fill={a.color}
+              style={{ opacity: dim(a.key), cursor: "pointer" }}
+              onMouseEnter={() => setHover(a.key)}
+            />
           ),
         )}
         <text x={CX} y={CY - 1} className="donut-total">
@@ -63,6 +90,21 @@ export function RoleDonut({ slices }: { slices: RoleSlice[] }) {
           с ролью
         </text>
       </svg>
+
+      {hovered && (
+        <div className="donut-tip" style={{ left: pos.x, top: pos.y }}>
+          <span
+            className="role-dot"
+            style={{ "--role": roleColor(hovered.index) } as CSSProperties}
+          />
+          <span className="donut-tip-name">{hovered.name ?? "без роли"}</span>
+          <span className="donut-tip-count mono">{hovered.count}</span>
+          <span className="donut-tip-pct mono">
+            {Math.round((hovered.count / total) * 100)}%
+          </span>
+        </div>
+      )}
+
       <ul className="donut-legend">
         {slices.map((s) => (
           <li key={s.index}>

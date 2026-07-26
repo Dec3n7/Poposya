@@ -8,11 +8,12 @@
 import asyncio
 import json
 import logging
+import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.domain.events.base import CriticalDomainEvent, DomainEvent
@@ -81,6 +82,10 @@ class OutboxDispatcher:
         self._event_bus = event_bus
         self._interval = interval_seconds
         self._max_attempts = max_attempts
+        # отметка живости для health-метрик: задача может быть «не завершена»,
+        # но при этом висеть внутри прохода — по одному факту существования
+        # таска отличить работающий диспетчер от зависшего нельзя
+        self._last_pass_at: float | None = None
 
     async def dispatch_once(self) -> int:
         """Публикует пачку неопубликованных; возвращает число доставленных."""
@@ -124,6 +129,54 @@ class OutboxDispatcher:
             logger.info("Outbox: досталось из очереди событий: %d", delivered)
         return delivered
 
+    async def backlog_stats(self) -> dict:
+        """Состояние очереди для внешнего мониторинга.
+
+        `dead` — события, исчерпавшие попытки: диспетчер их больше не берёт, и
+        сами они уже никогда не уедут. Тихо растущий `dead` означает потерянные
+        доменные события при формально исправном боте.
+        """
+        async with self._session_factory() as session:
+            pending_row = (
+                await session.execute(
+                    select(
+                        func.count(OutboxEventModel.id),
+                        func.min(OutboxEventModel.occurred_at),
+                    ).where(
+                        OutboxEventModel.published_at.is_(None),
+                        OutboxEventModel.attempts < self._max_attempts,
+                    )
+                )
+            ).one()
+            dead = (
+                await session.execute(
+                    select(func.count(OutboxEventModel.id)).where(
+                        OutboxEventModel.published_at.is_(None),
+                        OutboxEventModel.attempts >= self._max_attempts,
+                    )
+                )
+            ).scalar_one()
+
+        pending, oldest = pending_row
+        # occurred_at лежит наивным UTC (см. outbox_row_for) — сравниваем с
+        # наивным «сейчас», иначе вычитание разнесёт по TypeError
+        oldest_age = (
+            round((datetime.now(UTC).replace(tzinfo=None) - oldest).total_seconds(), 1)
+            if oldest is not None
+            else None
+        )
+        return {
+            "pending": int(pending or 0),
+            "dead": int(dead or 0),
+            "oldest_pending_age_seconds": oldest_age,
+            "interval_seconds": self._interval,
+            "seconds_since_last_pass": (
+                round(time.monotonic() - self._last_pass_at, 1)
+                if self._last_pass_at is not None
+                else None
+            ),
+        }
+
     async def run_forever(self) -> None:
         # первый проход после паузы: подписчики регистрируются при старте когов
         while True:
@@ -132,3 +185,7 @@ class OutboxDispatcher:
                 await self.dispatch_once()
             except Exception:
                 logger.exception("Outbox-диспетчер упал на проходе")
+            finally:
+                # отметка ставится и после сбойного прохода: цикл жив, а качество
+                # проходов видно по отдельной метрике ошибок
+                self._last_pass_at = time.monotonic()

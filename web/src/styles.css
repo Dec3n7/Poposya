@@ -270,6 +270,201 @@ a {
   margin-bottom: var(--sp-4);
 }
 
+/* --- тосты (обратная связь по действиям) --- */
+.toast-stack {
+  position: fixed;
+  z-index: 100;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none; /* клики проходят сквозь пустой стек; сам тост — auto */
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(19, 28, 49, 0.94);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-rim);
+  box-shadow: 0 12px 40px rgba(2, 6, 23, 0.55);
+  color: var(--fg);
+  animation: toast-in 0.28s var(--ease);
+}
+.toast-ic {
+  flex: none;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+}
+.toast-success {
+  border-left: 3px solid var(--success);
+}
+.toast-success .toast-ic {
+  color: var(--success);
+}
+.toast-error {
+  border-left: 3px solid var(--danger);
+}
+.toast-error .toast-ic {
+  color: var(--danger);
+}
+.toast-info {
+  border-left: 3px solid var(--accent-hover);
+}
+.toast-info .toast-ic {
+  color: var(--accent-hover);
+}
+.toast-msg {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.toast-x {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--fg-faint);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.toast-x:hover {
+  color: var(--fg);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 560px) {
+  .toast-stack {
+    left: var(--sp-4);
+    right: var(--sp-4);
+    bottom: var(--sp-4);
+    width: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+/* --- скелетоны загрузки --- */
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 70%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+  border-radius: 8px;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 0;
+}
+.skeleton-row .skeleton-av {
+  flex: none;
+}
+.skeleton-row .skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--sp-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* --- пустые состояния --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  color: var(--fg-dim);
+}
+.empty-state.compact {
+  padding: var(--sp-5) var(--sp-3);
+}
+.empty-ic {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 15px;
+  margin-bottom: var(--sp-1);
+}
+.empty-state.compact .empty-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.empty-title {
+  font-weight: 600;
+  color: var(--fg);
+}
+.empty-hint {
+  font-size: 13px;
+  color: var(--fg-faint);
+  max-width: 340px;
+  line-height: 1.5;
+}
+.empty-action {
+  margin-top: var(--sp-2);
+}
+
+/* текстовая настройка (напр. имя роли-новичка) — шире числового поля */
+.text-setting {
+  min-width: 220px;
+  max-width: 360px;
+}
+
 /* --- утилиты, используемые вкладкой «Персона» --- */
 .row-between {
   display: flex;
@@ -1995,22 +2190,191 @@ a {
   border-bottom: 1px solid var(--glass-rim);
 }
 
+/* ==========================================================================
+   ЕДИНЫЙ НАБОР БРЕЙКПОИНТОВ (единственные ширинные пороги в проекте):
+     860px — каркас/навигация: shell → одна колонка, рельс → выезжающая шторка
+     720px — стекинг контентных сеток: .board (лидерборд+пончик), персона
+     560px — телефонная доводка: тосты во всю ширину, паддинги аккордеона,
+             сброс span у «широкой» KPI-плитки
+   Дашбордный bento — текучий (auto-fit), собственного порога не имеет.
+   Новые адаптивные правила ДОЛЖНЫ использовать один из этих трёх значений.
+   ========================================================================== */
+
+/* мобильный топбар и затемнение существуют только на узком экране (≤860px);
+   на десктопе рельс — обычный сайдбар, эти элементы скрыты */
+.m-topbar {
+  display: none;
+}
+.scrim {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .shell {
     grid-template-columns: 1fr;
+    padding: 0;
+    gap: 0;
   }
-  .rail {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
+
+  /* компактный топбар с бургером */
+  .m-topbar {
+    display: flex;
     align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 10px 12px;
+    background: rgba(11, 17, 32, 0.72);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border-soft);
   }
-  .rail-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .m-burger {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-soft);
+    color: var(--fg);
+    cursor: pointer;
+    transition: background 0.16s var(--ease), border-color 0.16s var(--ease);
   }
-  .rail-user {
-    margin-top: 0;
+  .m-burger:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent);
+  }
+  .m-burger:active {
+    transform: scale(0.95);
+  }
+  .m-burger:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 2px;
+  }
+  .m-burger svg {
+    display: block;
+  }
+  .m-burger-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 2px solid var(--panel);
+  }
+  .m-heading {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.15;
+  }
+  .m-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+  .m-guild {
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-av {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-soft);
+  }
+  .m-av.fallback {
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    color: var(--accent-hover);
+    background: var(--accent-soft);
+  }
+
+  /* рельс → выезжающая шторка слева (параметры примерки: слева, 300px, плотно, blur 2px) */
+  .rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 300px;
+    max-width: 86%;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    border-right: 1px solid var(--glass-rim);
+    background: linear-gradient(180deg, rgba(19, 28, 49, 0.97), rgba(9, 14, 27, 0.98));
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    overflow-y: auto;
+    /* скролл шторки есть, но полосу прячем — она уродует стеклянную панель */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* старый Edge/IE */
+    transform: translateX(-102%);
+    transition: transform 0.32s var(--ease);
+  }
+  .rail::-webkit-scrollbar {
+    display: none; /* WebKit/Blink (Chrome, Safari, мобильные) */
+  }
+  .shell.nav-open .rail {
+    transform: translateX(0);
+  }
+  /* плотные пункты (выбор пользователя) */
+  .rail-item {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  /* затемнение фона под шторкой */
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    padding: 0;
+    border: none;
+    appearance: none;
+    background: rgba(4, 5, 10, 0.55);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+    transition: opacity 0.28s var(--ease);
+  }
+  .shell.nav-open .scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* контекст несёт мобильный топбар — дубли (chip «сменить сервер» и большой
+     заголовок) на узком экране прячем */
+  .stage-top {
+    display: none;
+  }
+  .stage-head {
+    display: none;
+  }
+  .stage {
+    padding: 14px 12px 32px;
+  }
+}
+
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .rail,
+  .scrim {
+    transition: none;
   }
 }
 
@@ -2322,6 +2686,7 @@ a {
   }
 }
 .donut-wrap {
+  position: relative; /* якорь для мини-тултипа сектора */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2374,6 +2739,35 @@ a {
   width: 40px;
   text-align: right;
 }
+/* мини-тултип сектора пончика: следует за курсором, центрируется над ним */
+.donut-tip {
+  position: absolute;
+  transform: translate(-50%, -125%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(19, 28, 49, 0.96);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-rim);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none; /* не перехватывает hover самого сектора */
+  z-index: 5;
+}
+.donut-tip-name {
+  color: var(--fg-dim);
+}
+.donut-tip-count {
+  color: var(--fg);
+  font-weight: 600;
+}
+.donut-tip-pct {
+  color: var(--fg-faint);
+}
 .minibars {
   display: block;
   width: 100%;
@@ -2381,6 +2775,13 @@ a {
 
 /* --- Хитмап день-недели×час --- */
 .heatmap {
+  /* якорь для тултипа-ячейки; сам НЕ скроллится и не клипает — прокрутка живёт
+     во вложенном .heatmap-scroll, чтобы тултип у краёв не резался и не порождал
+     полосу прокрутки */
+  position: relative;
+  width: 100%;
+}
+.heatmap-scroll {
   width: 100%;
   overflow-x: auto;
 }
@@ -2421,11 +2822,67 @@ a {
 .heatmap-cell.peak {
   box-shadow: 0 0 0 2px var(--magenta);
 }
+/* ячейка «сейчас» (текущий час UTC): пульсирующее кольцо акцента, чтобы
+   мгновенно найти текущий момент на сетке. Видна и на пустой ячейке. */
+.heatmap-cell.now {
+  position: relative;
+  z-index: 1;
+  outline: 1.5px solid var(--accent-hover);
+  outline-offset: -1px;
+  animation: heat-now 1.6s ease-in-out infinite;
+}
+@keyframes heat-now {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(167, 139, 250, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heatmap-cell.now {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.45);
+  }
+}
 .heatmap-note {
   margin-top: 10px;
 }
 .heatmap-note b {
   color: var(--fg);
+}
+/* мини-тултип ячейки — тот же стеклянный ключ, что у пончика; следует за мышью.
+   transform (над/под курсором) задаётся инлайн из компонента, позиция зажата
+   в границах, поэтому у краёв тултип не обрезается */
+.heatmap-tip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(19, 28, 49, 0.96);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-rim);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.heatmap-tip b {
+  color: var(--fg);
+}
+.heatmap-tip-val {
+  color: var(--fg-dim);
+}
+.heatmap-tip-now {
+  color: var(--accent-hover);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* =========================================================================
@@ -2551,7 +3008,9 @@ a {
 .bento {
   display: grid;
   gap: var(--sp-3);
-  grid-template-columns: repeat(4, 1fr);
+  /* колонки текучие: авто-подгон под ширину сцены (она меняется скачком на 860px,
+     когда сайдбар уступает место шторке) — вместо фиксированных порогов 900/480 */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 .kpi {
   padding: 15px 16px;
@@ -2606,17 +3065,10 @@ a {
   display: block;
   overflow: visible;
 }
-@media (max-width: 900px) {
-  .bento {
-    grid-template-columns: repeat(2, 1fr);
-  }
+@media (max-width: 560px) {
+  /* на телефоне «широкая» KPI-плитка не тянется на 2 колонки */
   .kpi.wide {
-    grid-column: span 1;
-  }
-}
-@media (max-width: 480px) {
-  .bento {
-    grid-template-columns: 1fr 1fr;
+    grid-column: auto;
   }
 }
 
@@ -2871,6 +3323,35 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+
+/* 2C — плотные списки на телефоне складываются в «карточки»: правые сегменты
+   (время, кнопки, счётчики) переносятся под основную строку вместо сжатия в
+   узкую колонку. Брейкпоинт 560 из единого набора. People-строка уже адаптивна
+   (мета переносится в колонке имени), поэтому здесь Роли + cine-строки
+   (Аудит/Модерация/Киноклуб). */
+@media (max-width: 560px) {
+  /* Роли: имя в первой строке, счётчик/бейджи/действия переносятся ниже */
+  .role-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .role-row-name {
+    flex: 1 1 auto;
+  }
+  .role-actions {
+    margin-left: auto;
+  }
+
+  /* Аудит/модерация/кино: время и кнопки — отдельной строкой под заголовком */
+  .cine-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .cine-side {
+    justify-content: flex-start;
+  }
 }
 .icon-btn {
   display: inline-flex;
@@ -3342,4 +3823,176 @@ a {
 }
 .mrole-add {
   margin-top: var(--sp-2);
+}
+
+/* --- вкладка WARDEN --- */
+/* Кольца и палитра повторяют Visual Identity сторожа: зелёное READY, янтарное
+   DEGRADED, красное FAILED, серое UNKNOWN. Форма глифа дублирует цвет — так
+   статус читается и в монохроме. */
+
+.warden {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.warden-ring {
+  font-size: 18px;
+  line-height: 1;
+}
+.warden-ring.ok {
+  color: var(--success);
+  text-shadow: 0 0 10px rgba(70, 224, 160, 0.55);
+}
+.warden-ring.warn {
+  color: #f5b544;
+  text-shadow: 0 0 10px rgba(245, 181, 68, 0.55);
+}
+.warden-ring.bad {
+  color: var(--danger);
+  text-shadow: 0 0 10px rgba(255, 122, 145, 0.55);
+}
+.warden-ring.muted {
+  color: var(--fg-faint);
+}
+
+.warden-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.warden-head-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.warden-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.warden-subtitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.warden-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip.ok {
+  border-color: rgba(70, 224, 160, 0.4);
+  color: var(--success);
+  background: rgba(70, 224, 160, 0.1);
+}
+.chip.warn {
+  border-color: rgba(245, 181, 68, 0.4);
+  color: #f5b544;
+  background: rgba(245, 181, 68, 0.1);
+}
+.chip.bad {
+  border-color: rgba(255, 122, 145, 0.4);
+  color: var(--danger);
+  background: rgba(255, 122, 145, 0.1);
+}
+
+/* auto-fit: на телефоне одна колонка, на широком экране — до четырёх */
+.warden-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.warden-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--panel-2);
+  padding: 14px;
+}
+.warden-card.warn {
+  border-color: rgba(245, 181, 68, 0.35);
+}
+.warden-card.bad {
+  border-color: rgba(255, 122, 145, 0.35);
+}
+.warden-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.warden-name {
+  font-weight: 600;
+}
+.warden-status {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
+.warden-status.ok {
+  color: var(--success);
+}
+.warden-status.warn {
+  color: #f5b544;
+}
+.warden-status.bad {
+  color: var(--danger);
+}
+.warden-score {
+  margin-left: auto;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.warden-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+.warden-note.ok {
+  color: var(--fg-dim);
+}
+.warden-reasons {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--fg-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.warden-reasons .gate {
+  color: var(--danger);
+}
+.warden-penalty {
+  font-variant-numeric: tabular-nums;
+  color: #f5b544;
+  font-weight: 600;
+}
+
+.warden-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.warden-log li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.warden-log-target {
+  font-weight: 600;
+  min-width: 44px;
+}
+.warden-log-reason {
+  color: var(--fg-dim);
+  flex: 1;
+  min-width: 140px;
 }

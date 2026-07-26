@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api";
 import { IconCheck } from "../icons";
 import type { CommandResult, GuildRole, PermCatalog } from "../types";
+import { SkeletonText } from "./Skeleton";
+import { useToast } from "./Toast";
 
 // Редактор прав роли. Работаем битовым полем через BigInt (не влезает в number).
 // Ограждения — настоящие — на стороне бота; здесь UX-подсказки: недоступные боту
@@ -24,8 +26,8 @@ export function RolePermsEditor({
   const original = useMemo(() => BigInt(role.permissions), [role.permissions]);
   const [value, setValue] = useState<bigint>(original);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     api
@@ -43,7 +45,6 @@ export function RolePermsEditor({
   function toggle(bit: bigint) {
     setValue((v) => ((v & bit) === bit ? v & ~bit : v | bit));
     setConfirming(false);
-    setMsg(null);
   }
 
   // опасные права, которые это сохранение включит впервые (для подтверждения)
@@ -62,9 +63,9 @@ export function RolePermsEditor({
   const dirty = value !== original;
 
   function report(r: CommandResult): boolean {
-    if (r.status === "failed") setMsg(r.result ?? "Не вышло");
-    else if (r.status === "done") setMsg(r.result ?? "Готово");
-    else setMsg("Отправлено — применяется…");
+    if (r.status === "failed") toast.error(r.result ?? "Не вышло");
+    else if (r.status === "done") toast.success(r.result ?? "Права роли обновлены");
+    else toast.info("Отправлено — применяется…");
     return r.status !== "failed";
   }
 
@@ -79,12 +80,11 @@ export function RolePermsEditor({
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const ok = report(await api.setRolePermissions(guildId, role.id, String(value)));
       if (ok) onSaved(String(value));
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Ошибка");
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
       setBusy(false);
       setConfirming(false);
@@ -97,13 +97,12 @@ export function RolePermsEditor({
         <span className="faint">
           Права роли «{role.name}»
         </span>
-        {msg && <span className="faint small">{msg}</span>}
       </div>
 
       {err ? (
         <div className="muted small">{err}</div>
       ) : !cat ? (
-        <div className="muted small">Загрузка…</div>
+        <SkeletonText lines={4} />
       ) : (
         <>
           {hasAdmin && (

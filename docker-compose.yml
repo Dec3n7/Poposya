@@ -22,6 +22,12 @@ services:
   bot:
     build: .
     restart: unless-stopped
+    # Без лимита утечка в боте съедает весь хост — вместе со сторожем (WARDEN),
+    # и авария остаётся никем не замеченной. С лимитом отказ локален и точно
+    # назван: Docker выставляет OOMKilled, мониторинг читает его напрямую.
+    # 512M — пятикратный запас к рабочим ~100 МБ: субпроцессы ffmpeg/yt-dlp при
+    # музыке считаются в тот же cgroup.
+    mem_limit: 512m
     env_file: .env
     environment:
       # переопределяют значения из .env только внутри контейнера:
@@ -55,6 +61,7 @@ services:
     profiles: ["postgres"]
     build: .
     restart: unless-stopped
+    mem_limit: 256m
     env_file: .env
     environment:
       # та же БД, что у бота (см. BOT_DATABASE_URL в .env)
@@ -79,6 +86,7 @@ services:
     profiles: ["postgres"]
     build: ./web
     restart: unless-stopped
+    mem_limit: 128m
     depends_on:
       - api
     ports:
@@ -89,6 +97,14 @@ services:
     profiles: ["postgres"]
     image: postgres:16-alpine
     restart: unless-stopped
+    # Намеренно щедро (×20 к рабочим ~105 МБ): здесь лимит — предохранитель от
+    # разгона, а не рабочая граница. Причины две. Page cache считается в лимит
+    # cgroup, а Postgres держит на нём производительность (shared_buffers всего
+    # 128 МБ) — тесный лимит вытеснит кэш и замедлит базу. И OOM у Postgres не
+    # мягкий: убитый backend уводит postmaster в crash recovery, то есть рвёт
+    # все соединения и перезапускает кластер целиком.
+    # Настоящую границу задаёт конфиг Postgres, не этот лимит.
+    mem_limit: 2g
     environment:
       POSTGRES_DB: poposya
       POSTGRES_USER: poposya

@@ -34,7 +34,7 @@ from src.infrastructure.db.models.guild import GuildSettingModel
 logger = logging.getLogger(__name__)
 
 # скаляры хранятся как str(value); списки/словари — как JSON
-_SCALAR_KINDS = frozenset({"int", "float", "bool", "channel"})
+_SCALAR_KINDS = frozenset({"int", "float", "bool", "channel", "text"})
 _COMPLEX_KINDS = frozenset({"list", "dict"})
 
 # Канал Postgres LISTEN/NOTIFY: любой процесс (веб-панель), записав настройку,
@@ -59,6 +59,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "relationship_exclusive_threshold": ("Порог «Единственного»", "очк"),
     "relationship_absence_days": ("Дней отсутствия — сброс серии", "дн"),
     "relationship_notes_max_chars": ("Лимит заметки о человеке", "симв"),
+    "relationship_newcomer_role": ("Роль новичка (до 1 уровня; пусто = выкл)", ""),
     "secret_room_min_level": ("Уровень для тайной комнаты", ""),
     "secret_room_hours": ("Время жизни тайной комнаты", "ч"),
     "survey_bonus_points": ("Бонус за анкету", "очк"),
@@ -154,14 +155,17 @@ def _field_range(key: str) -> tuple[int | float | None, int | float | None]:
 class SettingSpec:
     key: str
     label: str
-    kind: str  # "int" | "float" | "channel" | "bool"
+    kind: str  # "int" | "float" | "channel" | "bool" | "text"
     min: int | float | None = None
     max: int | float | None = None
     unit: str = ""  # для подсказки: «ч», «мин», «сек», «очк»…
 
-    def parse(self, raw: str) -> int | float:
+    def parse(self, raw: str) -> int | float | str:
         """Текст из команды -> валидное значение или ValueError с понятным текстом."""
         raw = raw.strip()
+        if self.kind == "text":
+            # длину/содержимое проверит pydantic при сборке модели (max_length)
+            return raw
         if self.kind == "bool":
             low = raw.lower()
             if low in ("1", "true", "on", "вкл", "да", "yes"):
@@ -463,7 +467,7 @@ class GuildSettingsService(ISettingsProvider):
 
     # --- запись (в БД + кэш) ---
 
-    async def set(self, guild_id: int, key: str, raw: str) -> int | float:
+    async def set(self, guild_id: int, key: str, raw: str) -> int | float | str:
         """Валидирует и сохраняет переопределение. Возвращает разобранное
         значение; ValueError — если не прошло валидацию (поле или инвариант)."""
         spec = SETTING_SPECS[key]
