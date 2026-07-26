@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "../api";
 import {
@@ -631,12 +631,15 @@ export function Roles({ guild }: { guild: Guild }) {
   const [permsId, setPermsId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
   // панель инструментов: шаблоны / подтверждение импорта / автороли
   const [tool, setTool] = useState<"templates" | "import" | "autorole" | null>(null);
   const [importData, setImportData] = useState<RoleInput[] | null>(null);
   const [importError, setImportError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  // FLIP-анимация переупорядочивания: DOM-узлы строк по id + их прошлые top'ы.
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const prevTops = useRef<Map<string, number>>(new Map());
+  const lastOrder = useRef<string>("");
   const toast = useToast();
 
   const load = useCallback(() => {
@@ -687,6 +690,33 @@ export function Roles({ guild }: { guild: Guild }) {
   // любой редактор открыт — порядок не трогаем
   const rowsLocked = editingId !== null || permsId !== null || creating;
 
+  // FLIP: подпись порядка меняется только при перестановке — тогда и анимируем.
+  // Без массива зависимостей: замеряем top'ы каждый рендер (чтобы они не
+  // «протухли» после открытия/закрытия редактора), но проигрываем переход лишь
+  // когда порядок реально сменился.
+  const flipKey = roles.map((r) => r.id).join(",");
+  useLayoutEffect(() => {
+    const prev = prevTops.current;
+    const next = new Map<string, number>();
+    const orderChanged = flipKey !== lastOrder.current;
+    rowRefs.current.forEach((el, id) => {
+      const top = el.getBoundingClientRect().top;
+      next.set(id, top);
+      if (!orderChanged) return;
+      const old = prev.get(id);
+      if (old == null || Math.abs(old - top) < 0.5) return;
+      // мгновенно вернуть строку на прежнее место, затем плавно доехать к новому
+      el.style.transition = "none";
+      el.style.transform = `translateY(${old - top}px)`;
+      requestAnimationFrame(() => {
+        el.style.transition = "transform 200ms cubic-bezier(.2, .8, .2, 1)";
+        el.style.transform = "";
+      });
+    });
+    prevTops.current = next;
+    lastOrder.current = flipKey;
+  });
+
   // --- порядок ---
 
   function commitOrder(ids: string[]) {
@@ -703,20 +733,20 @@ export function Roles({ guild }: { guild: Guild }) {
     commitOrder(ids);
   }
 
-  function handleDrop(targetId: string) {
-    if (!dragId || dragId === targetId) {
-      setDragId(null);
-      setOverId(null);
-      return;
-    }
+  // Живое расступание: пока курсор над строкой-целью, сразу переставляем dragId
+  // к ней (выше/ниже — по тому, в какой половине строки курсор). Соседи
+  // разъезжаются, а их плавный переезд рисует FLIP-эффект выше. Порядок
+  // применяется по ходу, поэтому на дропе доделывать уже нечего.
+  function dragOver(targetId: string, e: React.DragEvent<HTMLDivElement>) {
+    if (!dragId || dragId === targetId) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const below = e.clientY > rect.top + rect.height / 2;
     const ids = editableIds.filter((id) => id !== dragId);
     const ti = ids.indexOf(targetId);
-    if (ti >= 0) {
-      ids.splice(ti, 0, dragId);
-      commitOrder(ids);
-    }
-    setDragId(null);
-    setOverId(null);
+    if (ti < 0) return;
+    ids.splice(below ? ti + 1 : ti, 0, dragId);
+    if (ids.join(",") !== editableIds.join(",")) commitOrder(ids);
   }
 
   async function saveOrder() {
@@ -1131,23 +1161,21 @@ export function Roles({ guild }: { guild: Guild }) {
                   </div>
                 )}
                 <div
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(r.id, el);
+                    else rowRefs.current.delete(r.id);
+                  }}
                   className={`role-row${r.editable ? "" : " locked"}${
-                    overId === r.id ? " drag-over" : ""
-                  }${dragId === r.id ? " dragging" : ""}`}
+                    dragId === r.id ? " dragging" : ""
+                  }`}
                   draggable={canDrag}
                   onDragStart={() => canDrag && setDragId(r.id)}
-                  onDragOver={(e) => {
-                    if (dragId && r.editable && r.id !== dragId) {
-                      e.preventDefault();
-                      setOverId(r.id);
-                    }
-                  }}
-                  onDragLeave={() => overId === r.id && setOverId(null)}
-                  onDrop={() => handleDrop(r.id)}
-                  onDragEnd={() => {
+                  onDragOver={(e) => canDrag && dragOver(r.id, e)}
+                  onDrop={(e) => {
+                    e.preventDefault();
                     setDragId(null);
-                    setOverId(null);
                   }}
+                  onDragEnd={() => setDragId(null)}
                 >
                   {r.editable && canReorder && !rowsLocked ? (
                     <span className="role-grip" title="Перетащить для смены порядка" aria-hidden="true">
