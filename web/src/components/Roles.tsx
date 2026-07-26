@@ -30,6 +30,16 @@ import { RolePermsEditor } from "./RolePerms";
 import { SkeletonRows, SkeletonText } from "./Skeleton";
 import { useToast } from "./Toast";
 
+// Прозрачная 1×1 картинка вместо нативного «призрака» перетаскивания: тащим саму
+// строку в списке, без плавающей копии-дубликата. Грузим на уровне модуля, чтобы
+// к первому drag она успела декодироваться.
+const EMPTY_DRAG_IMAGE: HTMLImageElement | null =
+  typeof Image !== "undefined" ? new Image() : null;
+if (EMPTY_DRAG_IMAGE) {
+  EMPTY_DRAG_IMAGE.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+}
+
 // битовое поле прав не влезает в number — сравниваем через BigInt.
 // 0x8 = Administrator: единственное право, которое стоит подсветить даже в
 // режиме просмотра (выдать роль с ним = отдать сервер).
@@ -740,6 +750,7 @@ export function Roles({ guild }: { guild: Guild }) {
   function dragOver(targetId: string, e: React.DragEvent<HTMLDivElement>) {
     if (!dragId || dragId === targetId) return;
     e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
     const rect = e.currentTarget.getBoundingClientRect();
     const below = e.clientY > rect.top + rect.height / 2;
     const ids = editableIds.filter((id) => id !== dragId);
@@ -1169,7 +1180,13 @@ export function Roles({ guild }: { guild: Guild }) {
                     dragId === r.id ? " dragging" : ""
                   }`}
                   draggable={canDrag}
-                  onDragStart={() => canDrag && setDragId(r.id)}
+                  onDragStart={(e) => {
+                    if (!canDrag) return;
+                    // прячем нативный дубликат-призрак — тащим саму строку
+                    if (EMPTY_DRAG_IMAGE) e.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragId(r.id);
+                  }}
                   onDragOver={(e) => canDrag && dragOver(r.id, e)}
                   onDrop={(e) => {
                     e.preventDefault();

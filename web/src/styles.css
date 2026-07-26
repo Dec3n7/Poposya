@@ -3311,14 +3311,15 @@ a {
 .role-row[draggable="true"]:active .role-grip {
   cursor: grabbing;
 }
-/* строка, которую тащат: пунктирный «слот» на месте будущей высадки — сама
-   строка едет за курсором нативным призраком, а этот слот плавно разъезжается
-   вместе с соседями (FLIP в Roles.tsx) */
+/* строка, которую тащат: нативный призрак спрятан (setDragImage), поэтому её
+   саму приподнимаем — непрозрачный фон, тень, акцентная рамка. Соседи плавно
+   разъезжаются вокруг (FLIP в Roles.tsx), а сама строка едет по слотам. */
 .role-row.dragging {
-  opacity: 0.55;
-  border-style: dashed;
-  border-color: var(--accent-ring);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  position: relative;
+  z-index: 2;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--elevated));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
 }
 .role-actions {
   flex: none;
