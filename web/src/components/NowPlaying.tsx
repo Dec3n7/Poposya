@@ -51,10 +51,19 @@ export function NowPlaying({ guild }: { guild: Guild }) {
         })
         .catch(() => {});
     load();
-    const poll = setInterval(load, 3000);
+    // фоновая вкладка не поллит (экономим запросы и упор в rate-limit nginx);
+    // вернулись на вкладку — сразу освежаем, чтобы не ждать следующего тика
+    const poll = setInterval(() => {
+      if (!document.hidden) load();
+    }, 3000);
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       alive = false;
       clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [guild.id]);
 

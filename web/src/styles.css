@@ -896,6 +896,15 @@ a {
   display: inline-block;
   margin-top: var(--sp-2);
 }
+.login-notice {
+  margin-top: var(--sp-3);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--fg-dim);
+  border: 1px solid var(--accent-ring);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
 
 /* --- guild picker --- */
 .guild-grid {

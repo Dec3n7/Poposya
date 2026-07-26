@@ -5,6 +5,7 @@ import type { Guild, GuildSummary, Me } from "../types";
 import { Audit } from "./Audit";
 import { Cinema } from "./Cinema";
 import { Dashboard } from "./Dashboard";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Finds } from "./Finds";
 import { GuildSettings } from "./GuildSettings";
 import { Moderation } from "./Moderation";
@@ -330,18 +331,22 @@ export function GuildView({
             <h1 className="stage-title">{guild.name}</h1>
           </div>
 
-          {tab === "overview" && <Dashboard guild={guild} />}
-          {tab === "people" && <People guild={guild} />}
-          {tab === "roles" && <Roles guild={guild} />}
-          {tab === "cinema" && <Cinema guild={guild} />}
-          {tab === "music" && <Music guild={guild} />}
-          {tab === "finds" && <Finds guild={guild} />}
-          {tab === "moderation" && <Moderation guild={guild} />}
-          {tab === "audit" && <Audit guild={guild} />}
-          {tab === "modules" && <Modules guild={guild} />}
-          {tab === "settings" && <GuildSettings guild={guild} />}
-          {tab === "persona" && <Persona guild={guild} />}
-          {tab === "warden" && <Warden />}
+          {/* key={tab}: барьер сбрасывается при переходе — упавшая вкладка
+              чинится сама, как только уходишь на другую и возвращаешься */}
+          <ErrorBoundary key={tab}>
+            {tab === "overview" && <Dashboard guild={guild} />}
+            {tab === "people" && <People guild={guild} />}
+            {tab === "roles" && <Roles guild={guild} />}
+            {tab === "cinema" && <Cinema guild={guild} />}
+            {tab === "music" && <Music guild={guild} />}
+            {tab === "finds" && <Finds guild={guild} />}
+            {tab === "moderation" && <Moderation guild={guild} />}
+            {tab === "audit" && <Audit guild={guild} />}
+            {tab === "modules" && <Modules guild={guild} />}
+            {tab === "settings" && <GuildSettings guild={guild} />}
+            {tab === "persona" && <Persona guild={guild} />}
+            {tab === "warden" && <Warden />}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

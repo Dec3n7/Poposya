@@ -48,6 +48,16 @@ export class ApiError extends Error {
   }
 }
 
+// Централизованный выход по протухшей/отозванной сессии: ЛЮБОЙ 401 (не только
+// стартовый /me) уводит на экран логина, а не сыплет разрозненными ошибками по
+// компонентам. Особенно важно после серверного killswitch сессий и TTL 24ч —
+// сессия может стать недействительной прямо во время работы. App регистрирует
+// обработчик; api.ts его дёргает.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include", // слать сессию-куку кросс-origin
@@ -55,6 +65,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
     let message = res.statusText;
     try {
       const body = await res.json();

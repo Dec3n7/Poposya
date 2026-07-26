@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { ApiError, api } from "./api";
+import { ApiError, api, setUnauthorizedHandler } from "./api";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildView } from "./components/GuildView";
 import { Login } from "./components/Login";
@@ -13,7 +13,22 @@ export default function App() {
   const [status, setStatus] = useState<Status>("loading");
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
+  const [sessionExpired, setSessionExpired] = useState(false);
   const route = useHashRoute();
+
+  // Любой 401 из api.ts (протухшая/отозванная сессия) -> на экран логина.
+  // statusRef, чтобы отличить обрыв активной сессии (показать «сессия истекла»)
+  // от обычного анонимного старта.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (statusRef.current === "ready") setSessionExpired(true);
+      setStatus("anon");
+      setMe(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
   // выбранный сервер выводится из URL (переживает F5, шарится ссылкой)
   const guild = me?.guilds.find((g) => g.id === route.guildId) ?? null;
 
@@ -50,7 +65,7 @@ export default function App() {
       </div>
     );
   }
-  if (status === "anon") return <Login />;
+  if (status === "anon") return <Login sessionExpired={sessionExpired} />;
   if (status === "error") {
     return (
       <div className="center">

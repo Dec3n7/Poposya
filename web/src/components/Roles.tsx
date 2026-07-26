@@ -708,7 +708,9 @@ export function Roles({ guild }: { guild: Guild }) {
   useLayoutEffect(() => {
     const prev = prevTops.current;
     const next = new Map<string, number>();
-    const orderChanged = flipKey !== lastOrder.current;
+    // при «уменьшить движение» перестановку не анимируем — как и остальная панель
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const orderChanged = !reduce && flipKey !== lastOrder.current;
     rowRefs.current.forEach((el, id) => {
       const top = el.getBoundingClientRect().top;
       next.set(id, top);
