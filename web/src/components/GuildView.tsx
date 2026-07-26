@@ -211,6 +211,18 @@ export function GuildView({
     };
   }, [navOpen]);
 
+  // если экран вырос до десктопа с открытой шторкой — закрыть её: иначе рельс
+  // снова становится сайдбаром, а блок скролла фона (body.overflow:hidden)
+  // остался бы висеть, и страница «залипала» бы без прокрутки
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 861px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setNavOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   // красная точка на бургере, если есть что-то тревожное (баны) — дублирует бейдж в шторке
   const hasAlert = (summary?.bans ?? 0) > 0;
 
