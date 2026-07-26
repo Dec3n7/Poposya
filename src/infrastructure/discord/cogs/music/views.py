@@ -361,7 +361,9 @@ class PlayerView(discord.ui.View):
                 self._p(interaction.guild_id, "music.history_empty_back"), ephemeral=True
             )
 
-    @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.primary, row=0, custom_id="music:pause")
+    @discord.ui.button(
+        emoji="⏯️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:pause"
+    )
     async def pause_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         player = self._service.get_player(interaction.guild_id)
@@ -388,7 +390,9 @@ class PlayerView(discord.ui.View):
         if player is not None:
             await player.cycle_repeat()
 
-    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, row=0, custom_id="music:stop")
+    @discord.ui.button(
+        emoji="⏹️", style=discord.ButtonStyle.secondary, row=0, custom_id="music:stop"
+    )
     async def stop_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         await self._service.cleanup(
