@@ -27,6 +27,7 @@ from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.events.outbox import (
     OutboxDispatcher,
+    _register,
     deserialize_event,
     outbox_row_for,
     serialize_event,
@@ -363,6 +364,22 @@ def test_event_serialization_roundtrip():
 
 def test_unknown_event_type_returns_none():
     assert deserialize_event("nope.unknown", "{}") is None
+
+
+def test_register_rejects_event_without_a_string_type():
+    """Событие без строкового default event_type зарегистрировалось бы под
+    сентинелом MISSING, а dispatcher по реальному типу его бы не нашёл — тихая
+    потеря критичного события. Ловим громко на импорте."""
+    from dataclasses import dataclass
+
+    from src.domain.events.base import CriticalDomainEvent
+
+    @dataclass(frozen=True, kw_only=True)
+    class Broken(CriticalDomainEvent):
+        pass  # event_type унаследован без default → MISSING
+
+    with pytest.raises(TypeError, match="event_type"):
+        _register(Broken)
 
 
 async def test_uow_stores_critical_event_and_marks_published(session_factory):

@@ -30,6 +30,16 @@ _REGISTRY: dict[str, type[DomainEvent]] = {}
 
 def _register(cls: type[DomainEvent]) -> None:
     event_type = cls.__dataclass_fields__["event_type"].default
+    # без строкового default `.default` вернёт сентинел dataclasses.MISSING:
+    # событие зарегистрировалось бы под ним, а dispatcher по реальному
+    # event_type его бы не нашёл — deserialize_event вернул бы None и пометил
+    # запись «исчерпавшей попытки». Тихая потеря критичного события; ловим
+    # громко и на импорте, а не годы спустя по растущему outbox.dead.
+    if not isinstance(event_type, str):
+        raise TypeError(
+            f"{cls.__name__}.event_type обязан иметь строковый default "
+            '(например: event_type: str = "feature.happened")'
+        )
     _REGISTRY[event_type] = cls
 
 
