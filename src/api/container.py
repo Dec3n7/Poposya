@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from src.api.bot_guilds import BotGuildsCache
 from src.application.activity.use_cases import VoiceLeaderboardUseCase
 from src.application.audit.use_cases import AppendAuditUseCase, ListAuditUseCase
+from src.application.banwatch.use_cases import CheckUserUseCase, FlaggedCandidatesUseCase
 from src.application.botprofile.use_cases import GetBotProfileUseCase, SetBotProfileUseCase
 from src.application.cinema.use_cases import (
     GetMovieRatingsUseCase,
@@ -107,6 +108,9 @@ class ApiContainer:
     # журнал действий панели
     append_audit: AppendAuditUseCase
     list_audit: ListAuditUseCase
+    # кросс-серверные баны (показ модератору в панели)
+    banwatch_check: CheckUserUseCase
+    banwatch_flagged: FlaggedCandidatesUseCase
     # пер-серверный профиль бота (ник/аватар/баннер)
     get_bot_profile: GetBotProfileUseCase
     set_bot_profile: SetBotProfileUseCase
@@ -188,6 +192,8 @@ def assemble_container(
         activity_stats=GetActivityStatsUseCase(uow_factory),
         append_audit=AppendAuditUseCase(uow_factory),
         list_audit=ListAuditUseCase(uow_factory),
+        banwatch_check=CheckUserUseCase(uow_factory),
+        banwatch_flagged=FlaggedCandidatesUseCase(uow_factory),
         get_bot_profile=GetBotProfileUseCase(uow_factory),
         set_bot_profile=SetBotProfileUseCase(uow_factory),
         list_roles=ListRolesUseCase(uow_factory),

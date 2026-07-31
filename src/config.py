@@ -224,6 +224,9 @@ class Settings(BaseSettings):
     finds_enabled: bool = True
     git_enabled: bool = True
     steam_enabled: bool = True
+    banwatch_enabled: bool = True
+    # кросс-серверные баны: с какого числа серверов участник считается «отмеченным»
+    banwatch_threshold: int = 3
     # тумблеры модуля «Модерация» (мастер + автоантиспам)
     moderation_enabled: bool = True
     moderation_antispam: bool = True

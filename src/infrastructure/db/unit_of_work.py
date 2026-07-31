@@ -13,6 +13,7 @@ from src.infrastructure.db.repositories.activity import (
     SqlAlchemyVoiceProgressRepository,
 )
 from src.infrastructure.db.repositories.audit import SqlAlchemyAuditRepository
+from src.infrastructure.db.repositories.banwatch import SqlAlchemyServerBanRepository
 from src.infrastructure.db.repositories.botprofile import SqlAlchemyBotProfileRepository
 from src.infrastructure.db.repositories.cinema import (
     SqlAlchemyMovieEntryRepository,
@@ -96,6 +97,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.roles = SqlAlchemyRoleRepository(self._session)
         self.tracked_repos = SqlAlchemyTrackedRepoRepository(self._session)
         self.tracked_games = SqlAlchemyTrackedGameRepository(self._session)
+        self.server_bans = SqlAlchemyServerBanRepository(self._session)
         self._events = []
         self._committed = False
         return self

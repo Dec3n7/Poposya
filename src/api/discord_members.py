@@ -45,3 +45,25 @@ async def fetch_guild_members(bot_token: str, guild_id: int, cap: int = 2000) ->
             if len(batch) < _PAGE:
                 break
     return out
+
+
+async def fetch_guild_member(bot_token: str, guild_id: int, user_id: int) -> dict | None:
+    """Один участник сервера или None, если его там нет (404). Дёшево — для
+    точечной проверки «сидит ли отмеченный человек на этом сервере»."""
+    headers = {"Authorization": f"Bot {bot_token}"}
+    try:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(
+                f"{DISCORD_API}/guilds/{guild_id}/members/{user_id}"
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                m = await resp.json()
+    except aiohttp.ClientError:
+        return None
+    user = m.get("user") or {}
+    if "id" not in user:
+        return None
+    uid = int(user["id"])
+    name = m.get("nick") or user.get("global_name") or user.get("username")
+    return {"user_id": uid, "name": name, "avatar": avatar_url(uid, user.get("avatar"))}

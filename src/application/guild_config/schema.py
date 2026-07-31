@@ -42,6 +42,8 @@ class GuildSettings(BaseModel):
 
     # --- модерация ---
     warn_threshold: int = Field(3, ge=1, le=20)
+    # кросс-серверные баны: порог «отмеченного» участника (забанен на N серверах)
+    banwatch_threshold: int = Field(3, ge=1, le=50)
     warn_mute_minutes: int = Field(120, ge=1, le=40320)
     spam_limit: int = Field(5, ge=2, le=50)
     spam_window: int = Field(10, ge=3, le=120)
@@ -163,6 +165,7 @@ class GuildSettings(BaseModel):
     finds_enabled: bool = True
     git_enabled: bool = True
     steam_enabled: bool = True
+    banwatch_enabled: bool = True
 
     # --- тумблеры модуля «Модерация» (мастер гасит все админ-команды;
     # авторазбан работает всегда, чтобы tempban'ы снимались) ---

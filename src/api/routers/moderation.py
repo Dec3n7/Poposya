@@ -18,10 +18,27 @@ from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
+from src.api.discord_members import fetch_guild_member
 from src.api.discord_users import fetch_users
 from src.api.security import Session
+from src.application.banwatch.dto import CrossBanReport
 
 router = APIRouter(prefix="/api/guilds/{guild_id}/moderation", tags=["moderation"])
+
+# сколько отмеченных кандидатов максимум проверять на членство за один запрос
+_CROSSBAN_MAX = 50
+
+
+def _records_json(report: CrossBanReport) -> list[dict]:
+    return [
+        {
+            "guild_id": str(r.guild_id),
+            "guild_name": r.guild_name,
+            "reason": r.reason,
+            "banned_at": r.banned_at.isoformat() if r.banned_at else None,
+        }
+        for r in report.records
+    ]
 
 
 def _now() -> datetime:
@@ -123,6 +140,62 @@ async def clear_warns(
         target=user_id, result=f"снято {cleared}",
     )
     return {"cleared": cleared}
+
+
+# --- кросс-серверные баны (только чтение, только для админа панели) ----------
+
+
+@router.get("/crossban")
+async def crossban_flagged(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Отмеченные участники: сидят на этом сервере, но забанены на >= порога
+    ДРУГИХ серверах бота. Наружу в Discord не идёт — только панель."""
+    settings = container.guild_settings
+    enabled = bool(settings.current(guild_id, "banwatch_enabled"))
+    threshold = int(settings.current(guild_id, "banwatch_threshold"))
+    if not enabled:
+        return {"enabled": False, "threshold": threshold, "flagged": []}
+
+    candidates = await container.banwatch_flagged.execute(guild_id, threshold)
+    token = container.settings.discord_token
+    flagged: list[dict] = []
+    for cand in candidates[:_CROSSBAN_MAX]:
+        member = await fetch_guild_member(token, guild_id, cand.user_id)
+        if member is None:
+            continue  # забанен где-то ещё, но на этом сервере его нет — не показываем
+        report = await container.banwatch_check.execute(cand.user_id, guild_id)
+        flagged.append(
+            {
+                "user_id": str(cand.user_id),
+                "name": member["name"],
+                "avatar": member["avatar"],
+                "count": report.count,
+                "records": _records_json(report),
+            }
+        )
+    return {"enabled": True, "threshold": threshold, "flagged": flagged}
+
+
+@router.get("/crossban/{user_id}")
+async def crossban_user(
+    user_id: int,
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Кросс-серверная бан-история конкретного участника (поиск в панели)."""
+    report = await container.banwatch_check.execute(user_id, guild_id)
+    users = await fetch_users(container.settings.discord_token, [user_id])
+    info = users.get(user_id, {})
+    return {
+        "user_id": str(user_id),
+        "username": info.get("username"),
+        "avatar": info.get("avatar"),
+        "count": report.count,
+        "threshold": int(container.guild_settings.current(guild_id, "banwatch_threshold")),
+        "records": _records_json(report),
+    }
 
 
 # --- write-действия через командный мост (реальный Discord делает бот) -------

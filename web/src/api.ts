@@ -7,6 +7,8 @@ import type {
   Cinema,
   CommandResult,
   ComplexSettings,
+  CrossBanList,
+  CrossBanUser,
   FindsOverview,
   GuildModule,
   GuildPersona,
@@ -153,6 +155,10 @@ export const api = {
     req<{ cleared: number }>(`/api/guilds/${guildId}/moderation/warns/${userId}`, {
       method: "DELETE",
     }),
+  crossban: (guildId: string): Promise<CrossBanList> =>
+    req<CrossBanList>(`/api/guilds/${guildId}/moderation/crossban`),
+  crossbanUser: (guildId: string, userId: string): Promise<CrossBanUser> =>
+    req<CrossBanUser>(`/api/guilds/${guildId}/moderation/crossban/${userId}`),
   playlists: (guildId: string): Promise<PlaylistItem[]> =>
     req<PlaylistItem[]>(`/api/guilds/${guildId}/music/playlists`),
   playlist: (guildId: string, name: string): Promise<PlaylistDetail> =>

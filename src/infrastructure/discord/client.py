@@ -21,6 +21,9 @@ class PoposyaBot(commands.Bot):
         # приветствия/прощания (on_member_join/remove) — тоже привилегированный
         # интент (Server Members Intent в Developer Portal)
         intents.members = True
+        # события банов (on_member_ban/unban) для кросс-серверного зеркала банов;
+        # непривилегированный интент — в Developer Portal включать НЕ надо
+        intents.moderation = True
         super().__init__(command_prefix="!", intents=intents)
         self.container = container
         self._was_connected = False  # для дедупликации логов разрыва связи
@@ -153,6 +156,7 @@ class PoposyaBot(commands.Bot):
             )
         )
         from src.infrastructure.discord.cogs.autorole import AutoRoleCog
+        from src.infrastructure.discord.cogs.banwatch import BanwatchCog
         from src.infrastructure.discord.cogs.config import ConfigCog
         from src.infrastructure.discord.cogs.git import GitCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
@@ -169,6 +173,7 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(ConfigCog(self, self.container.guild_settings, persona=persona))
         await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
         await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))
+        await self.add_cog(BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona))
         await self.add_cog(
             StayKickCog(
                 self, self.container.staykick, self.container.settings, gs, persona=persona

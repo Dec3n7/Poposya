@@ -7,6 +7,7 @@ from src.domain.activity.repository import (
     IVoiceProgressRepository,
 )
 from src.domain.audit.repository import IAuditRepository
+from src.domain.banwatch.repository import IServerBanRepository
 from src.domain.botprofile.repository import IBotProfileRepository
 from src.domain.cinema.repository import (
     IMovieEntryRepository,
@@ -69,6 +70,7 @@ class IUnitOfWork(ABC):
     roles: IRoleRepository
     tracked_repos: ITrackedRepoRepository
     tracked_games: ITrackedGameRepository
+    server_bans: IServerBanRepository
 
     @abstractmethod
     async def __aenter__(self) -> "IUnitOfWork": ...

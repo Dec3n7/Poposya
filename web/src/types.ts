@@ -330,6 +330,36 @@ export interface GuildWarn {
   last_at: string;
 }
 
+export interface CrossBanRecord {
+  guild_id: string;
+  guild_name: string;
+  reason: string;
+  banned_at: string | null;
+}
+
+export interface CrossBanFlagged {
+  user_id: string;
+  name: string | null;
+  avatar: string | null;
+  count: number;
+  records: CrossBanRecord[];
+}
+
+export interface CrossBanList {
+  enabled: boolean;
+  threshold: number;
+  flagged: CrossBanFlagged[];
+}
+
+export interface CrossBanUser {
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  count: number;
+  threshold: number;
+  records: CrossBanRecord[];
+}
+
 export interface AuditEntry {
   id: number;
   actor_id: string;

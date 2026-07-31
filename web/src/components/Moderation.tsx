@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
-import type { Ban, Guild, GuildWarn } from "../types";
+import type {
+  Ban,
+  CrossBanFlagged,
+  CrossBanList,
+  CrossBanRecord,
+  CrossBanUser,
+  Guild,
+  GuildWarn,
+} from "../types";
 import { EmptyState } from "./EmptyState";
 import { SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
@@ -107,9 +115,106 @@ function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: (
   );
 }
 
+function CrossBanRecords({ records }: { records: CrossBanRecord[] }) {
+  return (
+    <div style={{ padding: "4px 12px 12px 46px", display: "grid", gap: 8 }}>
+      {records.map((r, i) => (
+        <div key={i} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
+          <b>{r.guild_name || `Сервер ${r.guild_id}`}</b>
+          <span className="cine-review">«{r.reason || "без причины"}»</span>
+          <span className="mono faint">
+            {r.banned_at ? fmtDate(r.banned_at) : "дата неизвестна"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlaggedRow({ f }: { f: CrossBanFlagged }) {
+  const [open, setOpen] = useState(false);
+  const name = f.name ?? `ID ${f.user_id}`;
+  return (
+    <div>
+      <button
+        className="cine-row"
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: "100%", background: "none", border: "none", cursor: "pointer" }}
+      >
+        <span className="cine-title">
+          {f.avatar ? (
+            <img className="leader-avatar sm" src={f.avatar} alt="" />
+          ) : (
+            <span className="leader-avatar sm fallback">{name.slice(0, 1).toUpperCase()}</span>
+          )}
+          {name}
+          <span className="badge alert">забанен на {f.count} серв.</span>
+        </span>
+        <span className="cine-side faint">{open ? "▾ свернуть" : "▸ причины"}</span>
+      </button>
+      {open && <CrossBanRecords records={f.records} />}
+    </div>
+  );
+}
+
+function CrossBanLookup({ guildId }: { guildId: string }) {
+  const [id, setId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<CrossBanUser | null>(null);
+  const toast = useToast();
+
+  async function check() {
+    const clean = id.trim();
+    if (!/^\d{5,}$/.test(clean)) {
+      toast.error("Введите числовой ID пользователя Discord");
+      return;
+    }
+    setBusy(true);
+    try {
+      setResult(await api.crossbanUser(guildId, clean));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Не удалось проверить");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card leader-card" style={{ padding: 16, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          className="input"
+          placeholder="ID пользователя Discord"
+          value={id}
+          inputMode="numeric"
+          onChange={(e) => setId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && check()}
+          style={{ flex: 1, minWidth: 180 }}
+        />
+        <button className="btn" onClick={check} disabled={busy}>
+          Проверить
+        </button>
+      </div>
+      {result &&
+        (result.count === 0 ? (
+          <EmptyState compact title="Нигде не забанен" hint="На серверах бота банов нет." />
+        ) : (
+          <div>
+            <p className="muted" style={{ margin: "0 0 8px" }}>
+              {result.username ?? `ID ${result.user_id}`} — забанен на <b>{result.count}</b>{" "}
+              сервере(ах){result.count >= result.threshold ? " ⚠️ порог пройден" : ""}.
+            </p>
+            <CrossBanRecords records={result.records} />
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export function Moderation({ guild }: { guild: Guild }) {
   const [bans, setBans] = useState<Ban[] | null>(null);
   const [warns, setWarns] = useState<GuildWarn[] | null>(null);
+  const [crossban, setCrossban] = useState<CrossBanList | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
@@ -124,11 +229,16 @@ export function Moderation({ guild }: { guild: Guild }) {
       .guildWarns(guild.id)
       .then(setWarns)
       .catch(() => setWarns([]));
+    api
+      .crossban(guild.id)
+      .then(setCrossban)
+      .catch(() => setCrossban(null));
   }
 
   useEffect(() => {
     setBans(null);
     setWarns(null);
+    setCrossban(null);
     setError(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +281,45 @@ export function Moderation({ guild }: { guild: Guild }) {
           warns.map((w) => <WarnRow key={w.user_id} guildId={guild.id} w={w} onDone={load} />)
         )}
       </div>
+
+      <h2 className="section-title">Кросс-серверные баны</h2>
+      <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+        Участники этого сервера, забанённые на других серверах бота. Видно только админам —
+        в Discord не публикуется. Порог «отмеченного» — в настройках сервера.
+      </p>
+      {crossban === null ? (
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={2} />
+          </div>
+        </div>
+      ) : !crossban.enabled ? (
+        <div className="card leader-card">
+          <EmptyState
+            compact
+            title="Модуль выключен"
+            hint="Включите «Кросс-серверные баны» на вкладке «Модули»."
+          />
+        </div>
+      ) : (
+        <>
+          <div className="card leader-card">
+            {crossban.flagged.length === 0 ? (
+              <EmptyState
+                compact
+                title="Отмеченных нет"
+                hint={`Никто из участников не забанен на ${crossban.threshold}+ других серверах бота.`}
+              />
+            ) : (
+              crossban.flagged.map((f) => <FlaggedRow key={f.user_id} f={f} />)
+            )}
+          </div>
+          <h3 className="section-title" style={{ fontSize: "1rem" }}>
+            Проверить по ID
+          </h3>
+          <CrossBanLookup guildId={guild.id} />
+        </>
+      )}
     </div>
   );
 }
