@@ -301,7 +301,7 @@ class Settings(BaseSettings):
     # токен опционален: пусто = анонимно (60 запросов/ч на IP), с токеном — 5000/ч.
     # Только публичные репозитории; классический PAT без прав достаточно.
     github_token: str = ""
-    github_poll_interval_minutes: int = 15  # как часто опрашивать релизы
+    github_poll_interval_minutes: int = 120  # как часто опрашивать релизы
     # форум-канал для тредов релизов (дефолт-зеркало guild-настройки; 0 = выкл)
     git_forum_channel: int = 0
 
