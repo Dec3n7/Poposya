@@ -7,12 +7,14 @@ import type {
   CommandResult,
   Guild,
   MemberRoles,
+  ModCase,
   PersonDetail,
   PersonListItem,
   Warn,
 } from "../types";
 import { Dropdown } from "./Dropdown";
 import { EmptyState } from "./EmptyState";
+import { ACTION_LABELS } from "./Moderation";
 import { RoleChip } from "./RoleChip";
 import { Skeleton, SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
@@ -91,10 +93,20 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function ModActions({ guildId, userId }: { guildId: string; userId: string }) {
+function ModActions({
+  guildId,
+  userId,
+  onActed,
+}: {
+  guildId: string;
+  userId: string;
+  onActed?: () => void;
+}) {
   const [minutes, setMinutes] = useState("60");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // подтверждение по второму клику для необратимых действий: null | "kick" | "ban_perm"
+  const [confirmKind, setConfirmKind] = useState<null | "kick" | "ban_perm">(null);
   const toast = useToast();
 
   function show(r: { status: string; result: string | null }) {
@@ -103,10 +115,15 @@ function ModActions({ guildId, userId }: { guildId: string; userId: string }) {
     else toast.info("Отправлено — применяется…");
   }
 
-  async function act(kind: "mute" | "unmute" | "ban", fn: () => Promise<{ status: string; result: string | null }>) {
+  async function act(
+    kind: "mute" | "unmute" | "ban" | "kick" | "ban_perm",
+    fn: () => Promise<{ status: string; result: string | null }>,
+  ) {
+    setConfirmKind(null);
     setBusy(kind);
     try {
       show(await fn());
+      onActed?.(); // журнал по этому человеку мог измениться — дадим родителю обновить
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Ошибка");
     } finally {
@@ -133,7 +150,7 @@ function ModActions({ guildId, userId }: { guildId: string; userId: string }) {
         </label>
         <input
           className="input mod-reason"
-          placeholder="причина (для бана)"
+          placeholder="причина (для бана/кика)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
@@ -153,14 +170,99 @@ function ModActions({ guildId, userId }: { guildId: string; userId: string }) {
             Снять мут
           </button>
           <button
-            className="btn danger small"
+            className="btn ghost small"
+            disabled={busy !== null}
+            onClick={() =>
+              confirmKind === "kick"
+                ? act("kick", () => api.kick(guildId, userId, reason))
+                : setConfirmKind("kick")
+            }
+          >
+            {confirmKind === "kick" ? "Точно? Кик" : "👢 Кик"}
+          </button>
+          <button
+            className="btn small"
             disabled={busy !== null}
             onClick={() => act("ban", () => api.ban(guildId, userId, mins(), reason))}
           >
-            🔨 Бан
+            🔨 Бан (врем.)
+          </button>
+          <button
+            className="btn danger small"
+            disabled={busy !== null}
+            onClick={() =>
+              confirmKind === "ban_perm"
+                ? act("ban_perm", () => api.banPermanent(guildId, userId, reason))
+                : setConfirmKind("ban_perm")
+            }
+          >
+            {confirmKind === "ban_perm" ? "Точно? Навсегда" : "⛔ Бан навсегда"}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PersonHistory({
+  guildId,
+  userId,
+  reloadKey,
+}: {
+  guildId: string;
+  userId: string;
+  reloadKey: number;
+}) {
+  const [cases, setCases] = useState<ModCase[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function load() {
+    setBusy(true);
+    api
+      .history(guildId, userId)
+      .then(setCases)
+      .catch(() => setCases([]))
+      .finally(() => setBusy(false));
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, userId, reloadKey]);
+
+  return (
+    <div className="person-warns">
+      <div className="person-warns-head">
+        <span className="faint">
+          История модерации {cases && cases.length > 0 && `(${cases.length})`}
+        </span>
+        <button className="btn ghost small" onClick={load} disabled={busy} title="Обновить">
+          ⟳
+        </button>
+      </div>
+      {cases === null ? (
+        <div className="muted small">Загрузка…</div>
+      ) : cases.length === 0 ? (
+        <div className="muted small">Действий модерации нет.</div>
+      ) : (
+        <ul className="warn-list">
+          {cases.map((c) => (
+            <li className="warn-item" key={c.id}>
+              <span className="warn-reason">
+                <b>{ACTION_LABELS[c.action] ?? c.action}</b>
+                {c.duration_minutes ? ` · ${c.duration_minutes}м` : ""}
+                {c.reason ? ` · ${c.reason}` : ""}
+              </span>
+              <span className="faint small">
+                {fmtDate(c.created_at)}
+                {" · "}
+                {c.moderator_id ? (c.moderator_name ?? c.moderator_id) : "авто"}
+                {c.source === "panel" ? " (панель)" : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -318,6 +420,7 @@ function PersonCard({
   const [pts, setPts] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [modBump, setModBump] = useState(0); // счётчик для перезагрузки истории после действий
   const toast = useToast();
 
   useEffect(() => {
@@ -499,7 +602,12 @@ function PersonCard({
               </ul>
             )}
           </div>
-          <ModActions guildId={guildId} userId={userId} />
+          <ModActions
+            guildId={guildId}
+            userId={userId}
+            onActed={() => setModBump((v) => v + 1)}
+          />
+          <PersonHistory guildId={guildId} userId={userId} reloadKey={modBump} />
           {err && <div className="error-banner" style={{ marginTop: 12 }}>{err}</div>}
         </>
       )}

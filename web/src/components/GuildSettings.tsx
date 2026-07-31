@@ -8,7 +8,11 @@ import { SettingField } from "./SettingField";
 import { Skeleton } from "./Skeleton";
 
 const SECTIONS: { title: string; match: (k: string) => boolean }[] = [
-  { title: "Модерация", match: (k) => k.startsWith("warn_") || k.startsWith("spam_") },
+  {
+    title: "Модерация",
+    match: (k) =>
+      k.startsWith("warn_") || k.startsWith("spam_") || k.startsWith("moderation_"),
+  },
   {
     title: "Отношения",
     match: (k) =>

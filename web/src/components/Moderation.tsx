@@ -15,8 +15,9 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
 
-// человекочитаемые ярлыки действий журнала (совпадают с ботовым _ACTION_LABELS)
-const ACTION_LABELS: Record<string, string> = {
+// человекочитаемые ярлыки действий журнала (совпадают с ботовым _ACTION_LABELS).
+// Экспортируется — карточка человека (People.tsx) переиспользует те же подписи.
+export const ACTION_LABELS: Record<string, string> = {
   warn: "варн",
   warn_mute: "мут по варнам",
   warn_tempban: "бан по варнам",
