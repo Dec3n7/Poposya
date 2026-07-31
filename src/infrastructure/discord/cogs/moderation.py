@@ -736,7 +736,7 @@ class ModerationCog(commands.Cog):
 
     # --- история модерации по участнику ---
 
-    @app_commands.command(name="history", description="История модерации по участнику")
+    @app_commands.command(name="modhistory", description="История модерации по участнику")
     @app_commands.describe(user="Чью историю показать")
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
