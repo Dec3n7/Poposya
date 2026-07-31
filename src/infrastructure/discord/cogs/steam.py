@@ -173,7 +173,13 @@ class SteamCog(commands.Cog):
     @steam_group.command(name="add", description="Отслеживать новости игры Steam")
     @app_commands.describe(game="AppID (напр. 730) или ссылка на страницу игры в Steam")
     async def steam_add(self, interaction: discord.Interaction, game: str) -> None:
-        await interaction.response.defer(ephemeral=True)
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.HTTPException:
+            # interaction истёк (не уложились в 3с Discord — обычно из-за пачки
+            # команд подряд): ответить уже нельзя, тихо выходим без шумной ошибки
+            logger.warning("Не успел подтвердить /steam add вовремя (interaction истёк)")
+            return
         appid = parse_app_ref(game)
         if appid is None:
             await interaction.followup.send(
@@ -195,7 +201,9 @@ class SteamCog(commands.Cog):
         snapshot = await self.steam.fetch_game.execute(appid)
         if snapshot is None:
             await interaction.followup.send(
-                f"Игра с AppID `{appid}` не найдена в Steam.", ephemeral=True
+                f"Не удалось получить игру `{appid}` из Steam — магазин медленно ответил "
+                "или такой игры нет. Попробуйте ещё раз через минуту.",
+                ephemeral=True,
             )
             return
 

@@ -49,14 +49,25 @@ def _parse_game(appid: int, data: dict) -> GameInfoDTO | None:
 
 
 class SteamClient(ISteamClient):
-    def __init__(self, timeout_seconds: float = 10.0, user_agent: str = "PoposyaBot"):
+    # storefront appdetails (store.steampowered.com) отвечает заметно медленнее
+    # официального api.steampowered.com (наблюдалось ~10с). Даём ему отдельный
+    # длинный таймаут, чтобы медленный ответ не превращался в ложное «не найдено».
+    def __init__(
+        self,
+        timeout_seconds: float = 10.0,
+        details_timeout_seconds: float = 25.0,
+        user_agent: str = "PoposyaBot",
+    ):
         self._timeout = timeout_seconds
+        self._details_timeout = details_timeout_seconds
         self._user_agent = user_agent
 
-    async def _get_json(self, url: str, params: dict[str, str]) -> tuple[object, int]:
+    async def _get_json(
+        self, url: str, params: dict[str, str], timeout_seconds: float | None = None
+    ) -> tuple[object, int]:
         """(тело, статус). Статус 0 — сеть/таймаут/не-JSON."""
         try:
-            timeout = aiohttp.ClientTimeout(total=self._timeout)
+            timeout = aiohttp.ClientTimeout(total=timeout_seconds or self._timeout)
             headers = {"User-Agent": self._user_agent}
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.get(url, params=params) as resp:
@@ -69,7 +80,13 @@ class SteamClient(ISteamClient):
             return None, 0
 
     async def get_game(self, appid: int) -> GameInfoDTO | None:
-        data, status = await self._get_json(_APPDETAILS, {"appids": str(appid)})
+        # cc=us — самый широкий каталог (региональные ограничения не прячут игру);
+        # в замерах ещё и заметно быстрее отвечал
+        data, status = await self._get_json(
+            _APPDETAILS,
+            {"appids": str(appid), "cc": "us", "l": "english"},
+            timeout_seconds=self._details_timeout,
+        )
         if status != 200 or not isinstance(data, dict):
             return None
         node = data.get(str(appid))
