@@ -1,3 +1,5 @@
+import asyncio
+import io
 import logging
 
 import discord
@@ -12,6 +14,7 @@ from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
+from src.infrastructure.rank_card import RankCard, render_rank_card
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +98,63 @@ class RelationshipCog(commands.Cog):
 
     # --- команды ---
 
+    def _thresholds(self, guild_id: int) -> list[int]:
+        """Пороги очков для ролей сервера (для полосы прогресса карточки)."""
+        if self.gs is not None:
+            return list(self.gs.resolved(guild_id).relationship_role_thresholds)
+        if self.settings is not None:
+            return list(self.settings.relationship_role_thresholds)
+        return []
+
+    async def _render_rank_card(
+        self, interaction: discord.Interaction, info, role_name: str, guild_id: int
+    ) -> bytes | None:
+        """Карточка ранга картинкой → PNG-байты, иначе None (тогда ког отдаёт
+        эмбед-фолбэк). Всё под общим try: сбой аватара/шрифта/рендера не должен
+        оставлять участника без ответа. Рендер (блокирующий Pillow) — в executor."""
+        try:
+            thresholds = self._thresholds(guild_id)
+            floor = max([0, *[t for t in thresholds if t <= info.points]])
+            if info.next_threshold is not None:
+                span = max(1, info.next_threshold - floor)
+                progress = (info.points - floor) / span
+                progress_text = f"{info.points} / {info.next_threshold}"
+            else:
+                progress, progress_text = 1.0, "макс"
+            avatar_bytes: bytes | None = None
+            try:
+                avatar_bytes = await interaction.user.display_avatar.replace(
+                    format="png", size=256
+                ).read()
+            except Exception:
+                avatar_bytes = None  # нет/битый аватар — плашка с инициалом
+            colour = accent(guild_id)  # int 0xRRGGBB
+            rgb = ((colour >> 16) & 0xFF, (colour >> 8) & 0xFF, colour & 0xFF)
+            card = RankCard(
+                display_name=interaction.user.display_name,
+                points=info.points,
+                level=info.level,
+                role_name=role_name,
+                progress=progress,
+                progress_text=progress_text,
+                accent=rgb,
+                is_exclusive=info.is_exclusive,
+                frozen=info.frozen,
+                deep_dialogs=info.deep_dialogs,
+                avatar=avatar_bytes,
+            )
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, render_rank_card, card)
+        except Exception:
+            logger.warning("Карточка ранга не отрисована — фолбэк на эмбед", exc_info=True)
+            return None
+
     @app_commands.command(name="rank", description="Твои очки и статус у Попоси")
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction) -> None:
-        # defer сразу: чтение БД на холодном старте может превысить 3 секунды
-        await interaction.response.defer(ephemeral=True)
+        # defer сразу: чтение БД на холодном старте может превысить 3 секунды.
+        # публично (в тон /leaderboard): карточку для того и рисуем
+        await interaction.response.defer()
         gid = interaction.guild_id
         info = await self.container.get_rank.execute(interaction.user.id, gid)
         role_name = (
@@ -107,6 +162,13 @@ class RelationshipCog(commands.Cog):
             if info.role_index is not None
             else self._p(gid, "relationship.rank_no_status")
         )
+        card = await self._render_rank_card(interaction, info, role_name, gid)
+        if card is not None:
+            await interaction.followup.send(
+                file=discord.File(io.BytesIO(card), filename="rank.png")
+            )
+            return
+        # фолбэк: текстовый эмбед, если картинка не отрисовалась
         lines = [
             self._p(gid, "relationship.rank_points", points=info.points),
             self._p(gid, "relationship.rank_status", status=role_name),
@@ -126,7 +188,7 @@ class RelationshipCog(commands.Cog):
             description="\n".join(lines),
             color=accent(gid),
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="leaderboard", description="Топ очков сервера: кто ближе всех к Попосе"

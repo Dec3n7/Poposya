@@ -11,9 +11,11 @@ FROM python:3.12-slim
 
 # ffmpeg — воспроизведение музыки; libopus0 — кодек голосового канала discord.py;
 # postgresql-client — pg_dump для бэкапов Postgres (на trixie это клиент 17,
-# он дампит сервер 16; при работе на SQLite просто не используется)
+# он дампит сервер 16; при работе на SQLite просто не используется);
+# fonts-dejavu-core — TTF с кириллицей для карточки /rank (Pillow ищет DejaVuSans)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libopus0 postgresql-client \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg libopus0 postgresql-client fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

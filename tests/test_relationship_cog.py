@@ -43,7 +43,18 @@ def make_cog(container=None, role_sync=None):
     )
 
 
-async def test_rank_shows_points_and_status():
+def _force_embed(monkeypatch):
+    """Заставить /rank упасть на текстовый эмбед-фолбэк: рендер картинки кидает
+    исключение (проверяем именно ветку фолбэка и её содержимое)."""
+
+    def boom(_card):
+        raise RuntimeError("нет шрифта")
+
+    monkeypatch.setattr("src.infrastructure.discord.cogs.relationship.render_rank_card", boom)
+
+
+async def test_rank_shows_points_and_status(monkeypatch):
+    _force_embed(monkeypatch)
     cog = make_cog()
     interaction = make_interaction()
     await type(cog).rank.callback(cog, interaction)
@@ -53,7 +64,8 @@ async def test_rank_shows_points_and_status():
     assert "R0" in embed.description
 
 
-async def test_rank_no_role():
+async def test_rank_no_role(monkeypatch):
+    _force_embed(monkeypatch)
     container = make_container()
     container.get_rank.execute.return_value = make_rank(
         role_index=None, points=10, next_threshold=100
@@ -65,7 +77,8 @@ async def test_rank_no_role():
     assert "без статуса" in embed.description
 
 
-async def test_rank_frozen_note():
+async def test_rank_frozen_note(monkeypatch):
+    _force_embed(monkeypatch)
     container = make_container()
     container.get_rank.execute.return_value = make_rank(frozen=True)
     cog = make_cog(container)
@@ -73,6 +86,20 @@ async def test_rank_frozen_note():
     await type(cog).rank.callback(cog, interaction)
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert "заморожено" in embed.description
+
+
+async def test_rank_sends_card_image(monkeypatch):
+    """Успешный рендер -> карточка уходит картинкой (rank.png), без эмбеда."""
+    monkeypatch.setattr(
+        "src.infrastructure.discord.cogs.relationship.render_rank_card",
+        lambda _card: b"\x89PNG\r\n\x1a\n",
+    )
+    cog = make_cog()
+    interaction = make_interaction()
+    await type(cog).rank.callback(cog, interaction)
+    file = interaction.followup.send.await_args.kwargs["file"]
+    assert file.filename == "rank.png"
+    assert "embed" not in interaction.followup.send.await_args.kwargs
 
 
 async def test_leaderboard_empty():
