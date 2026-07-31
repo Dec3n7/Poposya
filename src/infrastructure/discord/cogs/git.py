@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 # запас. Безопасное число репозиториев зависит от интервала опроса.
 _RATE_BUDGET_PER_HOUR = 50
 
+# Сколько символов текста релиза («What's Changed») влезает в описание эмбеда.
+# Предел Discord — 4096 на описание и 6000 на весь эмбед; оставляем запас на
+# заголовок/поля/футер.
+_RELEASE_BODY_LIMIT = 4000
+
 
 def _trim(text: str, limit: int) -> str:
     text = text or ""
@@ -146,7 +151,7 @@ class GitCog(commands.Cog):
         embed = discord.Embed(
             title=_trim(title, 240),
             url=release.html_url or None,
-            description=_trim(release.body, 1500) or None,
+            description=_trim(release.body, _RELEASE_BODY_LIMIT) or None,
             color=accent(guild_id),
             timestamp=release.published_at,
         )
@@ -263,7 +268,7 @@ class GitCog(commands.Cog):
             )
             return
 
-        await self.repos.add_repo.execute(
+        tracked = await self.repos.add_repo.execute(
             guild_id=interaction.guild_id,
             owner=owner,
             name=name,
@@ -272,6 +277,18 @@ class GitCog(commands.Cog):
             baseline=snapshot.latest,
             now=datetime.now(UTC),
         )
+
+        # сразу показать текущий последний релиз с его текстом (база уже на нём —
+        # фоновый опрос не объявит его повторно). Сбой не критичен: репо уже
+        # отслеживается, карточка на месте
+        if snapshot.latest is not None:
+            try:
+                await created.thread.send(
+                    embed=self._release_embed(interaction.guild_id, tracked, snapshot.latest),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.HTTPException:
+                logger.warning("Не удалось отправить последний релиз при добавлении", exc_info=True)
 
         no_releases = "" if snapshot.latest else "\nУ репозитория пока нет релизов — сообщу, когда появится."
         await interaction.followup.send(
