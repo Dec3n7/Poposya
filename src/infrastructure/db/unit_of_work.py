@@ -45,6 +45,7 @@ from src.infrastructure.db.repositories.relationship import (
 from src.infrastructure.db.repositories.repos import SqlAlchemyTrackedRepoRepository
 from src.infrastructure.db.repositories.roles import SqlAlchemyRoleRepository
 from src.infrastructure.db.repositories.staykick import SqlAlchemyPendingKickRepository
+from src.infrastructure.db.repositories.steam import SqlAlchemyTrackedGameRepository
 from src.infrastructure.db.repositories.tempvoice import SqlAlchemyTempVoiceRepository
 from src.infrastructure.events.outbox import outbox_row_for
 
@@ -94,6 +95,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.bot_profile = SqlAlchemyBotProfileRepository(self._session)
         self.roles = SqlAlchemyRoleRepository(self._session)
         self.tracked_repos = SqlAlchemyTrackedRepoRepository(self._session)
+        self.tracked_games = SqlAlchemyTrackedGameRepository(self._session)
         self._events = []
         self._committed = False
         return self

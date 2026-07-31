@@ -11,6 +11,7 @@ from src.application.music.di import MusicContainer
 from src.application.relationship.di import RelationshipContainer
 from src.application.repos.di import ReposContainer
 from src.application.roles.di import RolesContainer
+from src.application.steam.di import SteamContainer
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
@@ -33,6 +34,7 @@ class RootContainer:
     tempvoice: TempVoiceContainer
     roles: RolesContainer
     repos: ReposContainer
+    steam: SteamContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     persona: object  # PersonaService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
@@ -515,6 +517,33 @@ def build_root_container(settings: Settings) -> RootContainer:
         poll_releases=PollReleasesUseCase(uow_factory, github),
     )
 
+    # --- Steam-игры: клиент публичных API + use cases ---
+    from src.application.steam.use_cases import (
+        AddGameUseCase,
+        CountGamesUseCase,
+        FetchGameUseCase,
+        GetGameUseCase,
+        ListGamesUseCase,
+        PollNewsUseCase,
+        RemoveGameUseCase,
+    )
+    from src.application.steam.use_cases import (
+        MarkAnnouncedUseCase as MarkGameAnnouncedUseCase,
+    )
+    from src.infrastructure.steam.client import SteamClient
+
+    steam_client = SteamClient()
+    steam = SteamContainer(
+        fetch_game=FetchGameUseCase(steam_client),
+        get_game=GetGameUseCase(uow_factory),
+        list_games=ListGamesUseCase(uow_factory),
+        count_games=CountGamesUseCase(uow_factory),
+        add_game=AddGameUseCase(uow_factory),
+        remove_game=RemoveGameUseCase(uow_factory),
+        mark_announced=MarkGameAnnouncedUseCase(uow_factory),
+        poll_news=PollNewsUseCase(uow_factory, steam_client),
+    )
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -529,6 +558,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         tempvoice=tempvoice,
         roles=roles,
         repos=repos,
+        steam=steam,
         guild_settings=guild_settings,
         persona=persona,
         engine=engine,

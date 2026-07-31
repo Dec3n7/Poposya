@@ -156,6 +156,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.config import ConfigCog
         from src.infrastructure.discord.cogs.git import GitCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
+        from src.infrastructure.discord.cogs.steam import SteamCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
         from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
@@ -167,6 +168,7 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(AutoRoleCog(self, gs))
         await self.add_cog(ConfigCog(self, self.container.guild_settings, persona=persona))
         await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
+        await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))
         await self.add_cog(
             StayKickCog(
                 self, self.container.staykick, self.container.settings, gs, persona=persona

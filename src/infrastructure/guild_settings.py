@@ -100,6 +100,8 @@ _LABELS: dict[str, tuple[str, str]] = {
     "cinema_forum_channel": ("Форум «золотой фонд» (0=выкл)", ""),
     # GitHub-репозитории
     "git_forum_channel": ("Форум релизов GitHub (0=выкл)", ""),
+    # Steam-игры
+    "steam_forum_channel": ("Форум новостей Steam (0=выкл)", ""),
     # находки
     "finds_channel_id": ("Канал находок (0 = по имени / MAIN)", ""),
     "finds_min_interval_hours": ("Мин. интервал находок", "ч"),
@@ -127,6 +129,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "cinema_enabled": ("Киноклуб (весь модуль)", ""),
     "finds_enabled": ("Находки (весь модуль)", ""),
     "git_enabled": ("GitHub-репозитории (весь модуль)", ""),
+    "steam_enabled": ("Steam-игры (весь модуль)", ""),
     # тумблеры модуля «Модерация»
     "moderation_enabled": ("Модерация (весь модуль)", ""),
     "moderation_antispam": ("Антиспам (авто-мут за флуд)", ""),
@@ -328,6 +331,17 @@ FEATURE_MODULES: tuple[ModuleSpec, ...] = (
             "Команда /git подписывает репозитории GitHub: бот заводит по каждому тред "
             "в форум-канале и постит туда новые релизы. Форум задаётся настройкой "
             "git_forum_channel."
+        ),
+    ),
+    ModuleSpec(
+        key="steam",
+        label="Steam-игры",
+        master="steam_enabled",
+        subs=(),
+        description=(
+            "Команда /steam подписывает игры Steam: бот заводит по каждой тред в "
+            "форум-канале и постит туда официальные новости — обновления, патчи, "
+            "анонсы — с картинкой. Форум задаётся настройкой steam_forum_channel."
         ),
     ),
     ModuleSpec(

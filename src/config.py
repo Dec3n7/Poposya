@@ -223,6 +223,7 @@ class Settings(BaseSettings):
     cinema_enabled: bool = True
     finds_enabled: bool = True
     git_enabled: bool = True
+    steam_enabled: bool = True
     # тумблеры модуля «Модерация» (мастер + автоантиспам)
     moderation_enabled: bool = True
     moderation_antispam: bool = True
@@ -304,6 +305,11 @@ class Settings(BaseSettings):
     github_poll_interval_minutes: int = 120  # как часто опрашивать релизы
     # форум-канал для тредов релизов (дефолт-зеркало guild-настройки; 0 = выкл)
     git_forum_channel: int = 0
+
+    # --- Steam-игры (/steam) ---
+    steam_poll_interval_minutes: int = 120  # как часто опрашивать новости игр
+    # форум-канал для тредов игр (дефолт-зеркало guild-настройки; 0 = выкл)
+    steam_forum_channel: int = 0
 
     # --- плейлисты сервера ---
     music_playlist_max_per_guild: int = 25
