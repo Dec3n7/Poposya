@@ -630,6 +630,112 @@ function AutoRoleSection({ guild, roles }: { guild: Guild; roles: GuildRole[] })
   );
 }
 
+function InterestRolesSection({ guild, roles }: { guild: Guild; roles: GuildRole[] }) {
+  const editable = roles.filter((r) => r.editable);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .interestRoles(guild.id)
+      .then((v) => {
+        if (!alive) return;
+        setInterests(v.interests);
+        setMapping(v.mapping);
+        setSaved(v.mapping);
+      })
+      .catch(() => {
+        /* нет доступа/пусто — оставляем пусто */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [guild.id]);
+
+  function setRole(interest: string, roleId: string) {
+    setMapping((prev) => {
+      const next = { ...prev };
+      if (roleId) next[interest] = roleId;
+      else delete next[interest];
+      return next;
+    });
+  }
+
+  const dirty = interests.some((i) => (mapping[i] ?? "") !== (saved[i] ?? ""));
+
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await api.setInterestRoles(guild.id, mapping);
+      setMapping(res.mapping);
+      setSaved(res.mapping);
+      toast.success("Роли по интересам сохранены");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="role-panel">
+      <div className="role-panel-head">
+        <div>
+          <div className="role-panel-title">
+            <IconUserPlus /> Роли по интересам
+          </div>
+          <p className="muted small" style={{ margin: "4px 0 0" }}>
+            Отмечая интерес в анкете /introduce, участник заодно получает эту роль (и теряет,
+            если снимет интерес). Доступны только роли ниже линии Попоси.
+          </p>
+        </div>
+      </div>
+      {editable.length === 0 ? (
+        <EmptyState
+          compact
+          title="Нет ролей, доступных боту"
+          hint="Создай роль ниже линии Попоси — её можно будет привязать к интересу."
+        />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {interests.map((interest) => (
+            <label
+              key={interest}
+              style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
+            >
+              <span style={{ minWidth: 90 }}>{interest}</span>
+              <select
+                className="input"
+                style={{ flex: 1, minWidth: 160 }}
+                value={mapping[interest] ?? ""}
+                onChange={(e) => setRole(interest, e.target.value)}
+                disabled={busy}
+              >
+                <option value="">— нет —</option>
+                {editable.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="role-panel-actions">
+        <button className="btn primary small" onClick={save} disabled={busy || !dirty}>
+          <IconCheck /> Сохранить
+        </button>
+        {dirty && <span className="faint small">Есть несохранённые изменения.</span>}
+      </div>
+    </div>
+  );
+}
+
 export function Roles({ guild }: { guild: Guild }) {
   const [view, setView] = useState<RolesView | null>(null);
   const [roles, setRoles] = useState<GuildRole[]>([]);
@@ -641,8 +747,8 @@ export function Roles({ guild }: { guild: Guild }) {
   const [permsId, setPermsId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
-  // панель инструментов: шаблоны / подтверждение импорта / автороли
-  const [tool, setTool] = useState<"templates" | "import" | "autorole" | null>(null);
+  // панель инструментов: шаблоны / подтверждение импорта / автороли / роли по интересам
+  const [tool, setTool] = useState<"templates" | "import" | "autorole" | "interest" | null>(null);
   const [importData, setImportData] = useState<RoleInput[] | null>(null);
   const [importError, setImportError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -990,6 +1096,13 @@ export function Roles({ guild }: { guild: Guild }) {
         >
           <IconUserPlus /> Автороли
         </button>
+        <button
+          className={`btn ghost small${tool === "interest" ? " active" : ""}`}
+          onClick={() => setTool((t) => (t === "interest" ? null : "interest"))}
+          disabled={busy}
+        >
+          <IconUserPlus /> Роли по интересам
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -1079,6 +1192,8 @@ export function Roles({ guild }: { guild: Guild }) {
       )}
 
       {tool === "autorole" && <AutoRoleSection guild={guild} roles={roles} />}
+
+      {tool === "interest" && <InterestRolesSection guild={guild} roles={roles} />}
 
       {creating && (
         <RoleEditor

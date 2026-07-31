@@ -235,6 +235,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ role_ids: roleIds }),
     }),
+  interestRoles: (
+    guildId: string,
+  ): Promise<{ interests: string[]; mapping: Record<string, string> }> =>
+    req<{ interests: string[]; mapping: Record<string, string> }>(
+      `/api/guilds/${guildId}/roles/interest-roles`,
+    ),
+  setInterestRoles: (
+    guildId: string,
+    mapping: Record<string, string>,
+  ): Promise<{ mapping: Record<string, string> }> =>
+    req<{ mapping: Record<string, string> }>(`/api/guilds/${guildId}/roles/interest-roles`, {
+      method: "PUT",
+      body: JSON.stringify({ mapping }),
+    }),
   roleTemplates: (guildId: string): Promise<{ templates: SavedRoleTemplate[] }> =>
     req<{ templates: SavedRoleTemplate[] }>(`/api/guilds/${guildId}/roles/templates`),
   saveRoleTemplate: (guildId: string, name: string): Promise<SavedRoleTemplate> =>

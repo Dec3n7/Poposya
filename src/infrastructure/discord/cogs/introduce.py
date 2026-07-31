@@ -45,11 +45,19 @@ class SurveyView(discord.ui.View):
     подписи — структурные енумы (регистрируются глобально, без контекста
     гильдии); реплики-ответы — из каталога фраз персоны сервера."""
 
-    def __init__(self, container: RelationshipContainer, settings: Settings, persona=None):
+    def __init__(
+        self,
+        container: RelationshipContainer,
+        settings: Settings,
+        persona=None,
+        guild_settings=None,
+    ):
         super().__init__(timeout=None)
         self.container = container
         self.settings = settings
         self.persona = persona if persona is not None else RegistryPersona()
+        # пер-сервер маппинг «интерес → роль»; None в тестах = роли не трогаем
+        self.gs = guild_settings
         for emoji, label, value in _GENDER_OPTIONS:
             self.add_item(self._choice_button(emoji, label, "gender", value, row=0))
         for emoji, label, value in _CONTACT_OPTIONS:
@@ -119,13 +127,51 @@ class SurveyView(discord.ui.View):
                 else str(self.persona.phrase(gid, "introduce.interests_empty"))
             )
             key = "introduce.interest_added" if added else "introduce.interest_removed"
-            await interaction.response.send_message(
-                str(self.persona.phrase(gid, key, interest=interest, current=current)),
-                ephemeral=True,
-            )
+            reply = str(self.persona.phrase(gid, key, interest=interest, current=current))
+            role_name = await self._sync_interest_role(interaction, interest, added)
+            if role_name:
+                rkey = (
+                    "introduce.interest_role_added"
+                    if added
+                    else "introduce.interest_role_removed"
+                )
+                reply += " " + str(self.persona.phrase(gid, rkey, role=role_name))
+            await interaction.response.send_message(reply, ephemeral=True)
 
         button.callback = callback
         return button
+
+    async def _sync_interest_role(
+        self, interaction: discord.Interaction, interest: str, added: bool
+    ) -> str | None:
+        """Если для интереса задана управляемая роль — приводит её у участника к
+        состоянию тоггла. Возвращает имя роли, если реально выдал/снял, иначе None
+        (нет маппинга / роли / прав / уже в нужном состоянии — молча)."""
+        if self.gs is None or interaction.guild is None:
+            return None
+        mapping = self.gs.get(interaction.guild_id, "interest_roles", {}) or {}
+        role_id = mapping.get(interest)
+        if not role_id:
+            return None
+        role = interaction.guild.get_role(int(role_id))
+        me = interaction.guild.me
+        if role is None or me is None:
+            return None
+        # те же ограждения, что в командном мосте: @everyone/managed/выше бота — нельзя
+        if role.is_default() or role.managed or role >= me.top_role:
+            return None
+        member = interaction.user
+        has = role in getattr(member, "roles", [])
+        try:
+            if added and not has:
+                await member.add_roles(role, reason="Интерес из анкеты /introduce")
+            elif not added and has:
+                await member.remove_roles(role, reason="Интерес из анкеты /introduce")
+            else:
+                return None  # уже в нужном состоянии — в ответе не упоминаем
+        except discord.HTTPException:
+            return None
+        return role.name
 
     async def _on_done(self, interaction: discord.Interaction) -> None:
         result = await self.container.complete_survey.execute(
@@ -184,7 +230,9 @@ class IntroduceCog(commands.Cog):
 
     async def cog_load(self) -> None:
         # регистрация персистентной view: кнопки работают после рестарта
-        self.bot.add_view(SurveyView(self.container, self.settings, self.persona))
+        self.bot.add_view(
+            SurveyView(self.container, self.settings, self.persona, guild_settings=self.gs)
+        )
 
     def _p(self, guild_id: int | None, key: str, **vars: object) -> str:
         return str(self.persona.phrase(guild_id or 0, key, **vars))
@@ -246,7 +294,7 @@ class IntroduceCog(commands.Cog):
         await channel.send(embed=self._intro_embed(interaction.guild_id))
         await channel.send(
             embed=self._survey_embed(interaction.guild_id),
-            view=SurveyView(self.container, self.settings, self.persona),
+            view=SurveyView(self.container, self.settings, self.persona, guild_settings=self.gs),
         )
         await interaction.followup.send(
             self._p(interaction.guild_id, "introduce.published"), ephemeral=True

@@ -95,6 +95,10 @@ class GuildSettings(BaseModel):
     secret_room_min_level: int = Field(5, ge=1, le=7)
     secret_room_hours: int = Field(12, ge=1, le=168)
     survey_bonus_points: int = Field(5, ge=0, le=500)
+    # интерес из анкеты /introduce -> Discord-роль (пусто = только профиль).
+    # Ключ — название интереса, значение — id роли. Валидность роли (ниже бота,
+    # не managed) проверяет бот при выдаче — модель её знать не может.
+    interest_roles: dict[str, int] = Field(default={})
     birthday_remind_days: int = Field(3, ge=0, le=30)
     holiday_points_multiplier: int = Field(2, ge=1, le=10)
 

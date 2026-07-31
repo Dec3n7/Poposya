@@ -161,6 +161,9 @@ class Settings(BaseSettings):
 
     # --- анкета знакомства (/introduce) ---
     survey_bonus_points: int = 5  # разовый бонус очков за заполнение
+    # интерес из анкеты -> Discord-роль (пер-сервер, задаётся в панели). Пусто =
+    # только профиль (как раньше). Ключ — название интереса, значение — id роли.
+    interest_roles: dict[str, int] = {}
     survey_interest_options: list[str] = [
         "Игры",
         "Аниме",

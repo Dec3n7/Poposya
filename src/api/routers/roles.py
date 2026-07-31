@@ -65,6 +65,12 @@ class AutoRoleBody(BaseModel):
     role_ids: list[str]  # id ролей, выдаваемых новичку при входе; [] = выключить
 
 
+class InterestRolesBody(BaseModel):
+    # интерес анкеты -> id роли (строкой; snowflake не влезает в JS-number).
+    # Пустая строка / отсутствие ключа = у интереса нет роли.
+    mapping: dict[str, str]
+
+
 class TemplateSaveBody(BaseModel):
     name: str  # имя сохраняемого шаблона (сохраняем текущие редактируемые роли)
 
@@ -220,6 +226,58 @@ async def set_autorole(
         details={"count": len(ordered)},
     )
     return {"role_ids": [str(i) for i in ordered]}
+
+
+@router.get("/interest-roles")
+async def get_interest_roles(
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Маппинг «интерес анкеты → роль». Отдаём список интересов и текущие пары
+    (id ролей строками — snowflake). Тоггл интереса в /introduce выдаёт роль."""
+    mapping = container.guild_settings.get(guild_id, "interest_roles", {}) or {}
+    return {
+        "interests": list(container.settings.survey_interest_options),
+        "mapping": {k: str(v) for k, v in mapping.items()},
+    }
+
+
+@router.put("/interest-roles")
+async def set_interest_roles(
+    body: InterestRolesBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Задать пары «интерес → роль». Принимаем только известные интересы и роли,
+    доступные боту (бот на выдаче всё равно перепроверит). Пустое значение =
+    у интереса нет роли."""
+    interests = set(container.settings.survey_interest_options)
+    roles, meta, _counts = await container.list_roles.execute(guild_id)
+    bot_top = meta.bot_top_position if meta is not None else None
+    editable_ids = {r.role_id for r in roles if _editable(r, guild_id, bot_top)}
+    clean: dict[str, int] = {}
+    for interest, raw in body.mapping.items():
+        if interest not in interests:
+            continue  # неизвестный интерес — игнор
+        rid = str(raw).strip()
+        if not rid:
+            continue  # пусто = без роли
+        try:
+            role_id = int(rid)
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Некорректный id роли.") from None
+        if role_id not in editable_ids:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Роль недоступна боту (выше его роли, managed или @everyone).",
+            )
+        clean[interest] = role_id
+    await container.guild_settings.set_many(guild_id, {"interest_roles": clean})
+    await record_audit(
+        container, guild_id, session.user_id, "role.interest_roles", details={"count": len(clean)}
+    )
+    return {"mapping": {k: str(v) for k, v in clean.items()}}
 
 
 @router.get("/templates")

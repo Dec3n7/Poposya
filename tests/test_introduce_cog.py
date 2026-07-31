@@ -76,6 +76,92 @@ async def test_interest_toggle_button():
     assert "добавила" in interaction.response.send_message.await_args.args[0]
 
 
+# --- роли по интересам (Вариант 1: интерес -> Discord-роль) ------------------
+
+
+class FakeRole:
+    def __init__(self, rid=555, name="🎮 Игры", position=1, default=False, managed=False):
+        self.id = rid
+        self.name = name
+        self.position = position
+        self._default = default
+        self.managed = managed
+
+    def is_default(self):
+        return self._default
+
+    def __ge__(self, other):  # discord.Role сравнивается по позиции
+        return self.position >= other.position
+
+
+def make_gs(mapping):
+    return SimpleNamespace(
+        get=lambda gid, key, default=None: mapping if key == "interest_roles" else default
+    )
+
+
+def make_role_interaction(role, member_roles, top_position=10):
+    interaction = make_interaction()
+    interaction.guild.get_role = MagicMock(return_value=role)
+    interaction.guild.me = SimpleNamespace(
+        top_role=FakeRole(rid=0, name="бот", position=top_position)
+    )
+    member = MagicMock()
+    member.id = 1
+    member.roles = list(member_roles)
+    member.add_roles = AsyncMock()
+    member.remove_roles = AsyncMock()
+    interaction.user = member
+    return interaction, member
+
+
+async def test_interest_grants_mapped_role():
+    container = make_container()
+    container.toggle_survey_interest.execute.return_value = (True, ["Игры"])
+    role = FakeRole()
+    view = SurveyView(container, make_settings(), guild_settings=make_gs({"Игры": 555}))
+    button = find_button(view, "survey:interest:Игры")
+    interaction, member = make_role_interaction(role, member_roles=[])
+    await button.callback(interaction)
+    member.add_roles.assert_awaited_once()
+    assert "твоя" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_interest_removes_mapped_role():
+    container = make_container()
+    container.toggle_survey_interest.execute.return_value = (False, [])
+    role = FakeRole()
+    view = SurveyView(container, make_settings(), guild_settings=make_gs({"Игры": 555}))
+    button = find_button(view, "survey:interest:Игры")
+    interaction, member = make_role_interaction(role, member_roles=[role])
+    await button.callback(interaction)
+    member.remove_roles.assert_awaited_once()
+    assert "сняла" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_interest_no_mapping_leaves_roles_untouched():
+    container = make_container()
+    container.toggle_survey_interest.execute.return_value = (True, ["Игры"])
+    view = SurveyView(container, make_settings(), guild_settings=make_gs({}))
+    button = find_button(view, "survey:interest:Игры")
+    interaction, member = make_role_interaction(FakeRole(), member_roles=[])
+    await button.callback(interaction)
+    member.add_roles.assert_not_awaited()
+    assert "твоя" not in interaction.response.send_message.await_args.args[0]
+
+
+async def test_interest_role_above_bot_is_skipped():
+    container = make_container()
+    container.toggle_survey_interest.execute.return_value = (True, ["Игры"])
+    # роль выше бота (позиция 20 >= top 10) — ограждение не даёт её выдать
+    role = FakeRole(position=20)
+    view = SurveyView(container, make_settings(), guild_settings=make_gs({"Игры": 555}))
+    button = find_button(view, "survey:interest:Игры")
+    interaction, member = make_role_interaction(role, member_roles=[], top_position=10)
+    await button.callback(interaction)
+    member.add_roles.assert_not_awaited()
+
+
 async def test_done_button_first_time_bonus():
     container = make_container()
     view = SurveyView(container, make_settings())
