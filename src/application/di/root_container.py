@@ -9,6 +9,7 @@ from src.application.finds.di import FindsContainer
 from src.application.moderation.di import ModerationContainer
 from src.application.music.di import MusicContainer
 from src.application.relationship.di import RelationshipContainer
+from src.application.repos.di import ReposContainer
 from src.application.roles.di import RolesContainer
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
@@ -31,6 +32,7 @@ class RootContainer:
     staykick: object  # StayKickContainer
     tempvoice: TempVoiceContainer
     roles: RolesContainer
+    repos: ReposContainer
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     persona: object  # PersonaService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
@@ -488,6 +490,31 @@ def build_root_container(settings: Settings) -> RootContainer:
         member_roles=MemberRolesUseCase(uow_factory),
     )
 
+    # --- GitHub-репозитории: клиент API (токен опционален) + use cases ---
+    from src.application.repos.use_cases import (
+        AddRepoUseCase,
+        CountReposUseCase,
+        FetchRepoUseCase,
+        GetRepoUseCase,
+        ListReposUseCase,
+        MarkAnnouncedUseCase,
+        PollReleasesUseCase,
+        RemoveRepoUseCase,
+    )
+    from src.infrastructure.github.client import GitHubClient
+
+    github = GitHubClient(token=settings.github_token)
+    repos = ReposContainer(
+        fetch_repo=FetchRepoUseCase(github),
+        get_repo=GetRepoUseCase(uow_factory),
+        list_repos=ListReposUseCase(uow_factory),
+        count_repos=CountReposUseCase(uow_factory),
+        add_repo=AddRepoUseCase(uow_factory),
+        remove_repo=RemoveRepoUseCase(uow_factory),
+        mark_announced=MarkAnnouncedUseCase(uow_factory),
+        poll_releases=PollReleasesUseCase(uow_factory, github),
+    )
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -501,6 +528,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         staykick=staykick,
         tempvoice=tempvoice,
         roles=roles,
+        repos=repos,
         guild_settings=guild_settings,
         persona=persona,
         engine=engine,

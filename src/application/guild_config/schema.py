@@ -25,6 +25,7 @@ from src.domain.relationship.policies import PointsToLevelPolicy
 CHANNEL_KEYS: frozenset[str] = frozenset(
     {
         "cinema_forum_channel",
+        "git_forum_channel",
         "finds_channel_id",
         "tempvoice_hub_channel",
         "tempvoice_category",
@@ -125,6 +126,9 @@ class GuildSettings(BaseModel):
     cinema_watchlist_max: int = Field(50, ge=5, le=500)
     cinema_forum_channel: int = Field(0, ge=0)
 
+    # --- GitHub-репозитории (/git) ---
+    git_forum_channel: int = Field(0, ge=0)  # форум-канал для тредов релизов (0=выкл)
+
     # --- находки ---
     finds_channel_id: int = Field(0, ge=0)
     finds_min_interval_hours: int = Field(12, ge=1, le=336)
@@ -153,6 +157,7 @@ class GuildSettings(BaseModel):
     music_enabled: bool = True
     cinema_enabled: bool = True
     finds_enabled: bool = True
+    git_enabled: bool = True
 
     # --- тумблеры модуля «Модерация» (мастер гасит все админ-команды;
     # авторазбан работает всегда, чтобы tempban'ы снимались) ---

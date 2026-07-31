@@ -29,6 +29,7 @@ from src.domain.relationship.repository import (
     IRelationshipRepository,
     ISecretRoomRepository,
 )
+from src.domain.repos.repository import ITrackedRepoRepository
 from src.domain.roles.repository import IRoleRepository
 from src.domain.staykick.repository import IPendingKickRepository
 from src.domain.tempvoice.repository import ITempVoiceRepository
@@ -65,6 +66,7 @@ class IUnitOfWork(ABC):
     player_state: IPlayerStateRepository
     bot_profile: IBotProfileRepository
     roles: IRoleRepository
+    tracked_repos: ITrackedRepoRepository
 
     @abstractmethod
     async def __aenter__(self) -> "IUnitOfWork": ...

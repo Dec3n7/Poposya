@@ -222,6 +222,7 @@ class Settings(BaseSettings):
     music_enabled: bool = True
     cinema_enabled: bool = True
     finds_enabled: bool = True
+    git_enabled: bool = True
     # тумблеры модуля «Модерация» (мастер + автоантиспам)
     moderation_enabled: bool = True
     moderation_antispam: bool = True
@@ -295,6 +296,14 @@ class Settings(BaseSettings):
     cinema_forum_channel: int = 0
     cinema_rating_points: int = 2  # очков отношений за первую оценку
     cinema_utc_offset: int = 3  # часовой пояс дат киновечера (МСК = +3)
+
+    # --- GitHub-репозитории (/git) ---
+    # токен опционален: пусто = анонимно (60 запросов/ч на IP), с токеном — 5000/ч.
+    # Только публичные репозитории; классический PAT без прав достаточно.
+    github_token: str = ""
+    github_poll_interval_minutes: int = 15  # как часто опрашивать релизы
+    # форум-канал для тредов релизов (дефолт-зеркало guild-настройки; 0 = выкл)
+    git_forum_channel: int = 0
 
     # --- плейлисты сервера ---
     music_playlist_max_per_guild: int = 25
