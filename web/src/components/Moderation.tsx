@@ -9,10 +9,28 @@ import type {
   CrossBanUser,
   Guild,
   GuildWarn,
+  ModCase,
 } from "../types";
 import { EmptyState } from "./EmptyState";
 import { SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
+
+// человекочитаемые ярлыки действий журнала (совпадают с ботовым _ACTION_LABELS)
+const ACTION_LABELS: Record<string, string> = {
+  warn: "варн",
+  warn_mute: "мут по варнам",
+  warn_tempban: "бан по варнам",
+  mute: "мут",
+  unmute: "снят мут",
+  kick: "кик",
+  ban: "бан",
+  tempban: "врем. бан",
+  unban: "разбан",
+  clearwarns: "сброс варнов",
+  clear: "чистка",
+  spam_mute: "мут за спам",
+  rage: "ярость",
+};
 
 function fmtExpires(iso: string): string {
   const d = new Date(iso);
@@ -211,6 +229,131 @@ function CrossBanLookup({ guildId }: { guildId: string }) {
   );
 }
 
+function HistoryLookup({ guildId }: { guildId: string }) {
+  const [id, setId] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [cases, setCases] = useState<ModCase[] | null>(null);
+  // подтверждение по второму клику: null | "kick" | "ban"
+  const [confirmKind, setConfirmKind] = useState<null | "kick" | "ban">(null);
+  const toast = useToast();
+
+  function validId(): string | null {
+    const clean = id.trim();
+    return /^\d{5,}$/.test(clean) ? clean : null;
+  }
+
+  async function load() {
+    const clean = validId();
+    if (!clean) {
+      toast.error("Введите числовой ID пользователя Discord");
+      return;
+    }
+    setBusy(true);
+    setConfirmKind(null);
+    try {
+      setCases(await api.history(guildId, clean));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Не удалось загрузить историю");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function act(kind: "kick" | "ban") {
+    const clean = validId();
+    if (!clean) {
+      toast.error("Введите числовой ID пользователя Discord");
+      return;
+    }
+    if (confirmKind !== kind) {
+      setConfirmKind(kind); // первый клик — просим подтвердить
+      return;
+    }
+    setConfirmKind(null);
+    setBusy(true);
+    try {
+      const r =
+        kind === "kick"
+          ? await api.kick(guildId, clean, reason)
+          : await api.banPermanent(guildId, clean, reason);
+      if (r.status === "failed") {
+        toast.error(r.result ?? "Действие не удалось");
+      } else if (r.status === "done") {
+        toast.success(kind === "kick" ? "Кикнут" : "Забанен навсегда");
+        await load();
+      } else {
+        toast.info("Отправлено боту — применится через пару секунд");
+      }
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Ошибка действия");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card leader-card" style={{ padding: 16, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          className="input"
+          placeholder="ID пользователя Discord"
+          value={id}
+          inputMode="numeric"
+          onChange={(e) => {
+            setId(e.target.value);
+            setConfirmKind(null);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && load()}
+          style={{ flex: 1, minWidth: 180 }}
+        />
+        <button className="btn" onClick={load} disabled={busy}>
+          История
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          className="input"
+          placeholder="Причина (для кика/бана)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          style={{ flex: 1, minWidth: 180 }}
+        />
+        <button className="btn ghost small" onClick={() => act("kick")} disabled={busy}>
+          {confirmKind === "kick" ? "Точно? Кикнуть" : "Кикнуть"}
+        </button>
+        <button className="btn danger small" onClick={() => act("ban")} disabled={busy}>
+          {confirmKind === "ban" ? "Точно? Забанить" : "Забанить навсегда"}
+        </button>
+      </div>
+      {cases !== null &&
+        (cases.length === 0 ? (
+          <EmptyState compact title="История пуста" hint="Действий модерации по участнику нет." />
+        ) : (
+          <div style={{ display: "grid", gap: 6 }}>
+            {cases.map((c) => (
+              <div
+                key={c.id}
+                style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}
+              >
+                <span className="mono faint">{fmtExpires(c.created_at)}</span>
+                <b>{ACTION_LABELS[c.action] ?? c.action}</b>
+                {c.duration_minutes ? (
+                  <span className="mono faint">{c.duration_minutes}м</span>
+                ) : null}
+                {c.reason && <span className="cine-review">«{c.reason}»</span>}
+                <span className="faint">
+                  · {c.moderator_id ? (c.moderator_name ?? c.moderator_id) : "авто"}
+                  {c.source === "panel" ? " (панель)" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export function Moderation({ guild }: { guild: Guild }) {
   const [bans, setBans] = useState<Ban[] | null>(null);
   const [warns, setWarns] = useState<GuildWarn[] | null>(null);
@@ -281,6 +424,13 @@ export function Moderation({ guild }: { guild: Guild }) {
           warns.map((w) => <WarnRow key={w.user_id} guildId={guild.id} w={w} onDone={load} />)
         )}
       </div>
+
+      <h2 className="section-title">История модерации</h2>
+      <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+        Единый журнал действий по участнику (бот и панель): варны, муты, кики, баны, чистки.
+        Отсюда же можно кикнуть или забанить навсегда по ID.
+      </p>
+      <HistoryLookup guildId={guild.id} />
 
       <h2 className="section-title">Кросс-серверные баны</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>

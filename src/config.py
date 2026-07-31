@@ -151,6 +151,8 @@ class Settings(BaseSettings):
     spam_limit: int = 5  # сколько сообщений за окно = спам
     spam_window: int = 10  # окно отслеживания, секунды
     spam_mute_minutes: int = 2  # длительность мута за спам
+    spam_mention_limit: int = 5  # упоминаний в одном сообщении -> мут (0 = выкл)
+    spam_block_invites: bool = False  # удалять чужие Discord-инвайты от не-модеров
 
     # --- каналы ---
     welcome_channel: str = "bots"  # канал приветствий/прощаний (по названию)
@@ -197,6 +199,10 @@ class Settings(BaseSettings):
     # --- модерация ---
     warn_threshold: int = 3  # варнов до мута
     warn_mute_minutes: int = 120  # длительность мута при накоплении варнов
+    warn_expire_days: int = 90  # варны старше N дней не считаются к порогу (0 = не затухают)
+    warn_escalation: bool = True  # рецидив ужесточает: мут ×3, затем tempban
+    warn_ban_minutes: int = 1440  # tempban рецидивисту (3-е+ достижение порога), минуты
+    moderation_dm_notice: bool = True  # слать наказанному ЛС с причиной/сроком
 
     auto_role: str = ""  # роль новичку при входе (название; пусто = выключено)
 

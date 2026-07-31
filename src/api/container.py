@@ -27,6 +27,7 @@ from src.application.message_activity.use_cases import GetActivityStatsUseCase
 from src.application.metrics.use_cases import GetTrendsUseCase
 from src.application.moderation.use_cases import (
     ClearWarnsUseCase,
+    GetUserHistoryUseCase,
     GetWarnsUseCase,
     ListGuildWarnsUseCase,
     ListTempBansUseCase,
@@ -98,6 +99,7 @@ class ApiContainer:
     guild_warns: ListGuildWarnsUseCase
     clear_warns: ClearWarnsUseCase
     list_bans: ListTempBansUseCase
+    user_history: GetUserHistoryUseCase  # единый журнал действий по участнику
     # находки: активная находка + топ коллекционеров сервера
     active_find: GetActiveFindUseCase
     top_collectors: TopCollectorsUseCase
@@ -186,6 +188,7 @@ def assemble_container(
         guild_warns=ListGuildWarnsUseCase(uow_factory),
         clear_warns=ClearWarnsUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),
+        user_history=GetUserHistoryUseCase(uow_factory),
         active_find=GetActiveFindUseCase(uow_factory),
         top_collectors=TopCollectorsUseCase(uow_factory),
         get_trends=GetTrendsUseCase(uow_factory),

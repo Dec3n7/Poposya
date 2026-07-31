@@ -22,6 +22,15 @@ import discord
 from discord.ext import commands as discord_commands
 
 from src.application.moderation.di import ModerationContainer
+from src.domain.moderation.entities import (
+    CASE_BAN,
+    CASE_KICK,
+    CASE_MUTE,
+    CASE_TEMPBAN,
+    CASE_UNBAN,
+    CASE_UNMUTE,
+    ModCase,
+)
 from src.domain.music.entities import RepeatMode
 from src.infrastructure.commands.bridge import Command, CommandError
 
@@ -121,6 +130,33 @@ class DiscordCommandExecutor:
 
     # --- модерация ---
 
+    async def _log_case(
+        self,
+        guild_id: int,
+        user_id: int,
+        moderator_id: int,
+        action: str,
+        reason: str = "",
+        minutes: int | None = None,
+    ) -> None:
+        """Единый журнал: действия панели пишем сюда же, что и слеш-команды бота
+        (source="panel"). Побочный путь — сбой не должен ронять само действие."""
+        try:
+            await self._moderation.log_case.execute(
+                ModCase(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    moderator_id=moderator_id,
+                    action=action,
+                    reason=reason,
+                    duration_minutes=minutes,
+                    source="panel",
+                    created_at=datetime.now(UTC),
+                )
+            )
+        except Exception:
+            logger.warning("Не удалось записать кейс модерации (панель): %s", action, exc_info=True)
+
     async def _tempban(self, guild: discord.Guild, command: Command) -> str:
         p = command.payload
         user_id = int(p["user_id"])
@@ -137,6 +173,9 @@ class DiscordCommandExecutor:
         expires_at = await self._moderation.temp_ban.execute(
             user_id, guild.id, command.requested_by, reason, minutes, datetime.now(UTC)
         )
+        await self._log_case(
+            guild.id, user_id, command.requested_by, CASE_TEMPBAN, reason, minutes
+        )
         return f"Забанен до {expires_at.strftime('%d.%m.%Y %H:%M UTC')}."
 
     async def _unban(self, guild: discord.Guild, command: Command) -> str:
@@ -148,7 +187,36 @@ class DiscordCommandExecutor:
         except discord.Forbidden as exc:
             raise CommandError("Нет права Ban Members.") from exc
         await self._moderation.remove_ban.execute(user_id, guild.id)
+        await self._log_case(guild.id, user_id, command.requested_by, CASE_UNBAN)
         return "Разбанен."
+
+    async def _kick(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        reason = str(p.get("reason") or "без причины")
+        member = await self._member(guild, int(p["user_id"]))
+        try:
+            await member.kick(reason=f"{reason} (панель)")
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Kick Members (или роль участника выше моей).") from exc
+        await self._log_case(guild.id, member.id, command.requested_by, CASE_KICK, reason)
+        return "Кикнут."
+
+    async def _ban_perm(self, guild: discord.Guild, command: Command) -> str:
+        p = command.payload
+        user_id = int(p["user_id"])
+        reason = str(p.get("reason") or "без причины")
+        delete_days = max(0, min(int(p.get("delete_days") or 0), 7))
+        try:
+            await guild.ban(
+                discord.Object(id=user_id),
+                reason=f"{reason} (перманентно, панель)",
+                delete_message_seconds=delete_days * 86400,
+            )
+        except discord.Forbidden as exc:
+            raise CommandError("Нет права Ban Members (или роль участника выше моей).") from exc
+        # перманентный бан не пишем в temp_bans — авторазбан его не снимает
+        await self._log_case(guild.id, user_id, command.requested_by, CASE_BAN, reason)
+        return "Забанен навсегда."
 
     async def _member(self, guild: discord.Guild, user_id: int) -> discord.Member:
         member = guild.get_member(user_id)
@@ -168,6 +236,7 @@ class DiscordCommandExecutor:
             await member.timeout(timedelta(minutes=minutes), reason=f"{reason} (панель)")
         except discord.Forbidden as exc:
             raise CommandError("Нет права Timeout Members (или роль участника выше моей).") from exc
+        await self._log_case(guild.id, member.id, command.requested_by, CASE_MUTE, reason, minutes)
         return f"Замучен на {minutes} мин."
 
     async def _unmute(self, guild: discord.Guild, command: Command) -> str:
@@ -176,6 +245,7 @@ class DiscordCommandExecutor:
             await member.timeout(None, reason="Снято из панели")
         except discord.Forbidden as exc:
             raise CommandError("Нет права Timeout Members.") from exc
+        await self._log_case(guild.id, member.id, command.requested_by, CASE_UNMUTE)
         return "Мут снят."
 
     # --- музыка ---
@@ -554,6 +624,8 @@ _HANDLERS = {
     "mod.unban": DiscordCommandExecutor._unban,
     "mod.mute": DiscordCommandExecutor._mute,
     "mod.unmute": DiscordCommandExecutor._unmute,
+    "mod.kick": DiscordCommandExecutor._kick,
+    "mod.ban_perm": DiscordCommandExecutor._ban_perm,
     "music.pause": DiscordCommandExecutor._pause,
     "music.resume": DiscordCommandExecutor._resume,
     "music.skip": DiscordCommandExecutor._skip,

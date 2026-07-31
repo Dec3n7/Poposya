@@ -33,3 +33,21 @@ class TempBanModel(Base):
         Index("ix_temp_bans_guild_user", "guild_id", "user_id"),
         Index("ix_temp_bans_expires", "expires_at"),
     )
+
+
+class ModCaseModel(Base):
+    """Единый журнал действий модерации (бот + панель). Только append."""
+
+    __tablename__ = "mod_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    moderator_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="bot")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (Index("ix_mod_cases_guild_user", "guild_id", "user_id"),)

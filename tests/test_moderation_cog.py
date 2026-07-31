@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 
 from src.application.moderation.use_cases import WarnResult
-from src.domain.moderation.entities import TempBan, Warn
+from src.domain.moderation.entities import ModCase, TempBan, Warn
 from src.infrastructure.discord.cogs.moderation import ModerationCog
 
 NOW = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
@@ -27,12 +27,24 @@ def make_settings(**over):
         spam_window=10,
         spam_limit=5,
         spam_mute_minutes=2,
+        spam_mention_limit=0,  # 0 = масс-упоминания не ловим (по умолчанию в тестах)
+        spam_block_invites=False,
+        moderation_dm_notice=False,  # без ЛС в тестах (иначе await по MagicMock.send)
         warn_threshold=3,
         warn_mute_minutes=120,
+        warn_ban_minutes=1440,
+        warn_expire_days=0,
+        warn_escalation=False,
         log_channel=0,
     )
     base.update(over)
     return SimpleNamespace(**base)
+
+
+def warn_result(count, threshold, action="none", minutes=0, offense=0):
+    return WarnResult(
+        count=count, threshold=threshold, action=action, minutes=minutes, offense=offense
+    )
 
 
 def make_container():
@@ -44,6 +56,8 @@ def make_container():
     c.remove_ban = SimpleNamespace(execute=AsyncMock(return_value=True))
     c.list_bans = SimpleNamespace(execute=AsyncMock(return_value=[]))
     c.pop_expired_bans = SimpleNamespace(execute=AsyncMock(return_value=[]))
+    c.log_case = SimpleNamespace(execute=AsyncMock())
+    c.user_history = SimpleNamespace(execute=AsyncMock(return_value=[]))
     return c
 
 
@@ -130,9 +144,7 @@ async def test_warn_bot_rejected():
 
 async def test_warn_normal():
     container = make_container()
-    container.warn_user.execute.return_value = WarnResult(
-        count=1, threshold=3, mute_triggered=False
-    )
+    container.warn_user.execute.return_value = warn_result(1, 3)
     cog = make_cog(container)
     interaction = make_interaction()
     user = make_member()
@@ -144,13 +156,28 @@ async def test_warn_normal():
 
 async def test_warn_triggers_mute():
     container = make_container()
-    container.warn_user.execute.return_value = WarnResult(count=3, threshold=3, mute_triggered=True)
+    container.warn_user.execute.return_value = warn_result(3, 3, action="mute", minutes=120, offense=1)
     cog = make_cog(container)
     interaction = make_interaction()
     user = make_member()
     await type(cog).warn.callback(cog, interaction, user, "перебор")
     user.timeout.assert_awaited_once()  # мут по достижении порога
     assert "мут" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_warn_escalation_tempbans_repeat_offender():
+    container = make_container()
+    container.warn_user.execute.return_value = warn_result(
+        3, 3, action="tempban", minutes=1440, offense=3
+    )
+    cog = make_cog(container)
+    interaction = make_interaction()
+    interaction.guild.ban = AsyncMock()
+    user = make_member()
+    await type(cog).warn.callback(cog, interaction, user, "рецидив")
+    interaction.guild.ban.assert_awaited_once()  # эскалация -> бан, не мут
+    container.temp_ban.execute.assert_awaited_once()  # срок в БД для авторазбана
+    user.timeout.assert_not_called()
 
 
 # --- /warnings, /clearwarns -------------------------------------------------
@@ -420,3 +447,102 @@ async def test_antispam_ignores_admins():
         msg.author.guild_permissions.administrator = True
         await cog.on_message(msg)
     channel.send.assert_not_awaited()
+
+
+async def test_antispam_mass_mention_mutes():
+    """Один месседж с кучей пингов -> сразу мут (без накопления флуда)."""
+    cog = make_cog(settings=make_settings(spam_mention_limit=3))
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    msg = make_spam_message(channel)
+    msg.mentions = [1, 2, 3, 4]  # > лимита 3
+    msg.author.timeout = AsyncMock()
+    await cog.on_message(msg)
+    msg.author.timeout.assert_awaited_once()
+    channel.send.assert_awaited_once()
+
+
+async def test_antispam_blocks_invite():
+    """Чужой инвайт от не-модера удаляется и выдаётся варн."""
+    container = make_container()
+    container.warn_user.execute.return_value = warn_result(1, 3)
+    cog = make_cog(container, settings=make_settings(spam_block_invites=True))
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    msg = make_spam_message(channel)
+    msg.content = "го сюда discord.gg/abcdef"
+    msg.delete = AsyncMock()
+    await cog.on_message(msg)
+    msg.delete.assert_awaited_once()
+    container.warn_user.execute.assert_awaited_once()
+
+
+# --- /kick, /ban (перманентный), /history -----------------------------------
+
+
+async def test_kick_success():
+    container = make_container()
+    cog = make_cog(container)
+    interaction = make_interaction()
+    interaction.guild.kick = AsyncMock()
+    user = make_member()
+    await type(cog).kick.callback(cog, interaction, user, "мусор")
+    interaction.guild.kick.assert_awaited_once()
+    container.log_case.execute.assert_awaited()
+    assert "вышвырнут" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_kick_forbidden():
+    cog = make_cog()
+    interaction = make_interaction()
+    interaction.guild.kick = AsyncMock(side_effect=forbidden())
+    await type(cog).kick.callback(cog, interaction, make_member(), "x")
+    assert "Нет права Kick" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_ban_permanent_success():
+    container = make_container()
+    cog = make_cog(container)
+    interaction = make_interaction()
+    interaction.guild.ban = AsyncMock()
+    user = make_member()
+    await type(cog).ban.callback(cog, interaction, user, "рейд", 0)
+    interaction.guild.ban.assert_awaited_once()
+    container.temp_ban.execute.assert_not_called()  # перм-бан НЕ в temp_bans
+    assert "навсегда" in interaction.followup.send.await_args.args[0]
+
+
+async def test_history_empty():
+    cog = make_cog()
+    interaction = make_interaction()
+    await type(cog).history.callback(cog, interaction, make_member())
+    assert "чистая история" in interaction.response.send_message.await_args.args[0]
+
+
+async def test_history_list():
+    container = make_container()
+    container.user_history.execute.return_value = [
+        ModCase(
+            guild_id=10,
+            user_id=1,
+            moderator_id=99,
+            action="mute",
+            reason="шум",
+            duration_minutes=30,
+            created_at=NOW,
+        ),
+    ]
+    cog = make_cog(container)
+    interaction = make_interaction()
+    await type(cog).history.callback(cog, interaction, make_member())
+    assert "embed" in interaction.response.send_message.await_args.kwargs
+
+
+async def test_mute_sends_dm_when_enabled():
+    """При включённом moderation_dm_notice наказанному уходит ЛС."""
+    cog = make_cog(settings=make_settings(moderation_dm_notice=True))
+    interaction = make_interaction()
+    user = make_member()
+    user.send = AsyncMock()
+    await type(cog).mute.callback(cog, interaction, user, 15, "шум")
+    user.send.assert_awaited_once()

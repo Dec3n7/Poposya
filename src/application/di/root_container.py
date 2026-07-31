@@ -68,8 +68,10 @@ def build_root_container(settings: Settings) -> RootContainer:
     from src.application.metrics.use_cases import RecordDailySnapshotUseCase
     from src.application.moderation.use_cases import (
         ClearWarnsUseCase,
+        GetUserHistoryUseCase,
         GetWarnsUseCase,
         ListTempBansUseCase,
+        LogModCaseUseCase,
         PopExpiredBansUseCase,
         RemoveTempBanUseCase,
         TempBanUserUseCase,
@@ -324,6 +326,10 @@ def build_root_container(settings: Settings) -> RootContainer:
         warn_user=WarnUserUseCase(
             uow_factory,
             threshold=settings.warn_threshold,
+            mute_minutes=settings.warn_mute_minutes,
+            ban_minutes=settings.warn_ban_minutes,
+            expire_days=settings.warn_expire_days,
+            escalation=settings.warn_escalation,
             settings_provider=guild_settings,
         ),
         get_warns=GetWarnsUseCase(uow_factory),
@@ -332,6 +338,8 @@ def build_root_container(settings: Settings) -> RootContainer:
         remove_ban=RemoveTempBanUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),
         pop_expired_bans=PopExpiredBansUseCase(uow_factory),
+        log_case=LogModCaseUseCase(uow_factory),
+        user_history=GetUserHistoryUseCase(uow_factory),
     )
     activity = ActivityContainer(
         touch_activity=TouchMemberActivityUseCase(

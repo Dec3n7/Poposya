@@ -61,6 +61,17 @@ class UserBody(BaseModel):
     user_id: str
 
 
+class KickBody(BaseModel):
+    user_id: str
+    reason: str = ""
+
+
+class PermBanBody(BaseModel):
+    user_id: str
+    reason: str = ""
+    delete_days: int = Field(0, ge=0, le=7)
+
+
 @router.get("/bans")
 async def bans(
     guild_id: int = Depends(require_guild_manager),
@@ -123,6 +134,31 @@ async def warns(
             "created_at": w.created_at.isoformat(),
         }
         for w in items
+    ]
+
+
+@router.get("/history/{user_id}")
+async def history(
+    user_id: int,
+    guild_id: int = Depends(require_guild_manager),
+    container: ApiContainer = Depends(get_container),
+) -> list[dict]:
+    """Единый журнал действий модерации по участнику (бот + панель), свежие сверху."""
+    cases = await container.user_history.execute(guild_id, user_id, limit=50)
+    mod_ids = [c.moderator_id for c in cases if c.moderator_id]
+    users = await fetch_users(container.settings.discord_token, list(set(mod_ids)))
+    return [
+        {
+            "id": c.id,
+            "action": c.action,
+            "reason": c.reason,
+            "duration_minutes": c.duration_minutes,
+            "source": c.source,
+            "moderator_id": str(c.moderator_id) if c.moderator_id else None,
+            "moderator_name": users.get(c.moderator_id, {}).get("username") if c.moderator_id else None,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in cases
     ]
 
 
@@ -273,5 +309,48 @@ async def unmute(
     await record_audit(
         container, guild_id, session.user_id, "mod.unmute",
         target=body.user_id, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.post("/kick")
+async def kick(
+    body: KickBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    cmd = await run_command(
+        container,
+        guild_id,
+        "mod.kick",
+        {"user_id": body.user_id, "reason": body.reason},
+        session.user_id,
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.kick", target=body.user_id,
+        details={"reason": body.reason}, result=cmd.get("status"),
+    )
+    return cmd
+
+
+@router.post("/ban_permanent")
+async def ban_permanent(
+    body: PermBanBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Постоянный бан (без авторазбана). Отдельно от /ban (тот — временный)."""
+    cmd = await run_command(
+        container,
+        guild_id,
+        "mod.ban_perm",
+        {"user_id": body.user_id, "reason": body.reason, "delete_days": body.delete_days},
+        session.user_id,
+    )
+    await record_audit(
+        container, guild_id, session.user_id, "mod.ban_perm", target=body.user_id,
+        details={"reason": body.reason, "delete_days": body.delete_days}, result=cmd.get("status"),
     )
     return cmd

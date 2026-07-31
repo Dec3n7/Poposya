@@ -16,6 +16,7 @@ import type {
   GuildWarn,
   Me,
   MemberRoles,
+  ModCase,
   MovieDetail,
   NowPlaying,
   Overview,
@@ -159,6 +160,8 @@ export const api = {
     req<CrossBanList>(`/api/guilds/${guildId}/moderation/crossban`),
   crossbanUser: (guildId: string, userId: string): Promise<CrossBanUser> =>
     req<CrossBanUser>(`/api/guilds/${guildId}/moderation/crossban/${userId}`),
+  history: (guildId: string, userId: string): Promise<ModCase[]> =>
+    req<ModCase[]>(`/api/guilds/${guildId}/moderation/history/${userId}`),
   playlists: (guildId: string): Promise<PlaylistItem[]> =>
     req<PlaylistItem[]>(`/api/guilds/${guildId}/music/playlists`),
   playlist: (guildId: string, name: string): Promise<PlaylistDetail> =>
@@ -264,6 +267,21 @@ export const api = {
     req<CommandResult>(`/api/guilds/${guildId}/moderation/unmute`, {
       method: "POST",
       body: JSON.stringify({ user_id: userId }),
+    }),
+  kick: (guildId: string, userId: string, reason: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/kick`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, reason }),
+    }),
+  banPermanent: (
+    guildId: string,
+    userId: string,
+    reason: string,
+    deleteDays = 0,
+  ): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/moderation/ban_permanent`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, reason, delete_days: deleteDays }),
     }),
   musicControl: (
     guildId: string,

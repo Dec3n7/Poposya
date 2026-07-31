@@ -360,6 +360,17 @@ export interface CrossBanUser {
   records: CrossBanRecord[];
 }
 
+export interface ModCase {
+  id: number;
+  action: string;
+  reason: string;
+  duration_minutes: number | null;
+  source: string;
+  moderator_id: string | null;
+  moderator_name: string | null;
+  created_at: string;
+}
+
 export interface AuditEntry {
   id: number;
   actor_id: string;

@@ -22,7 +22,11 @@ from src.domain.finds.repository import (
 )
 from src.domain.message_activity.repository import IMessageActivityRepository
 from src.domain.metrics.repository import IMetricsRepository
-from src.domain.moderation.repository import ITempBanRepository, IWarnRepository
+from src.domain.moderation.repository import (
+    IModCaseRepository,
+    ITempBanRepository,
+    IWarnRepository,
+)
 from src.domain.music.repository import ILikedTrackRepository, IPlaylistRepository
 from src.domain.player.repository import IPlayerStateRepository
 from src.domain.relationship.repository import (
@@ -48,6 +52,7 @@ class IUnitOfWork(ABC):
     dialog_summaries: IDialogSummaryRepository
     warns: IWarnRepository
     temp_bans: ITempBanRepository
+    mod_cases: IModCaseRepository
     member_activity: IMemberActivityRepository
     reminders: IReminderRepository
     voice_progress: IVoiceProgressRepository

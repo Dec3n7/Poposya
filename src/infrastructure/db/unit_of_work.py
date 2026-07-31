@@ -30,6 +30,7 @@ from src.infrastructure.db.repositories.message_activity import (
 )
 from src.infrastructure.db.repositories.metrics import SqlAlchemyMetricsRepository
 from src.infrastructure.db.repositories.moderation import (
+    SqlAlchemyModCaseRepository,
     SqlAlchemyTempBanRepository,
     SqlAlchemyWarnRepository,
 )
@@ -75,6 +76,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.dialog_summaries = SqlAlchemyDialogSummaryRepository(self._session)
         self.warns = SqlAlchemyWarnRepository(self._session)
         self.temp_bans = SqlAlchemyTempBanRepository(self._session)
+        self.mod_cases = SqlAlchemyModCaseRepository(self._session)
         self.member_activity = SqlAlchemyMemberActivityRepository(self._session)
         self.reminders = SqlAlchemyReminderRepository(self._session)
         self.voice_progress = SqlAlchemyVoiceProgressRepository(self._session)

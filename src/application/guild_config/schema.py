@@ -45,9 +45,20 @@ class GuildSettings(BaseModel):
     # кросс-серверные баны: порог «отмеченного» участника (забанен на N серверах)
     banwatch_threshold: int = Field(3, ge=1, le=50)
     warn_mute_minutes: int = Field(120, ge=1, le=40320)
+    # затухание варнов: старше N дней не считаются к порогу (0 = не затухают)
+    warn_expire_days: int = Field(90, ge=0, le=3650)
+    # лестница эскалации: 1-е достижение порога — мут, 2-е — мут ×3, 3-е+ — tempban
+    warn_escalation: bool = True
+    warn_ban_minutes: int = Field(1440, ge=1, le=525600)
+    # слать наказанному ЛС с причиной/сроком (варн/мут/кик/бан)
+    moderation_dm_notice: bool = True
     spam_limit: int = Field(5, ge=2, le=50)
     spam_window: int = Field(10, ge=3, le=120)
     spam_mute_minutes: int = Field(2, ge=1, le=1440)
+    # масс-упоминания: > N упоминаний в одном сообщении -> мут (0 = выкл)
+    spam_mention_limit: int = Field(5, ge=0, le=50)
+    # удалять чужие Discord-инвайты от не-модеров (и варнить)
+    spam_block_invites: bool = False
 
     # --- отношения и роли ---
     relationship_daily_point_cap: int = Field(20, ge=1, le=5000)
