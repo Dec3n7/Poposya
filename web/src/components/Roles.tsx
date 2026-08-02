@@ -22,6 +22,7 @@ import type {
   Guild,
   GuildRole,
   RoleInput,
+  RolePreset,
   RolesView,
   SavedRoleTemplate,
 } from "../types";
@@ -369,6 +370,66 @@ function TemplateCard({
       ) : (
         <button className="btn ghost small" onClick={() => setConfirm(true)} disabled={busy}>
           <IconPlus /> Применить
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Карточка готового набора С ПРАВАМИ: роли-чипы с тултипом прав + подтверждение.
+// Права наглядно перечислены под каждой ролью, чтобы было видно, что раздаётся.
+function PresetTeamCard({
+  preset,
+  busy,
+  onApply,
+}: {
+  preset: RolePreset;
+  busy: boolean;
+  onApply: () => void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="template-card">
+      <div className="template-name">{preset.name}</div>
+      <div className="muted small template-desc">{preset.description}</div>
+      <div className="preset-roles">
+        {preset.roles.map((r, i) => {
+          const color = r.color ? toHex(r.color) : null;
+          return (
+            <div key={i} className="preset-role">
+              <span
+                className="template-role-chip"
+                style={color ? { color, borderColor: color } : undefined}
+              >
+                {r.name}
+              </span>
+              <span className="faint small preset-role-perms">
+                {r.perm_labels.length ? r.perm_labels.join(", ") : "без прав"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {confirm ? (
+        <div className="role-panel-actions">
+          <span className="faint small">Создать {preset.roles.length} ролей с правами?</span>
+          <button
+            className="btn primary small"
+            onClick={() => {
+              onApply();
+              setConfirm(false);
+            }}
+            disabled={busy}
+          >
+            Да
+          </button>
+          <button className="btn ghost small" onClick={() => setConfirm(false)} disabled={busy}>
+            Нет
+          </button>
+        </div>
+      ) : (
+        <button className="btn ghost small" onClick={() => setConfirm(true)} disabled={busy}>
+          <IconShield /> Применить с правами
         </button>
       )}
     </div>
@@ -751,6 +812,7 @@ export function Roles({ guild }: { guild: Guild }) {
   const [tool, setTool] = useState<"templates" | "import" | "autorole" | "interest" | null>(null);
   const [importData, setImportData] = useState<RoleInput[] | null>(null);
   const [importError, setImportError] = useState("");
+  const [presets, setPresets] = useState<RolePreset[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // FLIP-анимация переупорядочивания: DOM-узлы строк по id + их прошлые top'ы.
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -775,6 +837,11 @@ export function Roles({ guild }: { guild: Guild }) {
         setRoles(v.roles);
       })
       .catch((e) => setErr(e instanceof ApiError ? e.message : "Не удалось загрузить роли"));
+    // готовые наборы с правами — статичны, но тянем на сервер (та же авторизация)
+    api
+      .rolePresets(guild.id)
+      .then((v) => setPresets(v.presets))
+      .catch(() => setPresets([]));
   }, [guild.id]);
 
   useEffect(load, [load]);
@@ -1032,6 +1099,18 @@ export function Roles({ guild }: { guild: Guild }) {
     }
   }
 
+  async function applyPreset(key: string) {
+    setBusy(true);
+    try {
+      const ok = report(await api.applyRolePreset(guild.id, key));
+      if (ok) window.setTimeout(refresh, 1500); // роли + права — дать зеркалу догнать
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Ошибка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (err) return <div className="error-banner">{err}</div>;
   if (!view)
     return (
@@ -1115,7 +1194,26 @@ export function Roles({ guild }: { guild: Guild }) {
       {tool === "templates" && (
         <div className="role-panel">
           <div className="role-panel-title">
-            <IconSparkle /> Готовые наборы ролей
+            <IconShield /> Готовые команды и роли
+          </div>
+          <p className="muted small" style={{ margin: "4px 0 8px" }}>
+            Роли приезжают настроенными: где есть права — бот срежет то, чего нет у него самого, и
+            никогда не выдаёт Administrator. После создания подними мод-роли выше участников,
+            которыми они управляют.
+          </p>
+          <div className="template-grid">
+            {(presets ?? []).map((p) => (
+              <PresetTeamCard
+                key={p.key}
+                preset={p}
+                busy={busy}
+                onApply={() => applyPreset(p.key)}
+              />
+            ))}
+          </div>
+
+          <div className="role-panel-title" style={{ marginTop: 18 }}>
+            <IconSparkle /> Косметические наборы (без прав)
           </div>
           <p className="muted small" style={{ margin: "4px 0 8px" }}>
             Создаёт недостающие роли (совпадающие по имени пропускаются). Права не переносятся —

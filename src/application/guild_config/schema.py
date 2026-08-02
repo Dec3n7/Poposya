@@ -27,6 +27,8 @@ CHANNEL_KEYS: frozenset[str] = frozenset(
         "cinema_forum_channel",
         "git_forum_channel",
         "steam_forum_channel",
+        "digest_channel",
+        "appeals_channel",
         "finds_channel_id",
         "tempvoice_hub_channel",
         "tempvoice_category",
@@ -149,6 +151,8 @@ class GuildSettings(BaseModel):
 
     # --- Steam-игры (/steam) ---
     steam_forum_channel: int = Field(0, ge=0)  # форум-канал для тредов игр (0=выкл)
+    digest_channel: int = Field(0, ge=0)  # канал недельного дайджеста (0 = не постить)
+    appeals_channel: int = Field(0, ge=0)  # канал очереди апелляций (0 = выключено)
 
     # --- находки ---
     finds_channel_id: int = Field(0, ge=0)
@@ -181,6 +185,8 @@ class GuildSettings(BaseModel):
     git_enabled: bool = True
     steam_enabled: bool = True
     banwatch_enabled: bool = True
+    digest_enabled: bool = True
+    appeals_enabled: bool = True
 
     # --- тумблеры модуля «Модерация» (мастер гасит все админ-команды;
     # авторазбан работает всегда, чтобы tempban'ы снимались) ---

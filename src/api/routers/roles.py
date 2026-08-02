@@ -15,6 +15,7 @@ from src.api.command_client import run_command
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container, require_guild_manager
 from src.api.permissions_catalog import ADMINISTRATOR_BIT, all_catalog_bits, catalog_json
+from src.api.role_presets import get_preset, preset_payload, presets_json
 from src.api.security import Session
 from src.domain.roles.entities import GuildRole, SavedRoleTemplate, TemplateRole
 
@@ -382,6 +383,43 @@ async def delete_role_template(
         container, guild_id, session.user_id, "role.template_delete", target=template_id
     )
     return {"deleted": True}
+
+
+@router.get("/presets")
+async def list_role_presets(
+    guild_id: int = Depends(require_guild_manager),
+) -> dict:
+    """Готовые наборы ролей С ПРАВАМИ (курируются на сервере, см. role_presets).
+    Панель показывает состав и метки прав; применяет по ключу."""
+    return {"presets": presets_json()}
+
+
+@router.post("/presets/{key}/apply")
+async def apply_role_preset(
+    key: str,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container: ApiContainer = Depends(get_container),
+) -> dict:
+    """Применить готовый набор: создать недостающие роли сразу с правами через
+    мост (role.preset — бот зажимает маску под свои права, Administrator не
+    выдаёт, совпадения по имени пропускает). Состав берём с сервера по ключу —
+    клиент произвольные биты подсунуть не может."""
+    preset = get_preset(key)
+    if preset is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Набор не найден.")
+    cmd = await run_command(
+        container, guild_id, "role.preset", preset_payload(preset), session.user_id
+    )
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "role.preset_apply",
+        details={"key": key, "name": preset["name"], "count": len(preset["roles"])},
+        result=cmd.get("status"),
+    )
+    return cmd
 
 
 @router.post("")

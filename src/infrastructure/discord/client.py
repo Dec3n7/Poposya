@@ -155,16 +155,18 @@ class PoposyaBot(commands.Bot):
                 persona=persona,
             )
         )
+        from src.infrastructure.discord.cogs.appeals import AppealsCog
         from src.infrastructure.discord.cogs.autorole import AutoRoleCog
         from src.infrastructure.discord.cogs.banwatch import BanwatchCog
         from src.infrastructure.discord.cogs.config import ConfigCog
+        from src.infrastructure.discord.cogs.digest import DigestCog
         from src.infrastructure.discord.cogs.git import GitCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
-        from src.infrastructure.discord.cogs.steam import SteamCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
         from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
         from src.infrastructure.discord.cogs.staykick import StayKickCog
+        from src.infrastructure.discord.cogs.steam import SteamCog
         from src.infrastructure.discord.cogs.tempvoice import TempVoiceCog
 
         await self.add_cog(LogRelayCog(self, self.container.settings))
@@ -174,6 +176,18 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
         await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))
         await self.add_cog(BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona))
+        await self.add_cog(
+            AppealsCog(self, self.container.appeals, self.container.settings, gs, persona=persona)
+        )
+        await self.add_cog(
+            DigestCog(
+                self,
+                self.container.build_weekly_digest,
+                self.container.ai_chat.chat_service,
+                self.container.settings,
+                gs,
+            )
+        )
         await self.add_cog(
             StayKickCog(
                 self, self.container.staykick, self.container.settings, gs, persona=persona

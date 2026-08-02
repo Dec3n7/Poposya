@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.api.bot_guilds import BotGuildsCache
 from src.application.activity.use_cases import VoiceLeaderboardUseCase
+from src.application.appeals.use_cases import ListPendingAppealsUseCase
 from src.application.audit.use_cases import AppendAuditUseCase, ListAuditUseCase
 from src.application.banwatch.use_cases import CheckUserUseCase, FlaggedCandidatesUseCase
 from src.application.botprofile.use_cases import GetBotProfileUseCase, SetBotProfileUseCase
@@ -100,6 +101,7 @@ class ApiContainer:
     clear_warns: ClearWarnsUseCase
     list_bans: ListTempBansUseCase
     user_history: GetUserHistoryUseCase  # единый журнал действий по участнику
+    list_pending_appeals: ListPendingAppealsUseCase
     # находки: активная находка + топ коллекционеров сервера
     active_find: GetActiveFindUseCase
     top_collectors: TopCollectorsUseCase
@@ -189,6 +191,7 @@ def assemble_container(
         clear_warns=ClearWarnsUseCase(uow_factory),
         list_bans=ListTempBansUseCase(uow_factory),
         user_history=GetUserHistoryUseCase(uow_factory),
+        list_pending_appeals=ListPendingAppealsUseCase(uow_factory),
         active_find=GetActiveFindUseCase(uow_factory),
         top_collectors=TopCollectorsUseCase(uow_factory),
         get_trends=GetTrendsUseCase(uow_factory),

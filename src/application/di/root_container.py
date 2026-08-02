@@ -4,8 +4,15 @@ from pathlib import Path
 
 from src.application.activity.di import ActivityContainer
 from src.application.ai_chat.di import AIChatContainer
+from src.application.appeals.di import AppealsContainer
+from src.application.appeals.use_cases import (
+    CreateAppealUseCase,
+    ListPendingAppealsUseCase,
+    ResolveAppealUseCase,
+)
 from src.application.banwatch.di import BanwatchContainer
 from src.application.cinema.di import CinemaContainer
+from src.application.digest.use_cases import BuildWeeklyDigestUseCase
 from src.application.finds.di import FindsContainer
 from src.application.moderation.di import ModerationContainer
 from src.application.music.di import MusicContainer
@@ -37,6 +44,8 @@ class RootContainer:
     repos: ReposContainer
     steam: SteamContainer
     banwatch: BanwatchContainer
+    appeals: AppealsContainer
+    build_weekly_digest: object  # BuildWeeklyDigestUseCase; ког дайджеста
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     persona: object  # PersonaService; main вызывает load_all
     engine: object  # AsyncEngine; закрывается в main при завершении
@@ -571,6 +580,13 @@ def build_root_container(settings: Settings) -> RootContainer:
         flagged=FlaggedCandidatesUseCase(uow_factory),
     )
 
+    appeals = AppealsContainer(
+        create=CreateAppealUseCase(uow_factory),
+        resolve=ResolveAppealUseCase(uow_factory),
+        list_pending=ListPendingAppealsUseCase(uow_factory),
+    )
+    build_weekly_digest = BuildWeeklyDigestUseCase(uow_factory)
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -587,6 +603,8 @@ def build_root_container(settings: Settings) -> RootContainer:
         repos=repos,
         steam=steam,
         banwatch=banwatch,
+        appeals=appeals,
+        build_weekly_digest=build_weekly_digest,
         guild_settings=guild_settings,
         persona=persona,
         engine=engine,

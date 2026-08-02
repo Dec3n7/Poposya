@@ -1,5 +1,6 @@
 import type {
   ActivityStats,
+  Appeal,
   AuditEntry,
   Ban,
   BotProfile,
@@ -31,6 +32,7 @@ import type {
   PlaylistDetail,
   PlaylistItem,
   RoleInput,
+  RolePreset,
   RolesView,
   SavedRoleTemplate,
   SettingField,
@@ -260,6 +262,16 @@ export const api = {
     req<CommandResult>(`/api/guilds/${guildId}/roles/templates/${id}/apply`, { method: "POST" }),
   deleteRoleTemplate: (guildId: string, id: number): Promise<{ deleted: boolean }> =>
     req<{ deleted: boolean }>(`/api/guilds/${guildId}/roles/templates/${id}`, { method: "DELETE" }),
+  appeals: (guildId: string): Promise<Appeal[]> =>
+    req<Appeal[]>(`/api/guilds/${guildId}/appeals`),
+  approveAppeal: (guildId: string, id: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/appeals/${id}/approve`, { method: "POST" }),
+  rejectAppeal: (guildId: string, id: number): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/appeals/${id}/reject`, { method: "POST" }),
+  rolePresets: (guildId: string): Promise<{ presets: RolePreset[] }> =>
+    req<{ presets: RolePreset[] }>(`/api/guilds/${guildId}/roles/presets`),
+  applyRolePreset: (guildId: string, key: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/roles/presets/${key}/apply`, { method: "POST" }),
   audit: (guildId: string, limit = 100): Promise<AuditEntry[]> =>
     req<AuditEntry[]>(`/api/guilds/${guildId}/audit?limit=${limit}`),
   ban: (guildId: string, userId: string, minutes: number, reason: string): Promise<CommandResult> =>

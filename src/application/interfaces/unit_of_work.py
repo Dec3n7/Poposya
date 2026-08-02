@@ -6,6 +6,7 @@ from src.domain.activity.repository import (
     IReminderRepository,
     IVoiceProgressRepository,
 )
+from src.domain.appeals.repository import IAppealRepository
 from src.domain.audit.repository import IAuditRepository
 from src.domain.banwatch.repository import IServerBanRepository
 from src.domain.botprofile.repository import IBotProfileRepository
@@ -53,6 +54,7 @@ class IUnitOfWork(ABC):
     warns: IWarnRepository
     temp_bans: ITempBanRepository
     mod_cases: IModCaseRepository
+    appeals: IAppealRepository
     member_activity: IMemberActivityRepository
     reminders: IReminderRepository
     voice_progress: IVoiceProgressRepository

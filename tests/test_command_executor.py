@@ -1161,3 +1161,86 @@ async def test_role_import_forbidden():
     executor, _bot, _mod = make_executor(guild=guild)
     with pytest.raises(CommandError, match="Manage Roles"):
         await executor.execute(cmd("role.import", {"roles": [{"name": "X"}]}))
+
+
+# --- role.preset (готовые наборы С ПРАВАМИ) ---
+
+
+async def test_role_preset_clamps_perms_to_bot():
+    # бот владеет kick, но НЕ ban -> ban из запрошенной маски выпадает
+    guild = FakeGuild(bot_permissions=discord.Permissions(manage_roles=True, kick_members=True))
+    executor, _bot, _mod = make_executor(guild=guild)
+    requested = discord.Permissions(kick_members=True, ban_members=True).value
+    payload = {"roles": [{"name": "🏮 Модератор", "permissions": str(requested)}]}
+
+    result = await executor.execute(cmd("role.preset", payload))
+
+    guild.create_role.assert_awaited_once()
+    perms = guild.create_role.await_args.kwargs["permissions"]
+    assert perms.kick_members is True  # у бота есть -> выдали
+    assert perms.ban_members is False  # у бота нет -> срезали
+    assert "Создано ролей: 1" in result
+
+
+async def test_role_preset_never_grants_administrator():
+    guild = FakeGuild(bot_permissions=discord.Permissions(administrator=True, manage_roles=True))
+    executor, _bot, _mod = make_executor(guild=guild)
+    requested = discord.Permissions(administrator=True, manage_roles=True).value
+    payload = {"roles": [{"name": "🌙 Куратор", "permissions": str(requested)}]}
+
+    await executor.execute(cmd("role.preset", payload))
+
+    perms = guild.create_role.await_args.kwargs["permissions"]
+    assert perms.administrator is False  # никогда, даже если у бота admin есть
+    assert perms.manage_roles is True
+
+
+async def test_role_preset_passes_name_color_hoist():
+    guild = FakeGuild()
+    executor, _bot, _mod = make_executor(guild=guild)
+    payload = {
+        "roles": [{"name": "🕯️ Стажёр", "color": 0xE6B24D, "hoist": True, "permissions": "0"}]
+    }
+    await executor.execute(cmd("role.preset", payload))
+    kwargs = guild.create_role.await_args.kwargs
+    assert kwargs["name"] == "🕯️ Стажёр"
+    assert kwargs["colour"] == discord.Colour(0xE6B24D)
+    assert kwargs["hoist"] is True
+
+
+async def test_role_preset_skips_existing_by_name():
+    guild = FakeGuild()
+    add_role(guild, 1, position=2, name="🏮 Модератор")
+    executor, _bot, _mod = make_executor(guild=guild)
+    payload = {
+        "roles": [
+            {"name": "🏮 Модератор", "permissions": "0"},
+            {"name": "🔦 Старший модератор", "permissions": "0"},
+        ]
+    }
+    result = await executor.execute(cmd("role.preset", payload))
+    assert guild.create_role.await_count == 1  # только недостающий
+    assert "Пропущено" in result
+
+
+async def test_role_preset_not_a_list_rejected():
+    guild = FakeGuild()
+    executor, _bot, _mod = make_executor(guild=guild)
+    with pytest.raises(CommandError, match="Некорректный формат"):
+        await executor.execute(cmd("role.preset", {"roles": "nope"}))
+
+
+async def test_role_preset_over_cap_rejected():
+    guild = FakeGuild()
+    executor, _bot, _mod = make_executor(guild=guild)
+    payload = {"roles": [{"name": f"R{i}", "permissions": "0"} for i in range(21)]}
+    with pytest.raises(CommandError, match="предел безопасности"):
+        await executor.execute(cmd("role.preset", payload))
+
+
+async def test_role_preset_forbidden():
+    guild = FakeGuild()
+    guild.create_role = AsyncMock(side_effect=forbidden())
+    executor, _bot, _mod = make_executor(guild=guild)
+    with pytest.raises(CommandError, match="Manage Roles"):
+        await executor.execute(cmd("role.preset", {"roles": [{"name": "X", "permissions": "0"}]}))

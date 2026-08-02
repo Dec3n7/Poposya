@@ -218,6 +218,22 @@ class DiscordCommandExecutor:
         await self._log_case(guild.id, user_id, command.requested_by, CASE_BAN, reason)
         return "Забанен навсегда."
 
+    async def _appeal_approve(self, guild: discord.Guild, command: Command) -> str:
+        return await self._appeal_resolve(guild, command, approve=True)
+
+    async def _appeal_reject(self, guild: discord.Guild, command: Command) -> str:
+        return await self._appeal_resolve(guild, command, approve=False)
+
+    async def _appeal_resolve(
+        self, guild: discord.Guild, command: Command, approve: bool
+    ) -> str:
+        # разбор делает ког апелляций: снятие наказания + ЛС + смена статуса
+        cog = self._bot.get_cog("AppealsCog")
+        if cog is None:
+            raise CommandError("Модуль апелляций недоступен.")
+        appeal_id = int(command.payload["appeal_id"])
+        return await cog.resolve_from_panel(guild, appeal_id, approve, command.requested_by)
+
     async def _member(self, guild: discord.Guild, user_id: int) -> discord.Member:
         member = guild.get_member(user_id)
         if member is not None:
@@ -503,24 +519,35 @@ class DiscordCommandExecutor:
             raise CommandError("Нет права Manage Roles.") from exc
         return "Порядок ролей обновлён."
 
-    async def _role_permissions(self, guild: discord.Guild, command: Command) -> str:
-        """Права роли с ограждениями. Здесь — НАСТОЯЩАЯ граница (панель отдельный
-        процесс): Administrator панель не трогает никогда (бит берём из текущего
-        значения), а права, которых нет у самого бота, оставляем как есть —
-        Discord всё равно не даст их выдать, а так ещё и без лишнего 403."""
-        p = command.payload
-        role = self._manageable_role(guild, int(p["role_id"]))
-        requested = discord.Permissions(int(p["permissions"]))
-        current = role.permissions
+    @staticmethod
+    def _clamp_perms(
+        guild: discord.Guild,
+        requested: discord.Permissions,
+        current: discord.Permissions,
+    ) -> discord.Permissions:
+        """НАСТОЯЩАЯ граница прав (панель — отдельный процесс, ей на слово не
+        верим): Administrator не трогаем никогда (берём из current), права, что
+        есть у самого бота, выставляем в запрошенное, недоступные боту —
+        оставляем как в current. При создании роли current — пустой набор, тогда
+        это просто «запрошенное ∩ права бота, без Administrator»."""
         bot_perms = guild.me.guild_permissions
         result = discord.Permissions()
         for name, bot_has in bot_perms:
             if name == "administrator":
-                setattr(result, name, current.administrator)  # панель admin не меняет
+                setattr(result, name, current.administrator)
             elif bot_has:
                 setattr(result, name, getattr(requested, name))
             else:
-                setattr(result, name, getattr(current, name))  # боту недоступно — как есть
+                setattr(result, name, getattr(current, name))
+        return result
+
+    async def _role_permissions(self, guild: discord.Guild, command: Command) -> str:
+        """Права роли с ограждениями (см. _clamp_perms — там настоящая граница)."""
+        p = command.payload
+        role = self._manageable_role(guild, int(p["role_id"]))
+        requested = discord.Permissions(int(p["permissions"]))
+        current = role.permissions
+        result = self._clamp_perms(guild, requested, current)
         if result.value == current.value:
             return "Права не изменились."
         try:
@@ -618,6 +645,56 @@ class DiscordCommandExecutor:
         msg = f"Создано ролей: {created}."
         return msg + (f" Пропущено (уже есть/битые): {skipped}." if skipped else "")
 
+    # готовый набор ролей С ПРАВАМИ (пресет команды сервера). В отличие от
+    # role.import каждая роль рождается с маской прав, зажатой под права самого
+    # бота (_clamp_perms) — Administrator не выдаём никогда. Совпадения по имени
+    # пропускаем, чтобы повтор был безвреден.
+    _PRESET_CAP = 20
+
+    async def _role_preset(self, guild: discord.Guild, command: Command) -> str:
+        specs = command.payload.get("roles")
+        if not isinstance(specs, list):
+            raise CommandError("Некорректный формат набора.")
+        if len(specs) > self._PRESET_CAP:
+            raise CommandError(
+                f"Слишком много ролей ({len(specs)} > {self._PRESET_CAP}) — предел безопасности."
+            )
+        existing = {r.name.casefold() for r in guild.roles}
+        created = 0
+        skipped = 0
+        for spec in specs:
+            if not isinstance(spec, dict):
+                skipped += 1
+                continue
+            try:
+                name = self._role_name(spec.get("name"))
+            except CommandError:
+                skipped += 1  # битое имя — пропускаем, не валим весь набор
+                continue
+            if name.casefold() in existing:
+                skipped += 1  # роль с таким именем уже есть — не плодим дубли
+                continue
+            requested = discord.Permissions(int(spec.get("permissions") or 0))
+            perms = self._clamp_perms(guild, requested, discord.Permissions())
+            try:
+                await guild.create_role(
+                    name=name,
+                    colour=self._role_colour(spec.get("color")),
+                    hoist=bool(spec.get("hoist")),
+                    mentionable=bool(spec.get("mentionable")),
+                    permissions=perms,
+                    reason="Панель: набор ролей с правами",
+                )
+            except discord.Forbidden as exc:
+                raise CommandError("Нет права Manage Roles.") from exc
+            existing.add(name.casefold())
+            created += 1
+            await asyncio.sleep(0.2)  # вежливость к rate limit
+        if created == 0:
+            return f"Ничего не создано (пропущено: {skipped})."
+        msg = f"Создано ролей: {created}."
+        return msg + (f" Пропущено (уже есть): {skipped}." if skipped else "")
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -626,6 +703,8 @@ _HANDLERS = {
     "mod.unmute": DiscordCommandExecutor._unmute,
     "mod.kick": DiscordCommandExecutor._kick,
     "mod.ban_perm": DiscordCommandExecutor._ban_perm,
+    "appeal.approve": DiscordCommandExecutor._appeal_approve,
+    "appeal.reject": DiscordCommandExecutor._appeal_reject,
     "music.pause": DiscordCommandExecutor._pause,
     "music.resume": DiscordCommandExecutor._resume,
     "music.skip": DiscordCommandExecutor._skip,
@@ -646,4 +725,5 @@ _HANDLERS = {
     "role.permissions": DiscordCommandExecutor._role_permissions,
     "role.bulk": DiscordCommandExecutor._role_bulk,
     "role.import": DiscordCommandExecutor._role_import,
+    "role.preset": DiscordCommandExecutor._role_preset,
 }

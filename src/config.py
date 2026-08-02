@@ -236,6 +236,10 @@ class Settings(BaseSettings):
     banwatch_enabled: bool = True
     # кросс-серверные баны: с какого числа серверов участник считается «отмеченным»
     banwatch_threshold: int = 3
+    # еженедельный AI-дайджест сервера голосом персоны (пост по воскресеньям)
+    digest_enabled: bool = True
+    # апелляции наказаний: кнопка «Обжаловать» в ЛС наказанному → очередь модерации
+    appeals_enabled: bool = True
     # тумблеры модуля «Модерация» (мастер + автоантиспам)
     moderation_enabled: bool = True
     moderation_antispam: bool = True
@@ -322,6 +326,8 @@ class Settings(BaseSettings):
     steam_poll_interval_minutes: int = 120  # как часто опрашивать новости игр
     # форум-канал для тредов игр (дефолт-зеркало guild-настройки; 0 = выкл)
     steam_forum_channel: int = 0
+    digest_channel: int = 0  # канал недельного дайджеста (0 = не постить)
+    appeals_channel: int = 0  # канал очереди апелляций (0 = обжалование выключено)
 
     # --- плейлисты сервера ---
     music_playlist_max_per_guild: int = 25

@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import src.infrastructure.db.models.activity  # noqa: F401 — регистрация моделей
+import src.infrastructure.db.models.appeals  # noqa: F401
 import src.infrastructure.db.models.cinema  # noqa: F401
 import src.infrastructure.db.models.finds  # noqa: F401
 import src.infrastructure.db.models.guild  # noqa: F401

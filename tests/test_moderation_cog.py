@@ -120,6 +120,64 @@ async def test_say_sends_to_channel():
     interaction.response.send_message.assert_awaited_once()
 
 
+# --- гейтинг команд по правам («путь B»: роли видят команды без Administrator) ---
+
+# метод кога -> право, которое Discord требует по умолчанию для видимости команды.
+# Смысл: выдача роли этого Discord-права открывает участнику команду (см. пресеты
+# ролей role_presets). Регресс ловит откат к administrator или сбитый маппинг.
+_EXPECTED_GATES = {
+    "warn": "moderate_members",
+    "warnings": "moderate_members",
+    "clearwarns": "moderate_members",
+    "mute": "moderate_members",
+    "unmute": "moderate_members",
+    "history": "moderate_members",  # /modhistory
+    "tempban": "ban_members",
+    "unban": "ban_members",
+    "bans": "ban_members",
+    "ban": "ban_members",
+    "kick": "kick_members",
+    "rage": "kick_members",
+    "clear": "manage_messages",
+    "slowmode": "manage_messages",
+}
+
+
+def test_mod_commands_gated_by_granular_permissions():
+    cog = make_cog()
+    for method, perm in _EXPECTED_GATES.items():
+        dp = getattr(type(cog), method).default_permissions
+        assert dp is not None, f"{method}: нет default_permissions"
+        assert getattr(dp, perm) is True, f"{method} должна требовать {perm}"
+        # не заперта под Administrator — иначе роли из пресета её не увидят
+        assert dp.administrator is False, f"{method} всё ещё под administrator"
+
+
+def test_say_stays_admin_only():
+    # /say — имперсонация бота, не модерация: остаётся под Administrator
+    cog = make_cog()
+    assert type(cog).say.default_permissions.administrator is True
+
+
+# --- хук апелляций: кнопка «Обжаловать» берётся у AppealsCog ---
+
+
+def test_appeal_view_delegates_to_appeals_cog():
+    cog = make_cog()
+    fake_view = object()
+    appeals_cog = MagicMock()
+    appeals_cog.build_button_view = MagicMock(return_value=fake_view)
+    cog.bot.get_cog = MagicMock(return_value=appeals_cog)
+    assert cog._appeal_view(10, "ban") is fake_view
+    appeals_cog.build_button_view.assert_called_once_with(10, "ban")
+
+
+def test_appeal_view_none_when_module_absent():
+    cog = make_cog()
+    cog.bot.get_cog = MagicMock(return_value=None)
+    assert cog._appeal_view(10, "ban") is None
+
+
 async def test_say_forbidden():
     cog = make_cog()
     interaction = make_interaction()

@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.container import ApiContainer
 from src.api.routers import (
+    appeals,
     auth,
     finds,
     guilds,
@@ -107,6 +108,7 @@ def create_app(container: ApiContainer) -> FastAPI:
     app.include_router(people.router)
     app.include_router(roles.router)
     app.include_router(moderation.router)
+    app.include_router(appeals.router)
     app.include_router(music.router)
     app.include_router(finds.router)
     app.include_router(personas.router)

@@ -3792,6 +3792,23 @@ a {
   border: 1px solid var(--border);
   color: var(--fg-dim);
 }
+/* готовый набор с правами: роль + перечень её прав под чипом */
+.preset-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.preset-role {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.preset-role .template-role-chip {
+  align-self: flex-start;
+}
+.preset-role-perms {
+  line-height: 1.3;
+}
 .import-chip {
   display: inline-flex;
   align-items: center;

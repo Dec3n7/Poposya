@@ -4509,6 +4509,104 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             placeholders=("code",),
             allowed_modes=STATIC_MODES,
         ),
+        # --- еженедельный дайджест ---
+        _spec(
+            "digest.instruction",
+            "digest",
+            "template",
+            "Ты подводишь итоги прошедшей недели на сервере. Ниже — факты (числа "
+            "и имена). Опирайся ТОЛЬКО на них: не выдумывай события и не меняй "
+            "числа. Напиши живой тёплый пост от первого лица, 100–150 слов, "
+            "единым связным текстом (не список и не по пунктам). {tone} Без "
+            "хэштегов и обращений к «дорогим подписчикам», не выкай читателю. "
+            "Заверши короткой душевной строчкой от себя.",
+            label="Дайджест: инструкция генерации ({tone} — подсказка тона)",
+            placeholders=("tone",),
+            allowed_modes=AI_ONLY,
+        ),
+        # --- апелляции наказаний ---
+        _spec(
+            "appeals.button_label",
+            "appeals",
+            "str",
+            "Обжаловать",
+            label="Апелляции: подпись кнопки в ЛС",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.modal_title",
+            "appeals",
+            "str",
+            "Обжалование наказания",
+            label="Апелляции: заголовок формы",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.modal_field",
+            "appeals",
+            "str",
+            "Почему наказание несправедливо?",
+            label="Апелляции: подпись поля формы",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.submitted",
+            "appeals",
+            "str",
+            "Апелляция отправлена — модераторы её посмотрят.",
+            label="Апелляции: подтверждение отправки",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.duplicate",
+            "appeals",
+            "str",
+            "Ты уже подал апелляцию — она ещё на рассмотрении.",
+            label="Апелляции: уже есть открытая",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.empty",
+            "appeals",
+            "str",
+            "Пустую апелляцию не приму — напиши, в чём дело.",
+            label="Апелляции: пустой текст",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.closed",
+            "appeals",
+            "str",
+            "Обжалование на этом сервере сейчас недоступно.",
+            label="Апелляции: обжалование выключено",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.review_title",
+            "appeals",
+            "str",
+            "Апелляция на наказание",
+            label="Апелляции: заголовок карточки модератору",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.approved_dm",
+            "appeals",
+            "template",
+            "Твою апелляцию на «{guild}» приняли — наказание снято. Возвращайся аккуратнее.",
+            label="Апелляции: ЛС при одобрении",
+            placeholders=("guild",),
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "appeals.rejected_dm",
+            "appeals",
+            "template",
+            "Апелляцию на «{guild}» отклонили — наказание остаётся в силе.",
+            label="Апелляции: ЛС при отклонении",
+            placeholders=("guild",),
+            allowed_modes=STATIC_MODES,
+        ),
     )
 }
 

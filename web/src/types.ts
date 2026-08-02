@@ -371,6 +371,18 @@ export interface ModCase {
   created_at: string;
 }
 
+// открытая апелляция на наказание (очередь модерации в панели)
+export interface Appeal {
+  id: number;
+  user_id: string;
+  username: string | null;
+  avatar: string | null;
+  action: string; // ban | tempban | mute
+  text: string;
+  original_reason: string;
+  created_at: string;
+}
+
 export interface AuditEntry {
   id: number;
   actor_id: string;
@@ -447,6 +459,25 @@ export interface SavedRoleTemplate {
   name: string;
   created_at: string; // ISO
   roles: RoleInput[];
+}
+
+// готовый набор ролей с правами (пресет команды сервера). permissions — строка
+// (битовое поле не влезает в JS-number); perm_labels — русские метки прав для
+// показа. Применяется по ключу: бот сам зажимает маску под свои права.
+export interface RolePresetRole {
+  name: string;
+  color: number | null;
+  hoist: boolean;
+  mentionable: boolean;
+  permissions: string;
+  perm_labels: string[];
+}
+
+export interface RolePreset {
+  key: string;
+  name: string;
+  description: string;
+  roles: RolePresetRole[];
 }
 
 // каталог прав Discord для редактора. bit/маски — строки: битовое поле не

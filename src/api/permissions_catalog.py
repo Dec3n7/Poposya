@@ -100,3 +100,13 @@ def all_catalog_bits() -> int:
         for _name, bit, _plabel, _dangerous in perms:
             mask |= bit
     return mask
+
+
+# name -> bit / name -> русская метка. Единый источник для пресетов ролей
+# (role_presets.py собирает маски по именам прав и показывает их метки).
+PERM_BITS: dict[str, int] = {
+    name: bit for _k, _l, perms in _CATEGORIES for (name, bit, _pl, _d) in perms
+}
+PERM_LABELS: dict[str, str] = {
+    name: label for _k, _l, perms in _CATEGORIES for (name, _bit, label, _d) in perms
+}

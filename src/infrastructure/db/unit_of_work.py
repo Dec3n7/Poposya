@@ -12,6 +12,7 @@ from src.infrastructure.db.repositories.activity import (
     SqlAlchemyReminderRepository,
     SqlAlchemyVoiceProgressRepository,
 )
+from src.infrastructure.db.repositories.appeals import SqlAlchemyAppealRepository
 from src.infrastructure.db.repositories.audit import SqlAlchemyAuditRepository
 from src.infrastructure.db.repositories.banwatch import SqlAlchemyServerBanRepository
 from src.infrastructure.db.repositories.botprofile import SqlAlchemyBotProfileRepository
@@ -77,6 +78,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.warns = SqlAlchemyWarnRepository(self._session)
         self.temp_bans = SqlAlchemyTempBanRepository(self._session)
         self.mod_cases = SqlAlchemyModCaseRepository(self._session)
+        self.appeals = SqlAlchemyAppealRepository(self._session)
         self.member_activity = SqlAlchemyMemberActivityRepository(self._session)
         self.reminders = SqlAlchemyReminderRepository(self._session)
         self.voice_progress = SqlAlchemyVoiceProgressRepository(self._session)

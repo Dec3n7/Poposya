@@ -520,6 +520,49 @@ async def test_apply_template_not_found_404(client):
     assert resp.status_code == 404
 
 
+# --- готовые наборы с правами (пресеты) -----------------------------------------
+
+
+async def test_list_presets(client):
+    resp = await client.get(f"/api/guilds/{GUILD}/roles/presets")
+    assert resp.status_code == 200
+    presets = resp.json()["presets"]
+    keys = {p["key"] for p in presets}
+    assert {"mod_ladder", "content_hosts"} <= keys
+    ladder = next(p for p in presets if p["key"] == "mod_ladder")
+    assert len(ladder["roles"]) == 4
+    # маска — строкой, метки прав — списком
+    assert isinstance(ladder["roles"][0]["permissions"], str)
+    assert ladder["roles"][0]["perm_labels"]
+
+
+async def test_apply_preset_roundtrip_and_audit(client, container):
+    async def execute(_cmd):
+        return "Создано ролей: 4."
+
+    task, stop, seen = await _fake_bot(container, execute)
+    try:
+        resp = await client.post(f"/api/guilds/{GUILD}/roles/presets/mod_ladder/apply")
+    finally:
+        stop.set()
+        await task
+    assert resp.status_code == 200 and resp.json()["status"] == "done"
+    assert seen[0].command_type == "role.preset"
+    roles = seen[0].payload["roles"]
+    assert len(roles) == 4
+    # права уехали в команду строкой и ненулевые у боевых ролей
+    assert isinstance(roles[0]["permissions"], str)
+    assert int(roles[1]["permissions"]) > 0
+
+    audit = (await client.get(f"/api/guilds/{GUILD}/audit")).json()
+    assert audit[0]["action"] == "role.preset_apply"
+
+
+async def test_apply_preset_unknown_404(client):
+    resp = await client.post(f"/api/guilds/{GUILD}/roles/presets/does-not-exist/apply")
+    assert resp.status_code == 404
+
+
 async def test_delete_template_then_gone(client, uow_factory):
     everyone = _role(GUILD, name="@everyone", position=0)
     editable = _role(1, name="Базовая", position=2)

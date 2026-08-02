@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { api } from "../api";
 import type { Guild, GuildSummary, Me } from "../types";
+import { Appeals } from "./Appeals";
 import { Audit } from "./Audit";
 import { Cinema } from "./Cinema";
 import { Dashboard } from "./Dashboard";
@@ -24,6 +25,7 @@ type Tab =
   | "music"
   | "finds"
   | "moderation"
+  | "appeals"
   | "audit"
   | "modules"
   | "settings"
@@ -80,6 +82,13 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
     label: "Модерация",
     icon: (
       <svg {...I}><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg>
+    ),
+  },
+  {
+    id: "appeals",
+    label: "Апелляции",
+    icon: (
+      <svg {...I}><path d="M12 4v16M8 20h8M5 8h14" /><path d="M5 8l-2.5 5h5z" /><path d="M19 8l-2.5 5h5z" /></svg>
     ),
   },
   {
@@ -341,6 +350,7 @@ export function GuildView({
             {tab === "music" && <Music guild={guild} />}
             {tab === "finds" && <Finds guild={guild} />}
             {tab === "moderation" && <Moderation guild={guild} />}
+            {tab === "appeals" && <Appeals guild={guild} />}
             {tab === "audit" && <Audit guild={guild} />}
             {tab === "modules" && <Modules guild={guild} />}
             {tab === "settings" && <GuildSettings guild={guild} />}

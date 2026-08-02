@@ -291,6 +291,22 @@ class ChatService:
         )
         return ChatReply(text=text, rate_limited=False, award=award, stale_session=stale)
 
+    async def weekly_digest(
+        self, guild_id: int, facts: str, tone_hint: str, now: datetime
+    ) -> str:
+        """Недельный дайджест голосом персоны. facts — сухие числа/имена (их
+        нельзя выдумывать и менять), tone_hint — подсказка настроения от
+        статистики недели. Целимся в 100–150 слов единым связным текстом."""
+        variables = self._base_variables(now, 2, False, "", False)
+        system = self._render_base(guild_id, variables) + "\n---\n" + self._phrase_str(
+            guild_id, "digest.instruction", tone=tone_hint
+        )
+        text = await self._queue.run(
+            lambda: self._provider.generate(system, [ChatMessage("user", facts)]),
+            background=True,
+        )
+        return text.strip()
+
     async def comment_on_event(
         self, guild_id: int, user_id: int, user_display: str, instruction: str, now: datetime
     ) -> str:

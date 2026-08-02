@@ -142,17 +142,31 @@ class ModerationCog(commands.Cog):
             logger.warning("Не удалось замутить участника", exc_info=True)
             return False
 
-    async def _dm(self, guild: discord.Guild, member: discord.abc.User, key: str, **vars) -> None:
+    async def _dm(
+        self,
+        guild: discord.Guild,
+        member: discord.abc.User,
+        key: str,
+        *,
+        view: discord.ui.View | None = None,
+        **vars,
+    ) -> None:
         """ЛС наказанному с причиной/сроком (если включён moderation_dm_notice).
-        Ботам не пишем; закрытые ЛС — норма, любой сбой гасим тихо."""
+        Ботам не пишем; закрытые ЛС — норма, любой сбой гасим тихо. view —
+        кнопка «Обжаловать» (модуль апелляций), если наказание обжалуемо."""
         if getattr(member, "bot", False):
             return
         if not flag_on(self.settings, self.gs, guild.id, "moderation_dm_notice"):
             return
         try:
-            await member.send(self._p(guild.id, key, guild=guild.name, **vars))
+            await member.send(self._p(guild.id, key, guild=guild.name, **vars), view=view)
         except (discord.HTTPException, discord.Forbidden):
             pass
+
+    def _appeal_view(self, guild_id: int, action: str) -> discord.ui.View | None:
+        """Кнопка «Обжаловать» от кога апелляций (None, если модуль выключен)."""
+        cog = self.bot.get_cog("AppealsCog")
+        return cog.build_button_view(guild_id, action) if cog is not None else None
 
     async def _case(
         self,
@@ -375,7 +389,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="warn", description="Выдать предупреждение участнику")
     @app_commands.describe(user="Кому", reason="Причина")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def warn(
         self, interaction: discord.Interaction, user: discord.Member, reason: str = "без причины"
@@ -446,7 +460,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="warnings", description="Показать предупреждения участника")
     @app_commands.describe(user="Чьи предупреждения показать")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def warnings(self, interaction: discord.Interaction, user: discord.Member) -> None:
         gid = interaction.guild_id
@@ -475,7 +489,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="clearwarns", description="Сбросить все предупреждения участника")
     @app_commands.describe(user="Чьи предупреждения сбросить")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def clearwarns(self, interaction: discord.Interaction, user: discord.Member) -> None:
         gid = interaction.guild_id
@@ -496,7 +510,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="mute", description="Замутить участника на N минут")
     @app_commands.describe(user="Кого", minutes="Минуты (1–40320)", reason="Причина")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def mute(
         self,
@@ -511,7 +525,12 @@ class ModerationCog(commands.Cog):
         if await self._timeout(user, minutes, reason):
             await self._case(gid, user.id, interaction.user.id, CASE_MUTE, reason, minutes)
             await self._dm(
-                interaction.guild, user, "moderation.dm_muted", minutes=minutes, reason=reason
+                interaction.guild,
+                user,
+                "moderation.dm_muted",
+                minutes=minutes,
+                reason=reason,
+                view=self._appeal_view(gid, "mute"),
             )
             await interaction.response.send_message(
                 self._p(
@@ -535,7 +554,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="unmute", description="Досрочно снять мут")
     @app_commands.describe(user="С кого снять")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def unmute(self, interaction: discord.Interaction, user: discord.Member) -> None:
         try:
@@ -556,7 +575,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="tempban", description="Временный бан: разбаню автоматически")
     @app_commands.describe(user="Кого", minutes="Минуты (1–525600)", reason="Причина")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def tempban(
         self,
@@ -576,6 +595,7 @@ class ModerationCog(commands.Cog):
             "moderation.dm_tempbanned",
             when=f"<t:{int(expires_preview.timestamp())}:f>",
             reason=reason,
+            view=self._appeal_view(gid, "tempban"),
         )
         try:
             await interaction.guild.ban(
@@ -609,7 +629,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="unban", description="Досрочно разбанить по ID пользователя")
     @app_commands.describe(user_id="ID пользователя")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def unban(self, interaction: discord.Interaction, user_id: str) -> None:
         gid = interaction.guild_id
@@ -643,7 +663,7 @@ class ModerationCog(commands.Cog):
         await self._log(interaction.guild, f"✅ Досрочный разбан: <@{uid}> — {interaction.user}")
 
     @app_commands.command(name="bans", description="Список активных временных банов")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def bans(self, interaction: discord.Interaction) -> None:
         gid = interaction.guild_id
@@ -675,7 +695,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="kick", description="Выгнать участника с сервера")
     @app_commands.describe(user="Кого", reason="Причина")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(kick_members=True)
     @app_commands.guild_only()
     async def kick(
         self, interaction: discord.Interaction, user: discord.Member, reason: str = "без причины"
@@ -701,7 +721,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="ban", description="Забанить участника навсегда")
     @app_commands.describe(user="Кого", reason="Причина", delete_days="Удалить сообщения за N дней (0–7)")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def ban(
         self,
@@ -712,7 +732,13 @@ class ModerationCog(commands.Cog):
     ) -> None:
         gid = interaction.guild_id
         await interaction.response.defer()
-        await self._dm(interaction.guild, user, "moderation.dm_banned", reason=reason)
+        await self._dm(
+            interaction.guild,
+            user,
+            "moderation.dm_banned",
+            reason=reason,
+            view=self._appeal_view(gid, "ban"),
+        )
         try:
             await interaction.guild.ban(
                 user,
@@ -738,7 +764,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="modhistory", description="История модерации по участнику")
     @app_commands.describe(user="Чью историю показать")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(moderate_members=True)
     @app_commands.guild_only()
     async def history(self, interaction: discord.Interaction, user: discord.Member) -> None:
         gid = interaction.guild_id
@@ -798,7 +824,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="clear", description="Очистить сообщения в канале")
     @app_commands.describe(amount="Сколько сообщений удалить (1–100)")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_messages=True)
     @app_commands.guild_only()
     async def clear(
         self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]
@@ -828,7 +854,7 @@ class ModerationCog(commands.Cog):
 
     @app_commands.command(name="slowmode", description="Установить slowmode канала (0 = выключить)")
     @app_commands.describe(seconds="Секунды между сообщениями (0–21600)")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_messages=True)
     @app_commands.guild_only()
     async def slowmode(
         self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 21600]
@@ -860,7 +886,7 @@ class ModerationCog(commands.Cog):
         name="rage", description="Попося рассержена: перебросит по войсам и кикнет с сервера"
     )
     @app_commands.describe(user="Кто её разозлил")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(kick_members=True)
     @app_commands.guild_only()
     async def rage(self, interaction: discord.Interaction, user: discord.Member) -> None:
         gid = interaction.guild_id
