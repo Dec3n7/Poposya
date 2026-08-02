@@ -377,7 +377,7 @@ export interface Appeal {
   user_id: string;
   username: string | null;
   avatar: string | null;
-  action: string; // ban | tempban | mute
+  action: string; // ban | tempban | mute | kick
   text: string;
   original_reason: string;
   created_at: string;

@@ -1,15 +1,17 @@
-"""Апелляция на наказание: наказанный обжалует бан/темпбан/мут кнопкой в ЛС,
+"""Апелляция на наказание: наказанный обжалует бан/темпбан/мут/кик кнопкой в ЛС,
 модератор принимает (наказание снимается) или отклоняет. Одна активная апелляция
 на участника — защита от спама."""
 
 from dataclasses import dataclass
 from datetime import datetime
 
-# что обжалуют (оно же решает, как снимать при одобрении)
+# что обжалуют (оно же решает, как снимать при одобрении). Кик снять нельзя —
+# человек уже вне сервера; одобрение кика лишь уведомляет его (мод сам зовёт назад).
 ACTION_BAN = "ban"
 ACTION_TEMPBAN = "tempban"
 ACTION_MUTE = "mute"
-APPEALABLE = (ACTION_BAN, ACTION_TEMPBAN, ACTION_MUTE)
+ACTION_KICK = "kick"
+APPEALABLE = (ACTION_BAN, ACTION_TEMPBAN, ACTION_MUTE, ACTION_KICK)
 
 # статусы
 STATUS_PENDING = "pending"

@@ -125,6 +125,7 @@ class FakeMember:
         self.add_roles = AsyncMock()
         self.remove_roles = AsyncMock()
         self.timeout = AsyncMock()
+        self.kick = AsyncMock()
         self.edit = AsyncMock()
 
 
@@ -347,6 +348,103 @@ async def test_unmute_forbidden():
     executor, _bot, _mod = make_executor(guild=guild)
     with pytest.raises(CommandError, match="Timeout Members"):
         await executor.execute(cmd("mod.unmute", {"user_id": "3"}))
+
+
+# --- кик / постоянный бан + ЛС «Обжаловать» из панели ---
+
+
+def _with_mod_cog(bot):
+    """Навесить на фейк-бота ког модерации и fetch_user, чтобы _notify_punished
+    сработал (иначе get_cog -> None и ЛС тихо пропускается). Возвращает мок-ког."""
+    mod_cog = MagicMock()
+    mod_cog.notify_punishment = AsyncMock()
+    bot.get_cog = MagicMock(side_effect=lambda name: mod_cog if name == "ModerationCog" else None)
+    bot.fetch_user = AsyncMock(return_value=MagicMock())
+    return mod_cog
+
+
+async def test_ban_perm_happy_path():
+    guild = FakeGuild()
+    executor, _bot, _mod = make_executor(guild=guild)
+    result = await executor.execute(
+        cmd("mod.ban_perm", {"user_id": "42", "reason": "рейд"}, requested_by=7)
+    )
+    guild.ban.assert_awaited_once()
+    assert guild.ban.await_args.args[0].id == 42
+    assert result == "Забанен навсегда."
+
+
+async def test_ban_perm_forbidden():
+    guild = FakeGuild()
+    guild.ban = AsyncMock(side_effect=forbidden())
+    executor, _bot, _mod = make_executor(guild=guild)
+    with pytest.raises(CommandError, match="Ban Members"):
+        await executor.execute(cmd("mod.ban_perm", {"user_id": "1"}))
+
+
+async def test_kick_happy_path():
+    guild = FakeGuild()
+    member = add_member(guild, 3)
+    executor, _bot, _mod = make_executor(guild=guild)
+    result = await executor.execute(cmd("mod.kick", {"user_id": "3", "reason": "x"}))
+    member.kick.assert_awaited_once()
+    assert result == "Кикнут."
+
+
+async def test_kick_forbidden():
+    guild = FakeGuild()
+    member = add_member(guild, 3)
+    member.kick = AsyncMock(side_effect=forbidden())
+    executor, _bot, _mod = make_executor(guild=guild)
+    with pytest.raises(CommandError, match="Kick Members"):
+        await executor.execute(cmd("mod.kick", {"user_id": "3"}))
+
+
+async def test_ban_perm_dms_appeal_button():
+    guild = FakeGuild()
+    executor, bot, _mod = make_executor(guild=guild)
+    mod_cog = _with_mod_cog(bot)
+    await executor.execute(cmd("mod.ban_perm", {"user_id": "42", "reason": "рейд"}))
+    mod_cog.notify_punishment.assert_awaited_once()
+    a = mod_cog.notify_punishment.await_args
+    assert a.args[2] == "moderation.dm_banned" and a.args[3] == "ban"
+    assert a.kwargs["reason"] == "рейд"
+
+
+async def test_kick_dms_appeal_button():
+    guild = FakeGuild()
+    add_member(guild, 3)
+    executor, bot, _mod = make_executor(guild=guild)
+    mod_cog = _with_mod_cog(bot)
+    await executor.execute(cmd("mod.kick", {"user_id": "3", "reason": "x"}))
+    assert mod_cog.notify_punishment.await_args.args[3] == "kick"
+
+
+async def test_tempban_dms_appeal_button():
+    guild = FakeGuild()
+    executor, bot, _mod = make_executor(guild=guild)
+    mod_cog = _with_mod_cog(bot)
+    await executor.execute(cmd("mod.tempban", {"user_id": "1", "minutes": 5}))
+    assert mod_cog.notify_punishment.await_args.args[3] == "tempban"
+
+
+async def test_mute_dms_appeal_button():
+    guild = FakeGuild()
+    add_member(guild, 3)
+    executor, bot, _mod = make_executor(guild=guild)
+    mod_cog = _with_mod_cog(bot)
+    await executor.execute(cmd("mod.mute", {"user_id": "3", "minutes": 30}))
+    assert mod_cog.notify_punishment.await_args.args[3] == "mute"
+
+
+async def test_ban_perm_skips_dm_without_mod_cog():
+    # get_cog -> None (music_cog по умолчанию): ЛС не шлём, бан всё равно проходит
+    guild = FakeGuild()
+    executor, bot, _mod = make_executor(guild=guild)
+    result = await executor.execute(cmd("mod.ban_perm", {"user_id": "1"}))
+    guild.ban.assert_awaited_once()
+    bot.fetch_user.assert_not_called()
+    assert result == "Забанен навсегда."
 
 
 # --- музыка ---

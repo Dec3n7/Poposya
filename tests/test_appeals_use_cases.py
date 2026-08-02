@@ -37,6 +37,14 @@ async def test_create_pulls_reason_from_last_case(uow_factory):
     assert result.appeal.status == "pending"
 
 
+async def test_create_accepts_kick(uow_factory):
+    await _seed_case(uow_factory, 10, 5, "kick", "нарушение правил")
+    result = await CreateAppealUseCase(uow_factory).execute(10, 5, "kick", "я исправлюсь", NOW)
+    assert result.ok
+    assert result.appeal.action == "kick"
+    assert result.appeal.original_reason == "нарушение правил"
+
+
 async def test_create_rejects_duplicate(uow_factory):
     create = CreateAppealUseCase(uow_factory)
     assert (await create.execute(10, 5, "mute", "первый", NOW)).ok

@@ -15,7 +15,7 @@ class AppealModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    action: Mapped[str] = mapped_column(Text, nullable=False)  # ban | tempban | mute
+    action: Mapped[str] = mapped_column(Text, nullable=False)  # ban | tempban | mute | kick
     text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     original_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")

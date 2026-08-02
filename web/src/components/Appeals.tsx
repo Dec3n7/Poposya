@@ -10,6 +10,7 @@ const APPEAL_ACTION: Record<string, string> = {
   ban: "бан",
   tempban: "временный бан",
   mute: "мут",
+  kick: "кик",
 };
 
 function fmtWhen(iso: string): string {
@@ -104,15 +105,25 @@ export function Appeals({ guild }: { guild: Guild }) {
   return (
     <div>
       <p className="sub">
-        Открытые апелляции на наказания. «Принять» снимает бан/мут и уведомляет участника в ЛС.
+        Открытые апелляции на наказания. «Принять» снимает наказание и уведомляет участника в ЛС.
       </p>
 
       {error && <div className="error-banner">{error}</div>}
 
-      {!error && !appeals && <SkeletonRows rows={3} />}
+      <h2 className="section-title">Открытые апелляции</h2>
+
+      {!error && !appeals && (
+        <div className="card leader-card">
+          <div className="pad">
+            <SkeletonRows rows={3} />
+          </div>
+        </div>
+      )}
 
       {appeals && appeals.length === 0 && (
-        <EmptyState title="Апелляций нет" hint="Открытых обращений на разбор пока нет." />
+        <div className="card leader-card">
+          <EmptyState compact title="Апелляций нет" hint="Открытых обращений на разбор пока нет." />
+        </div>
       )}
 
       {appeals && appeals.length > 0 && (

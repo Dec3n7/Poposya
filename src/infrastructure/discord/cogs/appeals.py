@@ -14,14 +14,25 @@ from discord.ext import commands
 
 from src.application.appeals.di import AppealsContainer
 from src.config import Settings
-from src.domain.appeals.entities import ACTION_BAN, ACTION_MUTE, ACTION_TEMPBAN, Appeal
+from src.domain.appeals.entities import (
+    ACTION_BAN,
+    ACTION_KICK,
+    ACTION_MUTE,
+    ACTION_TEMPBAN,
+    Appeal,
+)
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
-_ACTION_LABELS = {ACTION_BAN: "бан", ACTION_TEMPBAN: "временный бан", ACTION_MUTE: "мут"}
+_ACTION_LABELS = {
+    ACTION_BAN: "бан",
+    ACTION_TEMPBAN: "временный бан",
+    ACTION_MUTE: "мут",
+    ACTION_KICK: "кик",
+}
 
 
 def _phrase(client: discord.Client, guild_id: int, key: str, **vars: object) -> str:
@@ -48,6 +59,8 @@ def _can_resolve(member: discord.Member, action: str) -> bool:
     perms = member.guild_permissions
     if action in (ACTION_BAN, ACTION_TEMPBAN):
         return perms.ban_members or perms.administrator
+    if action == ACTION_KICK:
+        return perms.kick_members or perms.administrator
     return perms.moderate_members or perms.administrator
 
 
@@ -179,7 +192,9 @@ async def _post_review(client: discord.Client, appeal: Appeal) -> None:
 
 
 async def _lift_punishment(guild: discord.Guild, appeal: Appeal) -> None:
-    """Снять наказание при одобрении (лучший эффорт: ушёл/уже снято — тихо)."""
+    """Снять наказание при одобрении (лучший эффорт: ушёл/уже снято — тихо).
+    Кик снять нечем — человек уже вне сервера; одобрение только уведомит его
+    (ниже, _notify_appellant), а вернуть должен модератор приглашением."""
     try:
         if appeal.action in (ACTION_BAN, ACTION_TEMPBAN):
             await guild.unban(discord.Object(id=appeal.user_id), reason="Апелляция принята")

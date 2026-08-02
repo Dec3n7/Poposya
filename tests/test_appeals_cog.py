@@ -10,6 +10,7 @@ import src.infrastructure.discord.cogs.appeals as mod
 from src.application.appeals.use_cases import ResolveResult
 from src.infrastructure.discord.cogs.appeals import (
     ACTION_BAN,
+    ACTION_KICK,
     ACTION_MUTE,
     AppealsCog,
     _can_resolve,
@@ -46,9 +47,15 @@ def test_can_resolve_mute_needs_moderate_members():
     assert _can_resolve(_member(ban_members=True), ACTION_MUTE) is False
 
 
+def test_can_resolve_kick_needs_kick_members():
+    assert _can_resolve(_member(kick_members=True), ACTION_KICK) is True
+    assert _can_resolve(_member(moderate_members=True), ACTION_KICK) is False
+
+
 def test_can_resolve_admin_can_everything():
     assert _can_resolve(_member(administrator=True), ACTION_BAN) is True
     assert _can_resolve(_member(administrator=True), ACTION_MUTE) is True
+    assert _can_resolve(_member(administrator=True), ACTION_KICK) is True
 
 
 # --- кнопка в ЛС ---

@@ -178,6 +178,25 @@ def test_appeal_view_none_when_module_absent():
     assert cog._appeal_view(10, "ban") is None
 
 
+async def test_notify_punishment_dms_with_appeal_view():
+    """Публичный вход для панели: ЛС наказанному несёт кнопку «Обжаловать»."""
+    cog = make_cog(settings=make_settings(moderation_dm_notice=True))
+    fake_view = MagicMock()
+    cog._appeal_view = MagicMock(return_value=fake_view)
+    guild = MagicMock()
+    guild.id = 10
+    guild.name = "Сервер"
+    user = MagicMock()
+    user.bot = False
+    user.send = AsyncMock()
+
+    await cog.notify_punishment(guild, user, "moderation.dm_banned", "ban", reason="рейд")
+
+    cog._appeal_view.assert_called_once_with(10, "ban")
+    user.send.assert_awaited_once()
+    assert user.send.await_args.kwargs["view"] is fake_view
+
+
 async def test_say_forbidden():
     cog = make_cog()
     interaction = make_interaction()

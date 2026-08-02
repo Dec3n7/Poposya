@@ -168,6 +168,20 @@ class ModerationCog(commands.Cog):
         cog = self.bot.get_cog("AppealsCog")
         return cog.build_button_view(guild_id, action) if cog is not None else None
 
+    async def notify_punishment(
+        self,
+        guild: discord.Guild,
+        user: discord.abc.User,
+        key: str,
+        action: str,
+        **vars: object,
+    ) -> None:
+        """Публичный вход для панели-исполнителя: ЛС наказанному с кнопкой
+        «Обжаловать» — та же логика, что у слеш-команд. Гейт moderation_dm_notice
+        и закрытые ЛС обрабатывает _dm; кнопку добавляем лишь при включённом
+        модуле апелляций (_appeal_view иначе вернёт None)."""
+        await self._dm(guild, user, key, view=self._appeal_view(guild.id, action), **vars)
+
     async def _case(
         self,
         guild_id: int,
@@ -240,7 +254,12 @@ class ModerationCog(commands.Cog):
         if result.action == "mute":
             if await self._timeout(member, result.minutes, f"{result.threshold}× варнов"):
                 await self._dm(
-                    guild, member, "moderation.dm_muted", minutes=result.minutes, reason=reason
+                    guild,
+                    member,
+                    "moderation.dm_muted",
+                    minutes=result.minutes,
+                    reason=reason,
+                    view=self._appeal_view(guild.id, "mute"),
                 )
             await self._log(
                 guild, f"🔇 Мут по варнам: {member} на {result.minutes} мин (причина: {reason})"
@@ -251,7 +270,14 @@ class ModerationCog(commands.Cog):
             expires_at = now + timedelta(minutes=result.minutes)
             when = f"<t:{int(expires_at.timestamp())}:f>"
             # ЛС до бана: после бана общий сервер исчезает и написать уже нельзя
-            await self._dm(guild, member, "moderation.dm_tempbanned", when=when, reason=reason)
+            await self._dm(
+                guild,
+                member,
+                "moderation.dm_tempbanned",
+                when=when,
+                reason=reason,
+                view=self._appeal_view(guild.id, "tempban"),
+            )
             try:
                 await guild.ban(
                     member,
@@ -375,7 +401,14 @@ class ModerationCog(commands.Cog):
         if not await self._timeout(member, spam_mute, reason):
             return
         await self._case(gid, member.id, 0, CASE_SPAM_MUTE, reason, spam_mute)
-        await self._dm(message.guild, member, "moderation.dm_muted", minutes=spam_mute, reason=reason)
+        await self._dm(
+            message.guild,
+            member,
+            "moderation.dm_muted",
+            minutes=spam_mute,
+            reason=reason,
+            view=self._appeal_view(gid, "mute"),
+        )
         try:
             await message.channel.send(
                 self._p(gid, phrase_key, mention=member.mention, minutes=spam_mute),
@@ -702,7 +735,13 @@ class ModerationCog(commands.Cog):
     ) -> None:
         gid = interaction.guild_id
         # ЛС до кика: после кика общий сервер может исчезнуть
-        await self._dm(interaction.guild, user, "moderation.dm_kicked", reason=reason)
+        await self._dm(
+            interaction.guild,
+            user,
+            "moderation.dm_kicked",
+            reason=reason,
+            view=self._appeal_view(gid, "kick"),
+        )
         try:
             await interaction.guild.kick(user, reason=f"{reason} ({interaction.user})")
         except discord.Forbidden:

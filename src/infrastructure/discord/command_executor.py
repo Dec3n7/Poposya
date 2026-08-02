@@ -157,11 +157,33 @@ class DiscordCommandExecutor:
         except Exception:
             logger.warning("Не удалось записать кейс модерации (панель): %s", action, exc_info=True)
 
+    async def _notify_punished(
+        self, guild: discord.Guild, user_id: int, key: str, action: str, **vars: object
+    ) -> None:
+        """ЛС наказанному из панели с кнопкой «Обжаловать» — та же логика, что у
+        слеш-команд бота (гейт moderation_dm_notice + модуль апелляций живут в коге
+        модерации). Лучший эффорт: нет кога/пользователь недоступен — тихо; для
+        бана/кика зовём ДО самого действия, пока общий сервер ещё есть."""
+        cog = self._bot.get_cog("ModerationCog")
+        if cog is None:
+            return
+        try:
+            user = await self._bot.fetch_user(user_id)
+        except discord.HTTPException:
+            return
+        await cog.notify_punishment(guild, user, key, action, **vars)
+
     async def _tempban(self, guild: discord.Guild, command: Command) -> str:
         p = command.payload
         user_id = int(p["user_id"])
         minutes = int(p["minutes"])
         reason = str(p.get("reason") or "без причины")
+        now = datetime.now(UTC)
+        when = f"<t:{int((now + timedelta(minutes=minutes)).timestamp())}:f>"
+        # ЛС до бана: после бана общий сервер исчезает и написать уже нельзя
+        await self._notify_punished(
+            guild, user_id, "moderation.dm_tempbanned", "tempban", when=when, reason=reason
+        )
         try:
             await guild.ban(
                 discord.Object(id=user_id),
@@ -171,7 +193,7 @@ class DiscordCommandExecutor:
         except discord.Forbidden as exc:
             raise CommandError("Нет права Ban Members (или роль участника выше моей).") from exc
         expires_at = await self._moderation.temp_ban.execute(
-            user_id, guild.id, command.requested_by, reason, minutes, datetime.now(UTC)
+            user_id, guild.id, command.requested_by, reason, minutes, now
         )
         await self._log_case(
             guild.id, user_id, command.requested_by, CASE_TEMPBAN, reason, minutes
@@ -194,6 +216,8 @@ class DiscordCommandExecutor:
         p = command.payload
         reason = str(p.get("reason") or "без причины")
         member = await self._member(guild, int(p["user_id"]))
+        # ЛС до кика: после кика общий сервер может исчезнуть
+        await self._notify_punished(guild, member.id, "moderation.dm_kicked", "kick", reason=reason)
         try:
             await member.kick(reason=f"{reason} (панель)")
         except discord.Forbidden as exc:
@@ -206,6 +230,8 @@ class DiscordCommandExecutor:
         user_id = int(p["user_id"])
         reason = str(p.get("reason") or "без причины")
         delete_days = max(0, min(int(p.get("delete_days") or 0), 7))
+        # ЛС до бана: после бана общий сервер исчезает и написать уже нельзя
+        await self._notify_punished(guild, user_id, "moderation.dm_banned", "ban", reason=reason)
         try:
             await guild.ban(
                 discord.Object(id=user_id),
@@ -253,6 +279,10 @@ class DiscordCommandExecutor:
         except discord.Forbidden as exc:
             raise CommandError("Нет права Timeout Members (или роль участника выше моей).") from exc
         await self._log_case(guild.id, member.id, command.requested_by, CASE_MUTE, reason, minutes)
+        # мут оставляет человека на сервере — ЛС с «Обжаловать» можно и после
+        await self._notify_punished(
+            guild, member.id, "moderation.dm_muted", "mute", minutes=minutes, reason=reason
+        )
         return f"Замучен на {minutes} мин."
 
     async def _unmute(self, guild: discord.Guild, command: Command) -> str:
