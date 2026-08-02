@@ -39,23 +39,34 @@ def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
     return f"{AUTHORIZE_URL}?{query}"
 
 
+def _perms_int(guild: dict) -> int:
+    try:
+        return int(guild.get("permissions", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _can_manage(guild: dict) -> bool:
     if guild.get("owner"):
         return True
-    try:
-        perms = int(guild.get("permissions", 0))
-    except (TypeError, ValueError):
-        return False
-    return bool(perms & (_MANAGE_GUILD | _ADMINISTRATOR))
+    return bool(_perms_int(guild) & (_MANAGE_GUILD | _ADMINISTRATOR))
 
 
 def manageable_guilds(guilds: list[dict]) -> list[SessionGuild]:
-    """Из списка серверов пользователя — только те, где он может управлять."""
-    return [
-        SessionGuild(id=int(g["id"]), name=g.get("name", ""), icon=g.get("icon"))
-        for g in guilds
-        if _can_manage(g)
-    ]
+    """Из списка серверов пользователя — только те, где он может управлять, вместе
+    с его маской прав Discord (для пер-действие проверок на бэкенде). Владельцу
+    ставим ADMINISTRATOR: Discord может не прислать бит явно, но права у него все."""
+    result: list[SessionGuild] = []
+    for g in guilds:
+        if not _can_manage(g):
+            continue
+        perms = _perms_int(g)
+        if g.get("owner"):
+            perms |= _ADMINISTRATOR
+        result.append(
+            SessionGuild(id=int(g["id"]), name=g.get("name", ""), icon=g.get("icon"), permissions=perms)
+        )
+    return result
 
 
 async def exchange_code(

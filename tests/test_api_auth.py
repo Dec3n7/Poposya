@@ -14,7 +14,16 @@ from pydantic import ValidationError
 from src.api import discord_oauth
 from src.api.app import create_app
 from src.api.container import build_api_container
-from src.api.security import Session, decode_session, encode_session
+from src.api.security import (
+    PERM_ADMINISTRATOR,
+    PERM_BAN_MEMBERS,
+    PERM_MANAGE_GUILD,
+    PERM_MODERATE_MEMBERS,
+    Session,
+    SessionGuild,
+    decode_session,
+    encode_session,
+)
 from src.config import Settings
 
 
@@ -180,6 +189,51 @@ def test_legacy_token_without_sv_valid_at_v1():
     legacy = jwt.encode(payload, _SECRET, algorithm="HS256")
     assert decode_session(_SECRET, legacy, version=1) is not None  # не гасим зря
     assert decode_session(_SECRET, legacy, version=2) is None  # но рубильник ловит
+
+
+# --- пер-действие права Discord в сессии (F1) --------------------------------
+
+
+def test_session_roundtrip_preserves_permissions():
+    perms = PERM_MANAGE_GUILD | PERM_BAN_MEMBERS
+    sess = Session(
+        user_id=1,
+        username="u",
+        avatar=None,
+        guilds=[SessionGuild(id=10, name="G", icon=None, permissions=perms)],
+    )
+    token = encode_session(_SECRET, sess, 24, 1)
+    decoded = decode_session(_SECRET, token, 1)
+    assert decoded is not None
+    assert decoded.guilds[0].permissions == perms
+
+
+def test_has_permission_specific_bit():
+    sess = Session(
+        user_id=1, username="u", avatar=None,
+        guilds=[SessionGuild(id=10, name="G", icon=None, permissions=PERM_MANAGE_GUILD | PERM_BAN_MEMBERS)],
+    )
+    assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
+    assert sess.has_permission(10, PERM_MODERATE_MEMBERS) is False  # права нет
+    assert sess.has_permission(999, PERM_BAN_MEMBERS) is False  # чужой сервер
+
+
+def test_has_permission_administrator_covers_all():
+    sess = Session(
+        user_id=1, username="u", avatar=None,
+        guilds=[SessionGuild(id=10, name="G", icon=None, permissions=PERM_ADMINISTRATOR)],
+    )
+    assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
+    assert sess.has_permission(10, PERM_MODERATE_MEMBERS) is True
+
+
+def test_has_permission_legacy_none_is_permissive():
+    # легаси-токен без записанных битов -> старое поведение (всё можно до перелогина)
+    sess = Session(
+        user_id=1, username="u", avatar=None,
+        guilds=[SessionGuild(id=10, name="G", icon=None)],  # permissions=None
+    )
+    assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
 
 
 async def test_me_rejected_after_session_version_bump(mock_discord):

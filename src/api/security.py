@@ -15,12 +15,26 @@ SESSION_COOKIE = "poposya_session"
 OAUTH_STATE_COOKIE = "poposya_oauth_state"
 _ALGO = "HS256"
 
+# Биты прав Discord (в токене — маска пользователя на конкретном сервере).
+# Вход в панель по-прежнему требует MANAGE_GUILD/админ (см. discord_oauth), а
+# каждое действие внутри дополнительно сверяется со своим правом.
+PERM_KICK_MEMBERS = 0x2
+PERM_BAN_MEMBERS = 0x4
+PERM_ADMINISTRATOR = 0x8
+PERM_MANAGE_GUILD = 0x20
+PERM_MANAGE_ROLES = 0x10000000
+PERM_MODERATE_MEMBERS = 0x10000000000
+
 
 @dataclass(frozen=True)
 class SessionGuild:
     id: int
     name: str
     icon: str | None
+    # маска прав Discord пользователя на этом сервере. None — легаси-токен,
+    # выданный до перехода на пер-действие права: трактуем как «всё можно» (старое
+    # поведение), строгую проверку такой пользователь получит при следующем логине.
+    permissions: int | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +49,17 @@ class Session:
     def can_manage(self, guild_id: int) -> bool:
         return any(g.id == guild_id for g in self.guilds)
 
+    def has_permission(self, guild_id: int, bit: int) -> bool:
+        """Есть ли у пользователя конкретное право Discord на сервере. ADMINISTRATOR
+        покрывает всё. Легаси-токен без записанных битов (permissions=None) —
+        «есть» (старое поведение до перелогина)."""
+        for g in self.guilds:
+            if g.id == guild_id:
+                if g.permissions is None:
+                    return True
+                return bool(g.permissions & (PERM_ADMINISTRATOR | bit))
+        return False
+
 
 def encode_session(secret: str, session: Session, ttl_hours: int, version: int = 1) -> str:
     now = int(time.time())
@@ -42,7 +67,16 @@ def encode_session(secret: str, session: Session, ttl_hours: int, version: int =
         "sub": str(session.user_id),
         "username": session.username,
         "avatar": session.avatar,
-        "guilds": [{"id": str(g.id), "name": g.name, "icon": g.icon} for g in session.guilds],
+        "guilds": [
+            {
+                "id": str(g.id),
+                "name": g.name,
+                "icon": g.icon,
+                # perms как строка (маска до 2^40+); отсутствие ключа = легаси-токен
+                **({"perms": str(g.permissions)} if g.permissions is not None else {}),
+            }
+            for g in session.guilds
+        ],
         # sv — версия сессии для серверного отзыва (см. web_session_version)
         "sv": version,
         "iat": now,
@@ -66,7 +100,13 @@ def decode_session(secret: str, token: str, version: int = 1) -> Session | None:
         return None
     try:
         guilds = [
-            SessionGuild(id=int(g["id"]), name=g["name"], icon=g.get("icon"))
+            SessionGuild(
+                id=int(g["id"]),
+                name=g["name"],
+                icon=g.get("icon"),
+                # нет ключа perms -> легаси-токен (permissions=None, «всё можно»)
+                permissions=(int(g["perms"]) if g.get("perms") is not None else None),
+            )
             for g in payload.get("guilds", [])
         ]
         return Session(

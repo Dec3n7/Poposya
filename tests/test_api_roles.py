@@ -49,6 +49,17 @@ def _cookie(settings, manage_guild_ids) -> str:
     return encode_session(settings.web_session_secret, session, 24)
 
 
+def _cookie_perms(settings, guild_id, perms) -> str:
+    """Кука с явной маской прав Discord (для проверки пер-действие гейтов F1)."""
+    session = Session(
+        user_id=1,
+        username="u",
+        avatar=None,
+        guilds=[SessionGuild(id=guild_id, name="G", icon=None, permissions=perms)],
+    )
+    return encode_session(settings.web_session_secret, session, 24)
+
+
 @pytest.fixture
 async def client(container):
     app = create_app(container)
@@ -594,3 +605,47 @@ async def test_command_failure_surfaces_not_as_http_error(client, container):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "failed" and data["result"] == "Нет права Manage Roles."
+
+
+# --- F1: пер-действие право Discord (manage_roles) на write-эндпоинтах --------
+
+
+async def test_role_write_forbidden_without_manage_roles(container):
+    """MANAGE_GUILD пускает в панель, но без MANAGE_ROLES создать роль нельзя."""
+    from src.api.security import PERM_MANAGE_GUILD
+
+    app = create_app(container)
+    token = _cookie_perms(container.settings, GUILD, PERM_MANAGE_GUILD)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", cookies={SESSION_COOKIE: token}
+    ) as c:
+        resp = await c.post(f"/api/guilds/{GUILD}/roles", json={"name": "X"})
+    assert resp.status_code == 403
+
+
+async def test_role_write_allowed_with_manage_roles(container):
+    """С MANAGE_ROLES гвард пройден — запрос уходит в мост (без бота -> pending)."""
+    from src.api.security import PERM_MANAGE_GUILD, PERM_MANAGE_ROLES
+
+    app = create_app(container)
+    token = _cookie_perms(container.settings, GUILD, PERM_MANAGE_GUILD | PERM_MANAGE_ROLES)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", cookies={SESSION_COOKIE: token}
+    ) as c:
+        resp = await c.post(f"/api/guilds/{GUILD}/roles", json={"name": "X"})
+    assert resp.status_code == 200  # не 403 -> право пропущено
+
+
+async def test_moderation_ban_forbidden_without_ban_members(container):
+    """MANAGE_GUILD без BAN_MEMBERS не может банить через панель (F1)."""
+    from src.api.security import PERM_MANAGE_GUILD
+
+    app = create_app(container)
+    token = _cookie_perms(container.settings, GUILD, PERM_MANAGE_GUILD)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", cookies={SESSION_COOKIE: token}
+    ) as c:
+        resp = await c.post(
+            f"/api/guilds/{GUILD}/moderation/ban", json={"user_id": "123", "minutes": 60}
+        )
+    assert resp.status_code == 403

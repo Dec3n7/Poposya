@@ -11,7 +11,12 @@ from pydantic import BaseModel
 from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
-from src.api.dependencies import current_session, get_container, require_guild_manager
+from src.api.dependencies import (
+    current_session,
+    get_container,
+    require_any_moderator,
+    require_guild_manager,
+)
 from src.api.discord_users import fetch_users
 from src.api.security import Session
 
@@ -66,7 +71,7 @@ async def _decide(
 @router.post("/{appeal_id}/approve")
 async def approve_appeal(
     appeal_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_any_moderator),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -76,7 +81,7 @@ async def approve_appeal(
 @router.post("/{appeal_id}/reject")
 async def reject_appeal(
     appeal_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_any_moderator),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:

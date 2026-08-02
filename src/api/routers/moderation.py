@@ -17,7 +17,14 @@ from pydantic import BaseModel, Field
 from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
-from src.api.dependencies import current_session, get_container, require_guild_manager
+from src.api.dependencies import (
+    current_session,
+    get_container,
+    require_ban_members,
+    require_guild_manager,
+    require_kick_members,
+    require_moderate_members,
+)
 from src.api.discord_members import fetch_guild_member
 from src.api.discord_users import fetch_users
 from src.api.security import Session
@@ -168,7 +175,7 @@ async def history(
 @router.delete("/warns/{user_id}")
 async def clear_warns(
     user_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_moderate_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -258,7 +265,7 @@ async def crossban_user(
 @router.post("/ban")
 async def ban(
     body: BanBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_ban_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -279,7 +286,7 @@ async def ban(
 @router.post("/unban")
 async def unban(
     body: UserBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_ban_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -296,7 +303,7 @@ async def unban(
 @router.post("/mute")
 async def mute(
     body: MuteBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_moderate_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -317,7 +324,7 @@ async def mute(
 @router.post("/unmute")
 async def unmute(
     body: UserBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_moderate_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -334,7 +341,7 @@ async def unmute(
 @router.post("/kick")
 async def kick(
     body: KickBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_kick_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -355,7 +362,7 @@ async def kick(
 @router.post("/ban_permanent")
 async def ban_permanent(
     body: PermBanBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_ban_members),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:

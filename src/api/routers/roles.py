@@ -13,7 +13,12 @@ from pydantic import BaseModel
 from src.api.audit import record_audit
 from src.api.command_client import run_command
 from src.api.container import ApiContainer
-from src.api.dependencies import current_session, get_container, require_guild_manager
+from src.api.dependencies import (
+    current_session,
+    get_container,
+    require_guild_manager,
+    require_manage_roles,
+)
 from src.api.permissions_catalog import ADMINISTRATOR_BIT, all_catalog_bits, catalog_json
 from src.api.role_presets import get_preset, preset_payload, presets_json
 from src.api.security import Session
@@ -158,7 +163,7 @@ async def permissions_catalog(
 @router.post("/import")
 async def import_roles(
     body: ImportBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -196,7 +201,7 @@ async def get_autorole(
 @router.put("/autorole")
 async def set_autorole(
     body: AutoRoleBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -246,7 +251,7 @@ async def get_interest_roles(
 @router.put("/interest-roles")
 async def set_interest_roles(
     body: InterestRolesBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -294,7 +299,7 @@ async def list_role_templates(
 @router.post("/templates")
 async def save_role_template(
     body: TemplateSaveBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -341,7 +346,7 @@ async def save_role_template(
 @router.post("/templates/{template_id}/apply")
 async def apply_role_template(
     template_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -372,7 +377,7 @@ async def apply_role_template(
 @router.delete("/templates/{template_id}")
 async def delete_role_template(
     template_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -397,7 +402,7 @@ async def list_role_presets(
 @router.post("/presets/{key}/apply")
 async def apply_role_preset(
     key: str,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -425,7 +430,7 @@ async def apply_role_preset(
 @router.post("")
 async def create_role(
     body: CreateRoleBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -450,7 +455,7 @@ async def create_role(
 @router.put("/order")
 async def reorder_roles(
     body: ReorderBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -472,7 +477,7 @@ async def reorder_roles(
 async def edit_role(
     role_id: int,
     body: EditRoleBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -494,7 +499,7 @@ async def edit_role(
 @router.delete("/{role_id}")
 async def delete_role(
     role_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -516,7 +521,7 @@ async def delete_role(
 async def set_permissions(
     role_id: int,
     body: PermissionsBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -545,7 +550,7 @@ async def set_permissions(
 async def bulk_role(
     role_id: int,
     body: BulkBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -594,7 +599,7 @@ async def member_roles(
 async def assign_role(
     user_id: int,
     body: AssignBody,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
@@ -621,7 +626,7 @@ async def assign_role(
 async def unassign_role(
     user_id: int,
     role_id: int,
-    guild_id: int = Depends(require_guild_manager),
+    guild_id: int = Depends(require_manage_roles),
     session: Session = Depends(current_session),
     container: ApiContainer = Depends(get_container),
 ) -> dict:
