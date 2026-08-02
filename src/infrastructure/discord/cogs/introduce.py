@@ -14,6 +14,29 @@ from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
 
+# Права, которых у самовыдаваемой роли-интереса быть НЕ должно: любое из них
+# превратило бы анкету в раздачу мод/админ-полномочий. Косметику (цвет/эмодзи/
+# упоминаемость и т.п.) не трогаем — блокируем только реальные полномочия.
+_SELF_ROLE_FORBIDDEN = discord.Permissions(
+    administrator=True,
+    ban_members=True,
+    kick_members=True,
+    moderate_members=True,
+    manage_guild=True,
+    manage_roles=True,
+    manage_channels=True,
+    manage_messages=True,
+    manage_webhooks=True,
+    manage_nicknames=True,
+    manage_events=True,
+    manage_threads=True,
+    mention_everyone=True,
+    view_audit_log=True,
+    mute_members=True,
+    deafen_members=True,
+    move_members=True,
+)
+
 _GENDER_OPTIONS = [
     ("👦", "Парень", "парень"),
     ("👧", "Девушка", "девушка"),
@@ -159,6 +182,15 @@ class SurveyView(discord.ui.View):
             return None
         # те же ограждения, что в командном мосте: @everyone/managed/выше бота — нельзя
         if role.is_default() or role.managed or role >= me.top_role:
+            return None
+        # роль-интерес самовыдаётся — она НЕ должна нести опасных прав (иначе любой
+        # через анкету поднял бы себе мод/админ-права). Админ мог смапить такую по
+        # ошибке; молча отказываем — пусть починит маппинг.
+        if role.permissions.value & _SELF_ROLE_FORBIDDEN.value:
+            logger.warning(
+                "Роль-интерес несёт опасные права — самовыдача отклонена",
+                extra={"guild_id": interaction.guild_id, "role_id": role.id},
+            )
             return None
         member = interaction.user
         has = role in getattr(member, "roles", [])

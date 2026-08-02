@@ -4,6 +4,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
+
 from src.application.relationship.use_cases import SurveyCompleteResult, SurveyData
 from src.infrastructure.discord.cogs.introduce import IntroduceCog, SurveyView
 from tests.cog_fakes import make_interaction
@@ -80,12 +82,13 @@ async def test_interest_toggle_button():
 
 
 class FakeRole:
-    def __init__(self, rid=555, name="🎮 Игры", position=1, default=False, managed=False):
+    def __init__(self, rid=555, name="🎮 Игры", position=1, default=False, managed=False, permissions=0):
         self.id = rid
         self.name = name
         self.position = position
         self._default = default
         self.managed = managed
+        self.permissions = discord.Permissions(permissions)
 
     def is_default(self):
         return self._default
@@ -158,6 +161,19 @@ async def test_interest_role_above_bot_is_skipped():
     view = SurveyView(container, make_settings(), guild_settings=make_gs({"Игры": 555}))
     button = find_button(view, "survey:interest:Игры")
     interaction, member = make_role_interaction(role, member_roles=[], top_position=10)
+    await button.callback(interaction)
+    member.add_roles.assert_not_awaited()
+
+
+async def test_interest_role_with_mod_perms_is_skipped():
+    """F9: роль-интерес с опасными правами (бан) не самовыдаётся — защита от
+    эскалации через анкету, даже если админ смапил её по ошибке."""
+    container = make_container()
+    container.toggle_survey_interest.execute.return_value = (True, ["Игры"])
+    role = FakeRole(permissions=discord.Permissions(ban_members=True).value)
+    view = SurveyView(container, make_settings(), guild_settings=make_gs({"Игры": 555}))
+    button = find_button(view, "survey:interest:Игры")
+    interaction, member = make_role_interaction(role, member_roles=[])
     await button.callback(interaction)
     member.add_roles.assert_not_awaited()
 
