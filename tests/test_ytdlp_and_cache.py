@@ -2,11 +2,13 @@
 чистые функции lyrics (clean_track_title/build_queries/parse_lrc/group_blocks)."""
 
 import time
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.domain.music.entities import Track
 from src.domain.music.exceptions import TrackResolveError
+from src.infrastructure.audio import ytdlp_source
 from src.infrastructure.audio.cache import AudioCache
 from src.infrastructure.audio.lyrics import (
     build_queries,
@@ -15,6 +17,13 @@ from src.infrastructure.audio.lyrics import (
     parse_lrc,
 )
 from src.infrastructure.audio.ytdlp_source import YtDlpAudioSource
+
+
+@pytest.fixture(autouse=True)
+def _bypass_ssrf(monkeypatch):
+    # resolve() зовёт SSRF-щит (реальный DNS-резолв); тесты дают нерезолвимые
+    # хосты (http://list, http://one) — глушим щит, кроме отдельного теста ниже.
+    monkeypatch.setattr(ytdlp_source, "assert_public_url", AsyncMock())
 
 
 def make_track(video_id="abc", duration=180):
@@ -109,6 +118,21 @@ async def test_resolve_empty_raises(monkeypatch):
     monkeypatch.setattr(src, "_extract", fake_extract)
     with pytest.raises(TrackResolveError):
         await src.resolve("http://x", requested_by=1)
+
+
+async def test_resolve_blocks_internal_url(monkeypatch):
+    """SSRF-щит: ссылка во внутреннюю сеть не доходит до yt-dlp (_extract)."""
+    from src.infrastructure.net.ssrf import SsrfError
+
+    src = YtDlpAudioSource()
+    extract = AsyncMock()
+    monkeypatch.setattr(src, "_extract", extract)
+    monkeypatch.setattr(
+        ytdlp_source, "assert_public_url", AsyncMock(side_effect=SsrfError("во внутреннюю сеть"))
+    )
+    with pytest.raises(TrackResolveError, match="внутреннюю сеть"):
+        await src.resolve("http://169.254.169.254/latest/meta-data/", requested_by=1)
+    extract.assert_not_called()
 
 
 async def test_get_stream_url_direct(monkeypatch):

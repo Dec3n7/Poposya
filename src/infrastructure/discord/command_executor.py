@@ -11,11 +11,8 @@ CommandError — панель покажет их админу.
 import asyncio
 import base64
 import binascii
-import ipaddress
 import logging
-import socket
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlparse
 
 import aiohttp
 import discord
@@ -33,6 +30,9 @@ from src.domain.moderation.entities import (
 )
 from src.domain.music.entities import RepeatMode
 from src.infrastructure.commands.bridge import Command, CommandError
+from src.infrastructure.net.ssrf import SsrfError
+from src.infrastructure.net.ssrf import assert_public_url as _assert_public_url_shared
+from src.infrastructure.net.ssrf import is_public_ip as _is_public_ip
 
 logger = logging.getLogger(__name__)
 
@@ -40,46 +40,16 @@ logger = logging.getLogger(__name__)
 # проверка типа — чтобы не тянуть гигантский/непонятный файл.
 _IMAGE_MAX_BYTES = 8 * 1024 * 1024
 
-
-def _is_public_ip(ip: str) -> bool:
-    """Адрес НЕ ведёт во внутреннюю сеть? loopback/private/link-local/reserved/
-    multicast/unspecified считаем небезопасными (SSRF во внутреннюю сеть)."""
-    try:
-        addr: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-    # ::ffff:10.0.0.1 и подобное — проверяем встроенный IPv4-адрес
-    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
-        addr = addr.ipv4_mapped
-    # not is_global ловит и то, что не покрыто явными флагами (напр. CGNAT
-    # 100.64.0.0/10, TEST-NET) — «глобально маршрутизируемый?» и есть критерий.
-    return not (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_reserved
-        or addr.is_multicast
-        or addr.is_unspecified
-        or not addr.is_global
-    )
+# SSRF-щит вынесен в src.infrastructure.net.ssrf (общий с yt-dlp-резолвом /play).
+# Здесь — тонкая обёртка: доменная ошибка панели вместо SsrfError.
+__all__ = ["_assert_public_url", "_is_public_ip"]
 
 
 async def _assert_public_url(url: str) -> None:
-    """SSRF-щит: хост URL не должен резолвиться во внутреннюю сеть. Проверяем ВСЕ
-    адреса при резолве — отсекаются и literal-IP (127.0.0.1, 169.254.169.254,
-    10.x, [::1]), и обфускация (http://2130706433/), и домены, указывающие
-    внутрь. Остаточный риск DNS-rebinding (повторный резолв на connect вернёт
-    другой адрес) для «админ зондирует внутреннюю сеть» приемлем."""
-    host = urlparse(url).hostname
-    if not host:
-        raise CommandError("В URL картинки нет хоста.")
-    loop = asyncio.get_running_loop()
     try:
-        infos = await loop.getaddrinfo(host, None)
-    except socket.gaierror as exc:
-        raise CommandError("Не удалось разрешить адрес картинки.") from exc
-    if not infos or not all(_is_public_ip(info[4][0]) for info in infos):
-        raise CommandError("Адрес картинки ведёт во внутреннюю сеть — запрещено.")
+        await _assert_public_url_shared(url)
+    except SsrfError as exc:
+        raise CommandError(str(exc)) from exc
 
 
 async def _download_image(url: str) -> bytes:

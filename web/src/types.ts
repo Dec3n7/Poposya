@@ -333,7 +333,7 @@ export interface GuildWarn {
 export interface CrossBanRecord {
   guild_id: string;
   guild_name: string;
-  reason: string;
+  // причину бана чужого сервера бэкенд намеренно не отдаёт (приватность)
   banned_at: string | null;
 }
 

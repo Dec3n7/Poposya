@@ -30,11 +30,14 @@ _CROSSBAN_MAX = 50
 
 
 def _records_json(report: CrossBanReport) -> list[dict]:
+    # Причину бана (свободный текст чужого сервера) НАРУЖУ не отдаём: она может
+    # нести чувствительное (имена/обвинения/личные данные), а межсерверная
+    # видимость — уже сама по себе много. Оставляем «где и когда» — этого хватает
+    # для решения модератора, без утечки формулировок между сообществами.
     return [
         {
             "guild_id": str(r.guild_id),
             "guild_name": r.guild_name,
-            "reason": r.reason,
             "banned_at": r.banned_at.isoformat() if r.banned_at else None,
         }
         for r in report.records
@@ -221,6 +224,20 @@ async def crossban_user(
     container: ApiContainer = Depends(get_container),
 ) -> dict:
     """Кросс-серверная бан-история конкретного участника (поиск в панели)."""
+    settings = container.guild_settings
+    threshold = int(settings.current(guild_id, "banwatch_threshold"))
+    # модуль выключен на этом сервере -> кросс-серверные данные не отдаём
+    # (как и /crossban): не участвуешь в обмене — не запрашиваешь чужие баны
+    if not bool(settings.current(guild_id, "banwatch_enabled")):
+        return {
+            "user_id": str(user_id),
+            "username": None,
+            "avatar": None,
+            "count": 0,
+            "threshold": threshold,
+            "records": [],
+            "enabled": False,
+        }
     report = await container.banwatch_check.execute(user_id, guild_id)
     users = await fetch_users(container.settings.discord_token, [user_id])
     info = users.get(user_id, {})
@@ -229,8 +246,9 @@ async def crossban_user(
         "username": info.get("username"),
         "avatar": info.get("avatar"),
         "count": report.count,
-        "threshold": int(container.guild_settings.current(guild_id, "banwatch_threshold")),
+        "threshold": threshold,
         "records": _records_json(report),
+        "enabled": True,
     }
 
 

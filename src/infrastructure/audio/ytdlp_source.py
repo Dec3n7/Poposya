@@ -8,6 +8,7 @@ from src.application.interfaces.audio_source import IAudioSource
 from src.domain.music.entities import Track
 from src.domain.music.exceptions import TrackResolveError
 from src.infrastructure.audio.cache import AudioCache
+from src.infrastructure.net.ssrf import SsrfError, assert_public_url
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,14 @@ class YtDlpAudioSource(IAudioSource):
         return [self._entry_to_track(e, requested_by) for e in entries if e]
 
     async def resolve(self, url: str, requested_by: int, playlist_limit: int = 50) -> list[Track]:
+        # SSRF-щит: пользовательская http(s)-ссылка не должна вести во внутреннюю
+        # сеть (метадата-эндпоинты, localhost, соседние сервисы) — yt-dlp иначе
+        # дёрнет её GET'ом. file://и прочие схемы отсекаются ещё в коге.
+        if url.startswith(("http://", "https://")):
+            try:
+                await assert_public_url(url)
+            except SsrfError as exc:
+                raise TrackResolveError(str(exc)) from exc
         info = await self._extract(url, flat=True)
         if not info:
             raise TrackResolveError("пустой ответ от YouTube")

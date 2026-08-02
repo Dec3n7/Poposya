@@ -162,9 +162,11 @@ class BanwatchCog(commands.Cog):
             when = (
                 f"<t:{int(rec.banned_at.timestamp())}:D>" if rec.banned_at else "дата неизвестна"
             )
+            # причину бана чужого сервера не показываем (см. _records_json в
+            # api/routers/moderation.py) — только где и когда
             embed.add_field(
                 name=_trim(rec.guild_name or f"Сервер {rec.guild_id}", 200),
-                value=f"{_trim(rec.reason or 'без причины', 400)}\n{when}",
+                value=when,
                 inline=False,
             )
         embed.set_footer(text="Виден только вам · в Discord не публикуется")

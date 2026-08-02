@@ -621,8 +621,10 @@ class IssueSecretCodeUseCase:
             existing = await uow.secret_rooms.get_code(user_id, guild_id)
             if existing is not None and existing.used_at is None:
                 return existing.code
-            raw = _secrets.token_hex(4).upper()
-            code = f"{raw[:4]}-{raw[4:]}"
+            # 64 бита (было 32): подбор через /secret и так упирался в rate-limit
+            # Discord, но запас лишним не будет. Формат — 4 группы по 4 для читаемости.
+            raw = _secrets.token_hex(8).upper()
+            code = "-".join(raw[i : i + 4] for i in range(0, 16, 4))
             await uow.secret_rooms.save_code(
                 SecretCode(guild_id=guild_id, user_id=user_id, code=code, issued_at=now)
             )
@@ -653,7 +655,9 @@ class ValidateSecretCodeUseCase:
                 return RedeemCheck(False, "no_code")
             if stored.used_at is not None:
                 return RedeemCheck(False, "used")
-            if stored.code.upper() != code_input.strip().upper():
+            # constant-time сравнение: подбор по таймингу через Discord и так
+            # непрактичен, но правильная привычка для секретов дешёвая
+            if not _secrets.compare_digest(stored.code.upper(), code_input.strip().upper()):
                 return RedeemCheck(False, "wrong")
             return RedeemCheck(True)
 

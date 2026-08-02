@@ -140,7 +140,6 @@ function CrossBanRecords({ records }: { records: CrossBanRecord[] }) {
       {records.map((r, i) => (
         <div key={i} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
           <b>{r.guild_name || `Сервер ${r.guild_id}`}</b>
-          <span className="cine-review">«{r.reason || "без причины"}»</span>
           <span className="mono faint">
             {r.banned_at ? fmtDate(r.banned_at) : "дата неизвестна"}
           </span>
