@@ -15,6 +15,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.guild_settings import (
     FEATURE_FLAG_KEYS,
     SETTING_SPECS,
@@ -66,13 +67,13 @@ class _RolesModal(discord.ui.Modal):
     def __init__(self, cog: "ConfigCog", thresholds_default: str, names_default: str):
         super().__init__(title="Роли-статусы: пороги и имена")
         self._cog = cog
-        self.thresholds = discord.ui.TextInput(
+        self.thresholds: discord.ui.TextInput = discord.ui.TextInput(
             label="Пороги очков (через запятую, по возрастанию)",
             default=thresholds_default,
             style=discord.TextStyle.short,
             max_length=400,
         )
-        self.names = discord.ui.TextInput(
+        self.names: discord.ui.TextInput = discord.ui.TextInput(
             label="Имена ролей (по одному на строку, = порогов + 1)",
             default=names_default,
             style=discord.TextStyle.paragraph,
@@ -91,7 +92,7 @@ class _LimitsModal(discord.ui.Modal):
     def __init__(self, cog: "ConfigCog", limits_default: str):
         super().__init__(title="Лимиты AI-реплик по уровням")
         self._cog = cog
-        self.limits = discord.ui.TextInput(
+        self.limits: discord.ui.TextInput = discord.ui.TextInput(
             label="Строки «уровень: лимит в час»",
             default=limits_default,
             style=discord.TextStyle.paragraph,
@@ -166,7 +167,7 @@ class ConfigCog(commands.Cog):
         return spec
 
     async def _apply(self, interaction: discord.Interaction, spec, raw: str) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         try:
             parsed = await self.settings.set(gid, spec.key, raw)
         except ValueError as exc:
@@ -195,7 +196,7 @@ class ConfigCog(commands.Cog):
 
     @config_group.command(name="list", description="Все настройки сервера и их значения")
     async def config_list(self, interaction: discord.Interaction) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         lines = []
         for spec in SETTING_SPECS.values():
             if spec.key in FEATURE_FLAG_KEYS:
@@ -215,7 +216,7 @@ class ConfigCog(commands.Cog):
     @app_commands.describe(key="Ключ настройки")
     @app_commands.autocomplete(key=_key_autocomplete)
     async def config_show(self, interaction: discord.Interaction, key: str) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         spec = SETTING_SPECS.get(key)
         if spec is None:
             await interaction.response.send_message(
@@ -262,7 +263,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"channel"})
         if spec is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "config.no_channel_setting"), ephemeral=True
+                self._p(guild_of(interaction).id, "config.no_channel_setting"), ephemeral=True
             )
             return
         await self._apply(interaction, spec, str(channel.id) if channel else "0")
@@ -274,7 +275,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"bool"})
         if spec is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "config.no_bool_setting"), ephemeral=True
+                self._p(guild_of(interaction).id, "config.no_bool_setting"), ephemeral=True
             )
             return
         await self._apply(interaction, spec, "1" if value else "0")
@@ -286,7 +287,7 @@ class ConfigCog(commands.Cog):
         spec = self._resolve(key, {"int", "float"})
         if spec is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "config.no_number_setting"), ephemeral=True
+                self._p(guild_of(interaction).id, "config.no_number_setting"), ephemeral=True
             )
             return
         # целые ключи принимают целое: 8.0 -> "8"; дробное для int-ключа
@@ -299,7 +300,7 @@ class ConfigCog(commands.Cog):
     async def _apply_roles(
         self, interaction: discord.Interaction, thresholds_text: str, names_text: str
     ) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         try:
             thresholds = _parse_int_list(thresholds_text)
             names = _parse_str_list(names_text)
@@ -331,7 +332,7 @@ class ConfigCog(commands.Cog):
         )
 
     async def _apply_limits(self, interaction: discord.Interaction, limits_text: str) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         try:
             limits = _parse_level_limits(limits_text)
         except ValueError as exc:
@@ -354,7 +355,7 @@ class ConfigCog(commands.Cog):
     @config_group.command(name="roles", description="Пороги очков и имена ролей-статусов")
     @app_commands.describe(reset="Вернуть пороги и имена к глобальным дефолтам")
     async def config_roles(self, interaction: discord.Interaction, reset: bool = False) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         if reset:
             await self.settings.reset(gid, "relationship_role_thresholds")
             await self.settings.reset(gid, "relationship_role_names")
@@ -370,7 +371,7 @@ class ConfigCog(commands.Cog):
     @config_group.command(name="limits", description="Лимиты AI-реплик в час по уровню отношений")
     @app_commands.describe(reset="Вернуть лимиты к глобальным дефолтам")
     async def config_limits(self, interaction: discord.Interaction, reset: bool = False) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         if reset:
             await self.settings.reset(gid, "ai_rate_limits_by_level")
             await interaction.response.send_message(
@@ -385,7 +386,7 @@ class ConfigCog(commands.Cog):
     @app_commands.describe(key="Ключ настройки")
     @app_commands.autocomplete(key=_key_autocomplete)
     async def config_reset(self, interaction: discord.Interaction, key: str) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         spec = SETTING_SPECS.get(key)
         if spec is None:
             await interaction.response.send_message(

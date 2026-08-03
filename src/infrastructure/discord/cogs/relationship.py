@@ -12,6 +12,7 @@ from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
 from src.infrastructure.rank_card import RankCard, render_rank_card
@@ -36,8 +37,10 @@ class RelationshipCog(commands.Cog):
         self.settings = settings
         self.gs = guild_settings
         self.persona = persona if persona is not None else RegistryPersona()
-        event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
-        event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)
+        # subscribe ждёт Callable[[DomainEvent], ...]; хендлеры сужены до
+        # конкретного события — диспетч по типу гарантирует правильный аргумент
+        event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
+        event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)  # type: ignore[arg-type]
 
     def _p(self, guild_id: int, key: str, **vars: object) -> str:
         """Строковая фраза каталога персоны сервера."""
@@ -155,7 +158,8 @@ class RelationshipCog(commands.Cog):
         # defer сразу: чтение БД на холодном старте может превысить 3 секунды.
         # публично (в тон /leaderboard): карточку для того и рисуем
         await interaction.response.defer()
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         info = await self.container.get_rank.execute(interaction.user.id, gid)
         role_name = (
             self._names(gid)[info.role_index]
@@ -196,7 +200,8 @@ class RelationshipCog(commands.Cog):
     @app_commands.guild_only()
     async def leaderboard(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         entries = await self.container.leaderboard.execute(gid, 10)
         if not entries:
             await interaction.followup.send(self._p(gid, "relationship.leaderboard_empty"))
@@ -204,7 +209,7 @@ class RelationshipCog(commands.Cog):
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         lines = []
         for i, entry in enumerate(entries, 1):
-            member = interaction.guild.get_member(entry.user_id)
+            member = guild.get_member(entry.user_id)
             name = member.display_name if member else f"<@{entry.user_id}>"
             role_name = (
                 self._names(gid)[entry.role_index]
@@ -232,9 +237,10 @@ class RelationshipCog(commands.Cog):
     async def set_points(
         self, interaction: discord.Interaction, user: discord.Member, points: int
     ) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         info = await self.container.set_points.execute(user.id, gid, points)
-        await self.role_sync.sync_member(interaction.guild, user.id, info.role_index)
+        await self.role_sync.sync_member(guild, user.id, info.role_index)
         role_name = (
             self._names(gid)[info.role_index]
             if info.role_index is not None
@@ -253,7 +259,8 @@ class RelationshipCog(commands.Cog):
     )
     @app_commands.describe(user="Пользователь")
     async def freeze(self, interaction: discord.Interaction, user: discord.Member) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         frozen = await self.container.toggle_freeze.execute(user.id, gid)
         state = self._p(
             gid, "relationship.freeze_frozen" if frozen else "relationship.freeze_active"
@@ -266,8 +273,9 @@ class RelationshipCog(commands.Cog):
     @relationship_group.command(name="sync", description="Пересинхронизировать роль пользователя")
     @app_commands.describe(user="Пользователь")
     async def sync(self, interaction: discord.Interaction, user: discord.Member) -> None:
-        info = await self.container.get_rank.execute(user.id, interaction.guild_id)
-        await self.role_sync.sync_member(interaction.guild, user.id, info.role_index)
+        guild = guild_of(interaction)
+        info = await self.container.get_rank.execute(user.id, guild.id)
+        await self.role_sync.sync_member(guild, user.id, info.role_index)
         await interaction.response.send_message(
-            self._p(interaction.guild_id, "relationship.sync_done"), ephemeral=True
+            self._p(guild.id, "relationship.sync_done"), ephemeral=True
         )

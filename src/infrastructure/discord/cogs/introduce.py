@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -9,6 +10,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -91,18 +93,18 @@ class SurveyView(discord.ui.View):
             self.add_item(self._interest_button(interest, row=row))
         for emoji, label, value in _SEASON_OPTIONS:
             self.add_item(self._choice_button(emoji, label, "season", value, row=4))
-        done = discord.ui.Button(
+        done: discord.ui.Button = discord.ui.Button(
             emoji="✅",
             label="Готово",
             style=discord.ButtonStyle.success,
             custom_id="survey:done",
             row=4,
         )
-        done.callback = self._on_done
+        done.callback = self._on_done  # type: ignore[method-assign]  # идиома discord.ui
         self.add_item(done)
 
     def _choice_button(self, emoji: str, label: str, field: str, value: str, row: int):
-        button = discord.ui.Button(
+        button: discord.ui.Button = discord.ui.Button(
             emoji=emoji,
             label=label,
             style=discord.ButtonStyle.secondary,
@@ -111,10 +113,10 @@ class SurveyView(discord.ui.View):
         )
 
         async def callback(interaction: discord.Interaction) -> None:
+            gid = guild_of(interaction).id
             await self.container.set_survey_choice.execute(
-                interaction.user.id, interaction.guild_id, field, value
+                interaction.user.id, gid, field, value
             )
-            gid = interaction.guild_id
             ack = str(self.persona.phrase(gid, "introduce.ack"))
             if field == "season":
                 seasons = self.persona.phrase(gid, "introduce.season_replies")
@@ -127,11 +129,11 @@ class SurveyView(discord.ui.View):
                 reply = ack
             await interaction.response.send_message(reply, ephemeral=True)
 
-        button.callback = callback
+        button.callback = callback  # type: ignore[method-assign]  # идиома discord.ui
         return button
 
     def _interest_button(self, interest: str, row: int):
-        button = discord.ui.Button(
+        button: discord.ui.Button = discord.ui.Button(
             emoji=_INTEREST_EMOJI.get(interest, "🎯"),
             label=interest,
             style=discord.ButtonStyle.secondary,
@@ -140,10 +142,10 @@ class SurveyView(discord.ui.View):
         )
 
         async def callback(interaction: discord.Interaction) -> None:
+            gid = guild_of(interaction).id
             added, interests = await self.container.toggle_survey_interest.execute(
-                interaction.user.id, interaction.guild_id, interest
+                interaction.user.id, gid, interest
             )
-            gid = interaction.guild_id
             current = (
                 ", ".join(interests)
                 if interests
@@ -161,7 +163,7 @@ class SurveyView(discord.ui.View):
                 reply += " " + str(self.persona.phrase(gid, rkey, role=role_name))
             await interaction.response.send_message(reply, ephemeral=True)
 
-        button.callback = callback
+        button.callback = callback  # type: ignore[method-assign]  # идиома discord.ui
         return button
 
     async def _sync_interest_role(
@@ -192,7 +194,7 @@ class SurveyView(discord.ui.View):
                 extra={"guild_id": interaction.guild_id, "role_id": role.id},
             )
             return None
-        member = interaction.user
+        member = member_of(interaction)
         has = role in getattr(member, "roles", [])
         try:
             if added and not has:
@@ -206,10 +208,10 @@ class SurveyView(discord.ui.View):
         return role.name
 
     async def _on_done(self, interaction: discord.Interaction) -> None:
+        gid = guild_of(interaction).id
         result = await self.container.complete_survey.execute(
-            interaction.user.id, interaction.guild_id, datetime.now(UTC)
+            interaction.user.id, gid, datetime.now(UTC)
         )
-        gid = interaction.guild_id
         done = await self.persona.render_block(gid, "introduce.done_replies", None)
         lines = [done] if done else []
         survey = result.survey
@@ -322,12 +324,13 @@ class IntroduceCog(commands.Cog):
     @app_commands.guild_only()
     async def introduce(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        channel = interaction.channel
-        await channel.send(embed=self._intro_embed(interaction.guild_id))
+        guild = guild_of(interaction)
+        channel = cast(discord.abc.Messageable, interaction.channel)  # guild_only: текстовый
+        await channel.send(embed=self._intro_embed(guild.id))
         await channel.send(
-            embed=self._survey_embed(interaction.guild_id),
+            embed=self._survey_embed(guild.id),
             view=SurveyView(self.container, self.settings, self.persona, guild_settings=self.gs),
         )
         await interaction.followup.send(
-            self._p(interaction.guild_id, "introduce.published"), ephemeral=True
+            self._p(guild.id, "introduce.published"), ephemeral=True
         )
