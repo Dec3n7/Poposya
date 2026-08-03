@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.repos.entities import TrackedRepo
 from src.domain.repos.repository import ITrackedRepoRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.repos import TrackedRepoModel
 
 
@@ -93,7 +94,7 @@ class SqlAlchemyTrackedRepoRepository(ITrackedRepoRepository):
                 TrackedRepoModel.name == name,
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def mark_announced(
         self, repo_id: int, release_id: int, published_at: datetime, etag: str | None

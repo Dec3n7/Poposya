@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.roles.entities import GuildRole, RoleMeta, SavedRoleTemplate, TemplateRole
 from src.domain.roles.repository import IRoleRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.roles import (
     GuildRoleMetaModel,
     GuildRoleModel,
@@ -217,4 +218,4 @@ class SqlAlchemyRoleRepository(IRoleRepository):
                 GuildRoleTemplateModel.id == template_id,
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0

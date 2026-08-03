@@ -10,6 +10,7 @@ from src.domain.moderation.repository import (
     ITempBanRepository,
     IWarnRepository,
 )
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.moderation import ModCaseModel, TempBanModel, WarnModel
 
 
@@ -130,7 +131,7 @@ class SqlAlchemyTempBanRepository(ITempBanRepository):
                 TempBanModel.user_id == user_id, TempBanModel.guild_id == guild_id
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
 
 def _case_to_domain(row: ModCaseModel) -> ModCase:

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import overload
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from src.domain.finds.repository import (
     IFindAttemptRepository,
     INightFindRepository,
 )
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.finds import (
     CollectionItemModel,
     FindAttemptModel,
@@ -16,12 +18,20 @@ from src.infrastructure.db.models.finds import (
 )
 
 
+@overload
+def _aware(value: datetime) -> datetime: ...
+@overload
+def _aware(value: None) -> None: ...
 def _aware(value: datetime | None) -> datetime | None:
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value
 
 
+@overload
+def _naive(value: datetime) -> datetime: ...
+@overload
+def _naive(value: None) -> None: ...
 def _naive(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=None) if value is not None else None
 
@@ -114,7 +124,7 @@ class SqlAlchemyNightFindRepository(INightFindRepository):
             )
             .values(claimed_by=user_id, claimed_at=_naive(now))
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
 
 class SqlAlchemyCollectionRepository(ICollectionRepository):

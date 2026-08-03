@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from typing import overload
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from src.domain.cinema.repository import (
     IMovieNightRepository,
     IMovieRatingRepository,
 )
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.cinema import (
     MovieEntryModel,
     MovieNightModel,
@@ -19,12 +21,20 @@ from src.infrastructure.db.models.cinema import (
 )
 
 
+@overload
+def _aware(value: datetime) -> datetime: ...
+@overload
+def _aware(value: None) -> None: ...
 def _aware(value: datetime | None) -> datetime | None:
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value
 
 
+@overload
+def _naive(value: datetime) -> datetime: ...
+@overload
+def _naive(value: None) -> None: ...
 def _naive(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=None) if value is not None else None
 
@@ -202,7 +212,7 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
         await self._session.execute(
             delete(MovieVoteModel).where(MovieVoteModel.entry_id == entry_id)
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def get_vote(self, entry_id: int, user_id: int) -> int | None:
         stmt = select(MovieVoteModel.value).where(
@@ -236,7 +246,7 @@ class SqlAlchemyMovieEntryRepository(IMovieEntryRepository):
             .where(MovieVoteModel.entry_id == entry_id)
             .group_by(MovieVoteModel.value)
         )
-        counts = dict((await self._session.execute(stmt)).all())
+        counts: dict[int, int] = dict((await self._session.execute(stmt)).tuples().all())
         return counts.get(1, 0), counts.get(-1, 0)
 
 
@@ -360,7 +370,7 @@ class SqlAlchemyMovieNightRepository(IMovieNightRepository):
             .where(MovieNightVoteModel.night_id == night_id)
             .group_by(MovieNightVoteModel.entry_id)
         )
-        return dict((await self._session.execute(stmt)).all())
+        return dict((await self._session.execute(stmt)).tuples().all())
 
 
 class SqlAlchemyMovieRatingRepository(IMovieRatingRepository):

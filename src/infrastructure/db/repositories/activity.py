@@ -12,6 +12,7 @@ from src.domain.activity.repository import (
     IReminderRepository,
     IVoiceProgressRepository,
 )
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.activity import (
     AlbumPostModel,
     MemberActivityModel,
@@ -62,7 +63,7 @@ class SqlAlchemyAlbumRepository(IAlbumRepository):
             .on_conflict_do_nothing(index_elements=["guild_id", "message_id"])
         )
         result = await self._session.execute(stmt)
-        return result.rowcount == 1
+        return rows_affected(result) == 1
 
 
 class SqlAlchemyVoiceProgressRepository(IVoiceProgressRepository):

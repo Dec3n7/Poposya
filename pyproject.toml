@@ -45,9 +45,10 @@ extend-immutable-calls = [
 ]
 
 [tool.mypy]
-# строгая типизация только для ядра (domain + application); инфраструктуру
-# импортируем «молча», чтобы её ошибки не валили гейт ядра
-files = ["src/domain", "src/application"]
+# строгая типизация ядра (domain + application) и репозиториев БД — границы,
+# где типы ловят реальные баги (None на стыке ORM↔домен); остальную
+# инфраструктуру импортируем «молча», чтобы её ошибки не валили гейт
+files = ["src/domain", "src/application", "src/infrastructure/db/repositories"]
 follow_imports = "silent"
 python_version = "3.11"
 ignore_missing_imports = true

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.tempvoice.entities import TempChannel
 from src.domain.tempvoice.repository import ITempVoiceRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.tempvoice import TempVoiceChannelModel
 
 
@@ -33,7 +34,7 @@ class SqlAlchemyTempVoiceRepository(ITempVoiceRepository):
         result = await self._session.execute(
             delete(TempVoiceChannelModel).where(TempVoiceChannelModel.channel_id == channel_id)
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def get(self, channel_id: int) -> TempChannel | None:
         row = await self._session.get(TempVoiceChannelModel, channel_id)

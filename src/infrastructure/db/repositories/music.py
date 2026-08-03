@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.music.entities import LikedTrack, Playlist, Track
 from src.domain.music.repository import ILikedTrackRepository, IPlaylistRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.music import GuildPlaylistModel, LikedTrackModel
 
 
@@ -120,7 +121,7 @@ class SqlAlchemyPlaylistRepository(IPlaylistRepository):
                 GuildPlaylistModel.name == name,
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
 
 def _liked_to_domain(row: LikedTrackModel) -> LikedTrack:
@@ -166,7 +167,7 @@ class SqlAlchemyLikedTrackRepository(ILikedTrackRepository):
                 LikedTrackModel.video_id == video_id,
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def list_for_user(self, user_id: int) -> list[LikedTrack]:
         stmt = (

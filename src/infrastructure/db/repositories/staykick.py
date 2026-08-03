@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.staykick.entities import PendingKick
 from src.domain.staykick.repository import IPendingKickRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.staykick import PendingKickModel
 
 
@@ -49,7 +50,7 @@ class SqlAlchemyPendingKickRepository(IPendingKickRepository):
                 PendingKickModel.user_id == user_id,
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def pop_due_kicks(self, now: datetime) -> list[PendingKick]:
         naive_now = now.replace(tzinfo=None)

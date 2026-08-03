@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.steam.entities import TrackedGame
 from src.domain.steam.repository import ITrackedGameRepository
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.steam import TrackedGameModel
 
 
@@ -85,7 +86,7 @@ class SqlAlchemyTrackedGameRepository(ITrackedGameRepository):
                 TrackedGameModel.guild_id == guild_id, TrackedGameModel.appid == appid
             )
         )
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     async def mark_announced(self, game_id: int, gid: str, date: datetime) -> None:
         row = await self._session.get(TrackedGameModel, game_id)
