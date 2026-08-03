@@ -11,7 +11,10 @@ bot.add_view(TempVoicePanel()) регистрирует вид как МАРШР
 
 Сами кнопки — тонкие: вся логика в TempVoiceCog."""
 
+from typing import cast
+
 import discord
+from discord.ext import commands
 
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -95,7 +98,7 @@ class _CogButton(discord.ui.Button):
         self._handler = handler
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("TempVoiceCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("TempVoiceCog")
         if cog is not None:
             await getattr(cog, self._handler)(interaction)
 
@@ -159,29 +162,29 @@ class TempVoicePanel(discord.ui.View):
 class NameModal(discord.ui.Modal, title="Имя каморки"):
     def __init__(self, current: str):
         super().__init__()
-        self.name = discord.ui.TextInput(
+        self.name: discord.ui.TextInput = discord.ui.TextInput(
             label="Как назвать", default=current, min_length=1, max_length=100
         )
         self.add_item(self.name)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("TempVoiceCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("TempVoiceCog")
         if cog is not None:
-            await cog.apply_name(interaction, str(self.name))
+            await cog.apply_name(interaction, str(self.name))  # type: ignore[attr-defined]
 
 
 class LimitModal(discord.ui.Modal, title="Сколько мест"):
     def __init__(self, current: int):
         super().__init__()
-        self.limit = discord.ui.TextInput(
+        self.limit: discord.ui.TextInput = discord.ui.TextInput(
             label="0–99 (0 — без лимита)", default=str(current), max_length=2
         )
         self.add_item(self.limit)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("TempVoiceCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("TempVoiceCog")
         if cog is not None:
-            await cog.apply_limit(interaction, str(self.limit))
+            await cog.apply_limit(interaction, str(self.limit))  # type: ignore[attr-defined]
 
 
 class MemberPickView(discord.ui.View):
@@ -191,12 +194,14 @@ class MemberPickView(discord.ui.View):
     def __init__(self, action: str, placeholder: str):
         super().__init__(timeout=120)
         self._action = action
-        select = discord.ui.UserSelect(placeholder=placeholder, max_values=1)
-        select.callback = self._picked
+        select: discord.ui.UserSelect = discord.ui.UserSelect(placeholder=placeholder, max_values=1)
+        select.callback = self._picked  # type: ignore[method-assign]  # идиома discord.ui
         self._select = select
         self.add_item(select)
 
     async def _picked(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("TempVoiceCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("TempVoiceCog")
         if cog is not None:
-            await cog.apply_member_action(interaction, self._action, self._select.values[0])
+            await cog.apply_member_action(  # type: ignore[attr-defined]
+                interaction, self._action, self._select.values[0]
+            )

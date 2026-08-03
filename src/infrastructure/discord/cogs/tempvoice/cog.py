@@ -16,6 +16,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -23,6 +24,7 @@ from discord.ext import commands
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.tempvoice.entities import TempChannel
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 from .views import (
@@ -177,7 +179,7 @@ class TempVoiceCog(commands.Cog):
             return
         try:
             async for message in hub.history(limit=_HUB_HISTORY_SCAN):
-                if is_panel(message, self.bot.user.id):
+                if is_panel(message, cast(discord.ClientUser, self.bot.user).id):
                     return  # панель на месте
             await hub.send(embed=hub_embed(guild.id, self.persona), view=TempVoicePanel())
             logger.info("Панель хаба выложена", extra={"guild_id": guild.id, "channel_id": hub_id})
@@ -198,7 +200,7 @@ class TempVoiceCog(commands.Cog):
                 await self.container.release.execute(temp.channel_id)
                 swept += 1
                 continue
-            if _humans(channel):
+            if _humans(cast(discord.VoiceChannel, channel)):
                 continue  # там сидят люди — каморка живая
             await _delete_quiet(channel, "Каморка: пустая после рестарта")
             await self.container.release.execute(temp.channel_id)
@@ -222,11 +224,11 @@ class TempVoiceCog(commands.Cog):
         # порядок важен: сперва освободить покинутый канал, потом создавать
         # новый — человек мог уйти из своей каморки прямо в хаб
         if before.channel is not None:
-            await self._maybe_delete(before.channel)
+            await self._maybe_delete(cast(discord.VoiceChannel, before.channel))
         if after.channel is not None:
-            await self._maybe_create(member, after.channel)
+            await self._maybe_create(member, cast(discord.VoiceChannel, after.channel))
 
-    async def _maybe_delete(self, channel: discord.abc.Connectable) -> None:
+    async def _maybe_delete(self, channel: discord.VoiceChannel) -> None:
         temp = await self.container.get.execute(channel.id)
         if temp is None:
             return  # не наша каморка
@@ -240,7 +242,7 @@ class TempVoiceCog(commands.Cog):
             extra={"guild_id": temp.guild_id, "channel_id": channel.id},
         )
 
-    async def _maybe_create(self, member: discord.Member, channel: discord.abc.Connectable) -> None:
+    async def _maybe_create(self, member: discord.Member, channel: discord.VoiceChannel) -> None:
         guild = member.guild
         if not self._feature(guild.id):
             return  # модуль «Каморки» выключен на сервере (вкладка «Модули»)
@@ -305,7 +307,7 @@ class TempVoiceCog(commands.Cog):
         if not isinstance(category, discord.CategoryChannel):
             # пикер /config отдаёт любой канал: если указали не категорию
             # (или её удалили) — создаём рядом с хабом, а не падаем
-            category = hub.category
+            category = cast(discord.VoiceChannel, hub).category
         try:
             return await guild.create_voice_channel(
                 name=self._p(guild.id, "tempvoice.channel_name", display_name=member.display_name)[
@@ -332,20 +334,20 @@ class TempVoiceCog(commands.Cog):
         Панель лежит в чате каморки — значит на неё саму. Панель хаба одна на
         всех и о конкретной каморке ничего не знает — значит на тот войс, где
         нажавший сейчас сидит. Отказы объясняет сам."""
-        temp = await self.container.get.execute(interaction.channel_id)
+        temp = await self.container.get.execute(cast(int, interaction.channel_id))
         if temp is not None:
-            return _Target(interaction.channel, temp, local=True)
+            return _Target(cast(discord.VoiceChannel, interaction.channel), temp, local=True)
         voice_state = getattr(interaction.user, "voice", None)
         voice = voice_state.channel if voice_state is not None else None
         if voice is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.not_in_voice"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.not_in_voice"), ephemeral=True
             )
             return None
         temp = await self.container.get.execute(voice.id)
         if temp is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.not_in_temp"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.not_in_temp"), ephemeral=True
             )
             return None
         return _Target(voice, temp, local=False)
@@ -357,7 +359,7 @@ class TempVoiceCog(commands.Cog):
             return None
         if target.temp.owner_id != interaction.user.id:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.not_owner", owner_id=target.temp.owner_id),
+                self._p(guild_of(interaction).id, "tempvoice.not_owner", owner_id=target.temp.owner_id),
                 ephemeral=True,
             )
             return None
@@ -422,7 +424,7 @@ class TempVoiceCog(commands.Cog):
             return True
         except discord.HTTPException:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.action_failed"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.action_failed"), ephemeral=True
             )
             logger.warning(
                 "Не удалось сменить права каморки",
@@ -438,7 +440,7 @@ class TempVoiceCog(commands.Cog):
         wait = self._rename_wait(target.channel.id)
         if wait:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.rename_too_soon", seconds=wait),
+                self._p(guild_of(interaction).id, "tempvoice.rename_too_soon", seconds=wait),
                 ephemeral=True,
             )
             return
@@ -461,7 +463,7 @@ class TempVoiceCog(commands.Cog):
             await target.channel.edit(name=name[:100], reason="Каморка: имя от владельца")
         except discord.HTTPException:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.action_failed"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.action_failed"), ephemeral=True
             )
             return
         self._renames.setdefault(target.channel.id, []).append(time.monotonic())
@@ -481,19 +483,19 @@ class TempVoiceCog(commands.Cog):
             limit = int(raw.strip())
         except ValueError:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.limit_bad"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.limit_bad"), ephemeral=True
             )
             return
         if not 0 <= limit <= 99:  # 99 — максимум Discord
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.limit_bad"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.limit_bad"), ephemeral=True
             )
             return
         try:
             await target.channel.edit(user_limit=limit, reason="Каморка: лимит от владельца")
         except discord.HTTPException:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.action_failed"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.action_failed"), ephemeral=True
             )
             return
         await self._show(interaction, target)
@@ -524,16 +526,16 @@ class TempVoiceCog(commands.Cog):
             return
         if member.id == interaction.user.id:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.self_target"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.self_target"), ephemeral=True
             )
             return
         try:
             text = await self._do_member_action(
-                interaction.guild_id, action, target.channel, member
+                guild_of(interaction).id, action, target.channel, member
             )
         except discord.HTTPException:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "tempvoice.action_failed"), ephemeral=True
+                self._p(guild_of(interaction).id, "tempvoice.action_failed"), ephemeral=True
             )
             logger.warning("Действие панели не прошло", extra={"action": action}, exc_info=True)
             return
@@ -573,15 +575,15 @@ class TempVoiceCog(commands.Cog):
         present = {m.id for m in channel.members if not m.bot}
         result = await self.container.claim.execute(channel.id, interaction.user.id, present)
         if not result.ok:
-            refusals = self.persona.phrase(interaction.guild_id, "tempvoice.claim_refusals")
+            refusals = self.persona.phrase(guild_of(interaction).id, "tempvoice.claim_refusals")
             text = refusals.get(result.reason) if isinstance(refusals, dict) else None
             await interaction.response.send_message(
-                text or self._p(interaction.guild_id, "tempvoice.action_failed"), ephemeral=True
+                text or self._p(guild_of(interaction).id, "tempvoice.action_failed"), ephemeral=True
             )
             return
         await self._show(interaction, target, owner_id=interaction.user.id)
         await interaction.followup.send(
-            self._p(interaction.guild_id, "tempvoice.claimed", previous_owner_id=result.owner_id),
+            self._p(guild_of(interaction).id, "tempvoice.claimed", previous_owner_id=result.owner_id),
             ephemeral=True,
         )
         logger.info(
