@@ -10,6 +10,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -26,6 +27,7 @@ from src.application.digest.format import (
 )
 from src.config import Settings
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ class DigestCog(commands.Cog):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "digest_enabled")
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._task is not None:
             self._task.cancel()
 
@@ -107,7 +109,9 @@ class DigestCog(commands.Cog):
         text = await self._compose(guild, now)
         if text is None:
             return
-        await channel.send(text[:_MAX_POST], allowed_mentions=discord.AllowedMentions.none())
+        await cast(discord.abc.Messageable, channel).send(
+            text[:_MAX_POST], allowed_mentions=discord.AllowedMentions.none()
+        )
 
     async def _compose(self, guild: discord.Guild, now: datetime) -> str | None:
         """Текст дайджеста: AI, при сбое — шаблон. None = рассказывать нечего."""
@@ -171,7 +175,8 @@ class DigestCog(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.guild_only()
     async def digest_now(self, interaction: discord.Interaction) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         channel_id = int(self._cfg(gid, "digest_channel") or 0)
         if not channel_id:
             await interaction.response.send_message(
@@ -180,7 +185,7 @@ class DigestCog(commands.Cog):
             )
             return
         await interaction.response.defer(ephemeral=True)
-        text = await self._compose(interaction.guild, datetime.now(UTC))
+        text = await self._compose(guild, datetime.now(UTC))
         if text is None:
             await interaction.followup.send("За неделю пока нечего рассказать.", ephemeral=True)
             return
@@ -188,5 +193,7 @@ class DigestCog(commands.Cog):
         if channel is None:
             await interaction.followup.send("Канал дайджеста не найден.", ephemeral=True)
             return
-        await channel.send(text[:_MAX_POST], allowed_mentions=discord.AllowedMentions.none())
+        await cast(discord.abc.Messageable, channel).send(
+            text[:_MAX_POST], allowed_mentions=discord.AllowedMentions.none()
+        )
         await interaction.followup.send("Дайджест опубликован.", ephemeral=True)

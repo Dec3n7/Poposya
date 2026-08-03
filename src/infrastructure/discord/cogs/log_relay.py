@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-from typing import Literal
+from typing import Literal, cast
 
 import discord
 from discord import app_commands
@@ -54,7 +54,7 @@ class LogRelayCog(commands.Cog):
         logging.getLogger().addHandler(self.handler)
         self._flush_task = asyncio.create_task(self._flush_loop())
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         logging.getLogger().removeHandler(self.handler)
         if self._flush_task is not None:
             self._flush_task.cancel()
@@ -68,6 +68,7 @@ class LogRelayCog(commands.Cog):
             channel = self.bot.get_channel(self.channel_id)
             if channel is None:
                 continue
+            messageable = cast(discord.abc.Messageable, channel)  # лог-канал текстовый
             lines: list[str] = []
             while self.handler.queue:
                 lines.append(self.handler.queue.popleft())
@@ -83,12 +84,12 @@ class LogRelayCog(commands.Cog):
             dropped = len(chunks) - _MAX_CHUNKS_PER_FLUSH
             for chunk in chunks[:_MAX_CHUNKS_PER_FLUSH]:
                 try:
-                    await channel.send(chunk, allowed_mentions=discord.AllowedMentions.none())
+                    await messageable.send(chunk, allowed_mentions=discord.AllowedMentions.none())
                 except discord.HTTPException:
                     return  # канал недоступен — не спамим попытками в этом цикле
             if dropped > 0:
                 try:
-                    await channel.send(f"*…опущено ещё {dropped} блоков логов*")
+                    await messageable.send(f"*…опущено ещё {dropped} блоков логов*")
                 except discord.HTTPException:
                     pass
 
@@ -113,7 +114,11 @@ class LogRelayCog(commands.Cog):
             return
         self.handler.setLevel(getattr(logging, level))
         target = self.bot.get_channel(self.channel_id)
-        where = target.mention if target else "канал не задан — укажи параметр channel"
+        where = (
+            cast(discord.TextChannel, target).mention
+            if target
+            else "канал не задан — укажи параметр channel"
+        )
         await interaction.response.send_message(
             f"Логи: уровень **{level}**, канал: {where}.\n"
             "-# До рестарта; постоянные значения — DISCORD_LOG_LEVEL и "

@@ -8,6 +8,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -20,6 +21,7 @@ from src.domain.steam.entities import TrackedGame
 from src.domain.steam.refs import header_url, parse_app_ref, store_url
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 from src.infrastructure.steam.bbcode import render_news
 
@@ -58,7 +60,7 @@ class SteamCog(commands.Cog):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "steam_enabled")
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         for task in self._tasks:
             task.cancel()
 
@@ -97,9 +99,9 @@ class SteamCog(commands.Cog):
             return None
         channel = self.bot.get_channel(thread_id)
         if channel is not None:
-            return channel
+            return cast(discord.abc.Messageable, channel)
         try:
-            return await self.bot.fetch_channel(thread_id)
+            return cast(discord.abc.Messageable, await self.bot.fetch_channel(thread_id))
         except discord.HTTPException:
             return None
 
@@ -180,6 +182,7 @@ class SteamCog(commands.Cog):
             # команд подряд): ответить уже нельзя, тихо выходим без шумной ошибки
             logger.warning("Не успел подтвердить /steam add вовремя (interaction истёк)")
             return
+        guild = guild_of(interaction)
         appid = parse_app_ref(game)
         if appid is None:
             await interaction.followup.send(
@@ -189,7 +192,7 @@ class SteamCog(commands.Cog):
             )
             return
 
-        forum = self._forum_channel(interaction.guild)
+        forum = self._forum_channel(guild)
         if forum is None:
             await interaction.followup.send(
                 "Сначала задайте форум-канал для игр: настройка `steam_forum_channel` "
@@ -207,7 +210,7 @@ class SteamCog(commands.Cog):
             )
             return
 
-        existing = await self.steam.get_game.execute(interaction.guild_id, appid)
+        existing = await self.steam.get_game.execute(guild.id, appid)
         if existing is not None:
             await interaction.followup.send(
                 f"**{snapshot.info.name}** уже отслеживается — <#{existing.thread_id}>.",
@@ -215,7 +218,7 @@ class SteamCog(commands.Cog):
             )
             return
 
-        card = self._game_card(interaction.guild_id, snapshot.info)
+        card = self._game_card(guild.id, snapshot.info)
         try:
             created = await forum.create_thread(
                 name=_trim(snapshot.info.name, 100),
@@ -235,7 +238,7 @@ class SteamCog(commands.Cog):
             return
 
         tracked = await self.steam.add_game.execute(
-            guild_id=interaction.guild_id,
+            guild_id=guild.id,
             appid=appid,
             name=snapshot.info.name,
             added_by=interaction.user.id,
@@ -249,7 +252,7 @@ class SteamCog(commands.Cog):
         if snapshot.latest_news is not None:
             try:
                 await created.thread.send(
-                    embed=self._news_embed(interaction.guild_id, tracked, snapshot.latest_news),
+                    embed=self._news_embed(guild.id, tracked, snapshot.latest_news),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             except discord.HTTPException:
@@ -264,7 +267,8 @@ class SteamCog(commands.Cog):
     @steam_group.command(name="list", description="Отслеживаемые игры сервера")
     async def steam_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        games = await self.steam.list_games.execute(interaction.guild_id)
+        guild = guild_of(interaction)
+        games = await self.steam.list_games.execute(guild.id)
         if not games:
             await interaction.followup.send(
                 "Пока ничего не отслеживается. Добавить — `/steam add <AppID>`.",
@@ -275,7 +279,7 @@ class SteamCog(commands.Cog):
         embed = discord.Embed(
             title=f"Steam-игры ({len(games)})",
             description=_trim("\n".join(lines), 4000),
-            color=accent(interaction.guild_id),
+            color=accent(guild.id),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -283,13 +287,14 @@ class SteamCog(commands.Cog):
     @app_commands.describe(game="AppID или название из /steam list")
     async def steam_remove(self, interaction: discord.Interaction, game: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        guild = guild_of(interaction)
         appid = parse_app_ref(game)
         if appid is None:
             await interaction.followup.send(
                 "Укажите AppID (число) или выберите из списка.", ephemeral=True
             )
             return
-        removed = await self.steam.remove_game.execute(interaction.guild_id, appid)
+        removed = await self.steam.remove_game.execute(guild.id, appid)
         if removed:
             await interaction.followup.send(
                 f"Больше не отслеживаю игру `{appid}`. Тред в форуме остаётся — "

@@ -8,6 +8,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -20,6 +21,7 @@ from src.domain.repos.entities import TrackedRepo
 from src.domain.repos.refs import parse_repo_ref
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -65,7 +67,7 @@ class GitCog(commands.Cog):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "git_enabled")
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         for task in self._tasks:
             task.cancel()
 
@@ -110,9 +112,9 @@ class GitCog(commands.Cog):
             return None
         channel = self.bot.get_channel(thread_id)
         if channel is not None:
-            return channel
+            return cast(discord.abc.Messageable, channel)
         try:
-            return await self.bot.fetch_channel(thread_id)
+            return cast(discord.abc.Messageable, await self.bot.fetch_channel(thread_id))
         except discord.HTTPException:
             return None
 
@@ -201,6 +203,7 @@ class GitCog(commands.Cog):
     @app_commands.describe(repo="owner/name или ссылка на репозиторий GitHub")
     async def git_add(self, interaction: discord.Interaction, repo: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        guild = guild_of(interaction)
         parsed = parse_repo_ref(repo)
         if parsed is None:
             await interaction.followup.send(
@@ -211,7 +214,7 @@ class GitCog(commands.Cog):
             return
         owner, name = parsed
 
-        forum = self._forum_channel(interaction.guild)
+        forum = self._forum_channel(guild)
         if forum is None:
             await interaction.followup.send(
                 "Сначала задайте форум-канал для релизов: настройка "
@@ -230,7 +233,7 @@ class GitCog(commands.Cog):
         # каноничные owner/name с GitHub — дедуп не зависит от регистра ввода
         owner, name = snapshot.info.owner, snapshot.info.name
 
-        existing = await self.repos.get_repo.execute(interaction.guild_id, owner, name)
+        existing = await self.repos.get_repo.execute(guild.id, owner, name)
         if existing is not None:
             await interaction.followup.send(
                 f"`{owner}/{name}` уже отслеживается — <#{existing.thread_id}>.",
@@ -249,7 +252,7 @@ class GitCog(commands.Cog):
                 "Часть релизов может прийти с задержкой."
             )
 
-        card = self._repo_card(interaction.guild_id, snapshot.info, snapshot.latest)
+        card = self._repo_card(guild.id, snapshot.info, snapshot.latest)
         try:
             created = await forum.create_thread(
                 name=_trim(f"{owner}/{name}", 100),
@@ -269,7 +272,7 @@ class GitCog(commands.Cog):
             return
 
         tracked = await self.repos.add_repo.execute(
-            guild_id=interaction.guild_id,
+            guild_id=guild.id,
             owner=owner,
             name=name,
             added_by=interaction.user.id,
@@ -284,7 +287,7 @@ class GitCog(commands.Cog):
         if snapshot.latest is not None:
             try:
                 await created.thread.send(
-                    embed=self._release_embed(interaction.guild_id, tracked, snapshot.latest),
+                    embed=self._release_embed(guild.id, tracked, snapshot.latest),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             except discord.HTTPException:
@@ -299,7 +302,8 @@ class GitCog(commands.Cog):
     @git_group.command(name="list", description="Отслеживаемые репозитории сервера")
     async def git_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        repos = await self.repos.list_repos.execute(interaction.guild_id)
+        guild = guild_of(interaction)
+        repos = await self.repos.list_repos.execute(guild.id)
         if not repos:
             await interaction.followup.send(
                 "Пока ничего не отслеживается. Добавить — `/git add owner/name`.",
@@ -310,7 +314,7 @@ class GitCog(commands.Cog):
         embed = discord.Embed(
             title=f"GitHub-репозитории ({len(repos)})",
             description=_trim("\n".join(lines), 4000),
-            color=accent(interaction.guild_id),
+            color=accent(guild.id),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -318,12 +322,13 @@ class GitCog(commands.Cog):
     @app_commands.describe(repo="owner/name из /git list")
     async def git_remove(self, interaction: discord.Interaction, repo: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        guild = guild_of(interaction)
         parsed = parse_repo_ref(repo)
         if parsed is None:
             await interaction.followup.send("Формат: `owner/name`.", ephemeral=True)
             return
         owner, name = parsed
-        removed = await self.repos.remove_repo.execute(interaction.guild_id, owner, name)
+        removed = await self.repos.remove_repo.execute(guild.id, owner, name)
         if removed:
             await interaction.followup.send(
                 f"Больше не отслеживаю `{owner}/{name}`. Тред в форуме остаётся — "
