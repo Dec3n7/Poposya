@@ -305,7 +305,9 @@ async def replace_phrases(
             container, _GLOBAL, op.user_id, "persona.replace", target=persona_id,
             details={"find": body.find, "replace": body.replace, "keys": len(changes)},
         )
-    return [PhraseChangeDTO(**change) for change in changes]
+    return [
+        PhraseChangeDTO(key=str(c["key"]), before=c["before"], after=c["after"]) for c in changes
+    ]
 
 
 @router.put("/personas/{persona_id}/phrases/{key}", response_model=PersonaPhraseDTO)

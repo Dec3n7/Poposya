@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from urllib.parse import unquote, urlparse
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,8 @@ class SqliteBackupService:
 
     @property
     def backup_dir(self) -> Path:
-        return self._db_path.parent / "backups"
+        # зовётся только при enabled / после None-проверки в backup_once
+        return cast(Path, self._db_path).parent / "backups"
 
     def backup_once(self) -> Path | None:
         """Синхронный бэкап (вызывается из executor). Возвращает путь копии."""
@@ -93,7 +95,7 @@ class SqliteBackupService:
         return target
 
     def _prune(self) -> None:
-        backups = sorted(self.backup_dir.glob(f"{self._db_path.stem}-*.db"))
+        backups = sorted(self.backup_dir.glob(f"{cast(Path, self._db_path).stem}-*.db"))
         for stale in backups[: -self._keep] if self._keep else backups:
             try:
                 stale.unlink()

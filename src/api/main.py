@@ -9,7 +9,7 @@ from src.api.container import build_api_container
 from src.config import Settings
 from src.infrastructure.logging.json_formatter import setup_logging
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # pydantic-settings читает поля из env
 setup_logging(settings.log_level, settings.log_format, settings.log_file)
 container = build_api_container(settings)
 app = create_app(container)

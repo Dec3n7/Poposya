@@ -61,9 +61,9 @@ from src.infrastructure.db.session import create_engine, create_session_factory
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.guild_settings import GuildSettingsService
-from src.infrastructure.persona_listener import make_persona_listener
+from src.infrastructure.persona_listener import PersonaChangeListener, make_persona_listener
 from src.infrastructure.persona_service import PersonaService
-from src.infrastructure.settings_listener import make_settings_listener
+from src.infrastructure.settings_listener import SettingsChangeListener, make_settings_listener
 
 
 @dataclass
@@ -129,9 +129,9 @@ class ApiContainer:
     # Тот же слушатель Postgres NOTIFY, что у бота: API тоже кэширует настройки,
     # и запись из бота/другого инстанса должна инвалидировать этот кэш. На SQLite
     # (dev без панели) фабрика вернёт None.
-    settings_listener: object | None
+    settings_listener: SettingsChangeListener | None
     # аналогичный слушатель для персон (Postgres NOTIFY; None на SQLite)
-    persona_listener: object | None
+    persona_listener: PersonaChangeListener | None
 
 
 def build_api_container(settings: Settings) -> ApiContainer:

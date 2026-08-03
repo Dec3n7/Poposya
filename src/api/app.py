@@ -7,6 +7,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,7 +81,7 @@ def create_app(container: ApiContainer) -> FastAPI:
 
     # Интерактивную схему (/docs, /redoc, /openapi.json) на публике не отдаём:
     # url=None полностью снимает роут. Включается только флагом в .env (dev).
-    docs_kwargs = (
+    docs_kwargs: dict[str, Any] = (
         {}
         if container.settings.web_docs_enabled
         else {"docs_url": None, "redoc_url": None, "openapi_url": None}

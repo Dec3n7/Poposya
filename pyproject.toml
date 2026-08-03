@@ -45,14 +45,15 @@ extend-immutable-calls = [
 ]
 
 [tool.mypy]
-# строгая типизация ядра (domain + application), репозиториев БД и всех когов
-# (презентационный слой) — типы ловят реальные баги (None на стыке ORM↔домен,
-# опечатки вызовов); остальную инфраструктуру импортируем «молча»
+# строгая типизация ядра (domain + application), слоя БД, всех когов
+# (презентация) и веб-API — типы ловят реальные баги (None на стыке ORM↔домен,
+# опечатки вызовов); внешние либы импортируем «молча»
 files = [
     "src/domain",
     "src/application",
-    "src/infrastructure/db/repositories",
+    "src/infrastructure/db",
     "src/infrastructure/discord/cogs",
+    "src/api",
 ]
 follow_imports = "silent"
 python_version = "3.11"

@@ -68,7 +68,7 @@ async def fetch_users(bot_token: str, ids: list[int]) -> dict[int, dict]:
 
     for uid, user in results:
         if user is None:
-            resolved = {"username": None, "avatar": None}
+            resolved: dict[str, str | None] = {"username": None, "avatar": None}
         else:
             resolved = {
                 "username": user.get("global_name") or user.get("username"),

@@ -23,7 +23,7 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    return Settings().database_url
+    return Settings().database_url  # type: ignore[call-arg]  # pydantic-settings читает из env
 
 
 def run_migrations_offline() -> None:

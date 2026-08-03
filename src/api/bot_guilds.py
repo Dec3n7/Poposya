@@ -20,7 +20,7 @@ async def _fetch_bot_guild_ids(bot_token: str) -> set[int]:
     after: str | None = None
     async with aiohttp.ClientSession(headers=headers) as session:
         while True:  # пагинация: Discord отдаёт максимум 200 за раз
-            params: dict[str, object] = {"limit": 200}
+            params: dict[str, int | str] = {"limit": 200}
             if after is not None:
                 params["after"] = after
             async with session.get(f"{DISCORD_API}/users/@me/guilds", params=params) as resp:
