@@ -8,7 +8,9 @@ import random
 import time
 from collections import deque
 from collections.abc import Callable
+from typing import cast
 
+import discord
 from discord.ext import commands
 
 from src.application.music.di import MusicContainer
@@ -62,11 +64,12 @@ class RadioService:
         history = self._history.setdefault(guild_id, deque(maxlen=_HISTORY_LIMIT))
 
         pool: dict[str, Track] = {}
-        for member in vc.channel.members:
+        bot_id = cast(discord.ClientUser, self._bot.user).id  # после ready есть
+        for member in cast(discord.VoiceChannel, vc.channel).members:
             if member.bot:
                 continue
             for liked in await self._container.list_liked.execute(member.id):
-                pool.setdefault(liked.video_id, liked.to_track(self._bot.user.id))
+                pool.setdefault(liked.video_id, liked.to_track(bot_id))
         fresh = [t for vid, t in pool.items() if vid not in history]
         if not fresh and pool:
             fresh = list(pool.values())  # всё уже играло — идём по второму кругу
@@ -76,7 +79,7 @@ class RadioService:
             if items:
                 name = random.choice(items)[0]
                 tracks = await self._container.load_playlist.execute(
-                    guild_id, name, self._bot.user.id
+                    guild_id, name, bot_id
                 )
                 fresh = [t for t in tracks or [] if t.video_id not in history] or (tracks or [])
         if not fresh:
@@ -103,7 +106,7 @@ class RadioService:
         mix_url = f"https://www.youtube.com/watch?v={seed}&list=RD{seed}"
         try:
             tracks = await self._container.audio_source.resolve(
-                mix_url, self._bot.user.id, playlist_limit=_MIX_LIMIT
+                mix_url, cast(discord.ClientUser, self._bot.user).id, playlist_limit=_MIX_LIMIT
             )
         except Exception:
             logger.warning("Радио: YouTube Mix не резолвится", exc_info=True)

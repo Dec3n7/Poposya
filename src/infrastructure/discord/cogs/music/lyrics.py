@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine
+from typing import cast
 
 import discord
 
@@ -20,6 +21,7 @@ from src.infrastructure.discord.cogs.music.session import (
     GuildMusicSession,
     delete_message_quiet,
 )
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -226,7 +228,7 @@ class LyricsService:
 
     async def toggle(self, interaction: discord.Interaction) -> None:
         """Кнопка 📜 в плеере: включает/выключает караоке; текст уже в кэше."""
-        guild_id = interaction.guild_id
+        guild_id = guild_of(interaction).id
         if self.stop_karaoke(guild_id):
             await interaction.response.send_message(
                 self._p(guild_id, "music.karaoke_off"), ephemeral=True
@@ -241,7 +243,9 @@ class LyricsService:
         await interaction.response.defer(ephemeral=True)
         track = session.player.current
         synced, plain = await self.get(track)
-        if synced and await self.start_karaoke(interaction.channel, guild_id, track, synced):
+        if synced and await self.start_karaoke(
+            cast(discord.abc.Messageable, interaction.channel), guild_id, track, synced
+        ):
             await interaction.followup.send(self._p(guild_id, "music.karaoke_on"), ephemeral=True)
         elif plain:
             await interaction.followup.send(embed=self.plain_embed(track, plain), ephemeral=True)

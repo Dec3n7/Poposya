@@ -5,7 +5,7 @@ Views зависят от сервисов и колбэков, а не от к�
 через bot.add_view — кнопки переживают рестарт бота."""
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 
@@ -15,6 +15,7 @@ from src.infrastructure.discord.cogs.music.formatting import (
     fmt_duration,
     trim,
 )
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.persona_service import RegistryPersona
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ class SearchSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         track = self.tracks[int(self.values[0])]
         key = "music.add_front_prefix" if self.to_front else "music.add_prefix"
-        prefix = str(self._persona.phrase(interaction.guild_id, key))
+        prefix = str(self._persona.phrase(guild_of(interaction).id, key))
         await interaction.response.edit_message(content=f"{prefix}: **{track.title}**", view=None)
         await self._enqueue(interaction, [track], self.to_front)
 
@@ -89,7 +90,7 @@ class HistorySelect(discord.ui.Select):
         track = replace(self.tracks[int(self.values[0])], requested_by=interaction.user.id)
         content = str(
             self._persona.phrase(
-                interaction.guild_id, "music.added_again", title=trim(track.title, 100)
+                guild_of(interaction).id, "music.added_again", title=trim(track.title, 100)
             )
         )
         await interaction.response.edit_message(content=content, view=None)
@@ -250,7 +251,7 @@ class LikedListView(discord.ui.View):
     def _rebuild(self) -> None:
         self.prev_button.disabled = self.page <= 0
         self.next_button.disabled = self.page >= self.total_pages - 1
-        self.play_select.options = [
+        self.play_select.options = [  # type: ignore[assignment]  # @ui.select: mypy видит метод
             discord.SelectOption(
                 label=trim(track.title, 95),
                 description=trim(
@@ -280,8 +281,8 @@ class LikedListView(discord.ui.View):
 
     @discord.ui.select(placeholder="Включить трек с этой страницы…", row=0)
     async def play_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        member = interaction.user
-        gid = interaction.guild_id
+        member = member_of(interaction)
+        gid = guild_of(interaction).id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
                 str(self._persona.phrase(gid, "music.join_voice_first")), ephemeral=True
@@ -328,20 +329,20 @@ class PlayerView(discord.ui.View):
         return str(self._persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is None:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "music.player_inactive"), ephemeral=True
+                self._p(guild_of(interaction).id, "music.player_inactive"), ephemeral=True
             )
             return False
         # лайк — личное дело: доступен всем, кто видит плеер, без войса
-        if (interaction.data or {}).get("custom_id") == "music:like":
+        if cast(dict, interaction.data or {}).get("custom_id") == "music:like":
             return True
-        vc = interaction.guild.voice_client
-        member = interaction.user
+        vc = guild_of(interaction).voice_client
+        member = member_of(interaction)
         if not vc or not member.voice or member.voice.channel != vc.channel:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "music.buttons_voice_only"), ephemeral=True
+                self._p(guild_of(interaction).id, "music.buttons_voice_only"), ephemeral=True
             )
             return False
         return True
@@ -353,12 +354,12 @@ class PlayerView(discord.ui.View):
     )
     async def prev_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is None:
             return
         if not await player.previous():
             await interaction.followup.send(
-                self._p(interaction.guild_id, "music.history_empty_back"), ephemeral=True
+                self._p(guild_of(interaction).id, "music.history_empty_back"), ephemeral=True
             )
 
     @discord.ui.button(
@@ -366,7 +367,7 @@ class PlayerView(discord.ui.View):
     )
     async def pause_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is not None:
             await player.toggle_pause()
 
@@ -375,7 +376,7 @@ class PlayerView(discord.ui.View):
     )
     async def next_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is not None:
             await player.skip()
 
@@ -386,7 +387,7 @@ class PlayerView(discord.ui.View):
         # без лишних сообщений: режим повтора виден в эмбеде плеера,
         # который обновляется этим же нажатием
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is not None:
             await player.cycle_repeat()
 
@@ -396,7 +397,7 @@ class PlayerView(discord.ui.View):
     async def stop_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         await self._service.cleanup(
-            interaction.guild_id, self._p(interaction.guild_id, "music.cleanup_stop_button")
+            guild_of(interaction).id, self._p(guild_of(interaction).id, "music.cleanup_stop_button")
         )
 
     # --- ряд 1: громкость ---
@@ -406,7 +407,7 @@ class PlayerView(discord.ui.View):
     )
     async def volume_down_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is not None:
             await player.change_volume(-0.1)
 
@@ -415,7 +416,7 @@ class PlayerView(discord.ui.View):
     )
     async def volume_up_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is not None:
             await player.change_volume(+0.1)
 
@@ -423,12 +424,12 @@ class PlayerView(discord.ui.View):
         emoji="🔀", style=discord.ButtonStyle.secondary, row=1, custom_id="music:shuffle"
     )
     async def shuffle_button(self, interaction: discord.Interaction, _: discord.ui.Button):
-        player = self._service.get_player(interaction.guild_id)
+        player = self._service.get_player(guild_of(interaction).id)
         if player is None:
             return
         if len(player.queue) < 2:
             await interaction.response.send_message(
-                self._p(interaction.guild_id, "music.shuffle_empty_player"), ephemeral=True
+                self._p(guild_of(interaction).id, "music.shuffle_empty_player"), ephemeral=True
             )
             return
         await interaction.response.defer()

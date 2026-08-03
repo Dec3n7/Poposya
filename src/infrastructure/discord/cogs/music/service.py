@@ -13,7 +13,7 @@ import logging
 import random
 import time
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 from discord.ext import commands
@@ -34,6 +34,7 @@ from src.infrastructure.discord.cogs.music.session import (
     GuildMusicSession,
     delete_message_quiet,
 )
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.discord.voice import DiscordVoiceConnection
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -124,16 +125,17 @@ class MusicPlayerService:
         session = await self._get_or_create_session(interaction)
         if session is None:
             return False
-        self.cancel_idle(interaction.guild_id)
-        await self._ensure_message(interaction.guild_id, interaction.channel)
+        gid = cast(int, interaction.guild_id)  # сессия создана -> guild есть
+        self.cancel_idle(gid)
+        await self._ensure_message(gid, cast(discord.abc.Messageable, interaction.channel))
         await session.player.enqueue(tracks, front=to_front)
         return True
 
     async def _get_or_create_session(
         self, interaction: discord.Interaction
     ) -> GuildMusicSession | None:
-        member = interaction.user
-        guild = interaction.guild
+        member = member_of(interaction)
+        guild = guild_of(interaction)
         if not member.voice or not member.voice.channel:
             await interaction.followup.send(
                 self._p(guild.id, "music.no_longer_in_voice"), ephemeral=True
@@ -156,11 +158,11 @@ class MusicPlayerService:
                     self._p(guild.id, "music.already_playing_elsewhere"), ephemeral=True
                 )
                 return None
-            await vc.move_to(channel)
+            await cast(discord.VoiceClient, vc).move_to(channel)
 
         session = self.sessions.get(guild.id)
         if session is None:
-            voice = DiscordVoiceConnection(vc, self.settings.ffmpeg_path)
+            voice = DiscordVoiceConnection(cast(discord.VoiceClient, vc), self.settings.ffmpeg_path)
             player = GuildPlayer(
                 guild_id=guild.id,
                 audio_source=self.audio,
@@ -312,7 +314,9 @@ class MusicPlayerService:
         pool = phrases if isinstance(phrases, list) and phrases else [""]
         text = random.choice(pool).format(title=trim(track.title, 100))
         try:
-            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
+            await cast(discord.abc.Messageable, channel).send(
+                text, allowed_mentions=discord.AllowedMentions.none()
+            )
         except discord.HTTPException:
             pass
 
@@ -400,7 +404,7 @@ class MusicPlayerService:
             )
             if channel is not None:
                 try:
-                    prompt = await channel.send(
+                    prompt = await cast(discord.abc.Messageable, channel).send(
                         self._p(guild_id, "music.idle_prompt", minutes=max(1, warn // 60))
                     )
                     session = self.sessions.get(guild_id)
@@ -425,7 +429,7 @@ class MusicPlayerService:
         guild = member.guild
         if guild.id not in self.sessions:
             return
-        if member.id == self.bot.user.id:
+        if member.id == cast(discord.ClientUser, self.bot.user).id:
             # бота отключили — прибираем; переместили — переоценим новый канал ниже
             if after.channel is None:
                 await self.cleanup(guild.id, self._p(guild.id, "music.cleanup_kicked"))
@@ -435,7 +439,7 @@ class MusicPlayerService:
         vc = guild.voice_client
         if vc is None or vc.channel is None:
             return
-        humans = [m for m in vc.channel.members if not m.bot]
+        humans = [m for m in cast(discord.VoiceChannel, vc.channel).members if not m.bot]
         if humans:
             self._cancel_empty_grace(guild.id)  # кто-то есть — отменяем выход
             return
@@ -463,7 +467,7 @@ class MusicPlayerService:
         vc = guild.voice_client if guild is not None else None
         if vc is None or vc.channel is None:
             return
-        if not [m for m in vc.channel.members if not m.bot]:
+        if not [m for m in cast(discord.VoiceChannel, vc.channel).members if not m.bot]:
             await self.cleanup(guild_id, self._p(guild_id, "music.cleanup_all_left"))
 
     # --- завершение ---
