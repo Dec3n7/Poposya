@@ -4,7 +4,7 @@ import random
 import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 
 import discord
 from discord import app_commands
@@ -17,6 +17,7 @@ from src.config import Settings
 from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ class FunCog(commands.Cog):
             "Развлечения: цикл напоминаний запущен (проверка каждые %d с)", _REMINDER_CHECK_INTERVAL
         )
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._reminder_task is not None:
             self._reminder_task.cancel()
 
@@ -110,7 +111,7 @@ class FunCog(commands.Cog):
         sides: app_commands.Range[int, 2, 1000] = 6,
         users: str | None = None,
     ) -> None:
-        gid = interaction.guild_id
+        gid = cast(int, interaction.guild_id)  # без guild_only: в ЛС None (пер-серверных фраз нет)
         mentioned: list[discord.Member] = []
         had_bots = False
         if users and interaction.guild is not None:
@@ -124,7 +125,7 @@ class FunCog(commands.Cog):
                 mentioned.append(member)
 
         players: list[discord.Member] = []
-        for member in (interaction.user, *mentioned):
+        for member in (member_of(interaction), *mentioned):
             if member not in players:
                 players.append(member)
         if len(players) > self._DICE_MAX_PLAYERS:
@@ -173,12 +174,12 @@ class FunCog(commands.Cog):
 
     @app_commands.command(name="coinflip", description="Подбросить монетку")
     async def coinflip(self, interaction: discord.Interaction) -> None:
-        side = await self._pick(interaction.guild_id, "fun.coin_sides")
+        side = await self._pick(cast(int, interaction.guild_id), "fun.coin_sides")
         await interaction.response.send_message(f"**{side}**")
 
     @app_commands.command(name="topic", description="Случайная тема для разговора")
     async def topic(self, interaction: discord.Interaction) -> None:
-        topic = await self._pick(interaction.guild_id, "fun.topics")
+        topic = await self._pick(cast(int, interaction.guild_id), "fun.topics")
         await interaction.response.send_message(f"💬 {topic}")
 
     # --- профиль глазами Попоси ---
@@ -268,7 +269,8 @@ class FunCog(commands.Cog):
     async def profile(
         self, interaction: discord.Interaction, user: discord.Member | None = None
     ) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         target = user or interaction.user
         if target.bot:
             await interaction.response.send_message(
@@ -375,7 +377,7 @@ class FunCog(commands.Cog):
         # defer сразу: у Discord лимит 3 секунды на первый ответ,
         # а запись в БД на холодном старте может не успеть (ошибка 10062)
         await interaction.response.defer(ephemeral=True)
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         ok = await self.relationship.set_birthday.execute(
             interaction.user.id, gid, day, month
         )
@@ -394,7 +396,7 @@ class FunCog(commands.Cog):
     @app_commands.command(name="rules", description="Опубликовать правила сервера (разово)")
     @app_commands.default_permissions(administrator=True)
     async def rules(self, interaction: discord.Interaction) -> None:
-        gid = interaction.guild_id
+        gid = cast(int, interaction.guild_id)  # без guild_only: в ЛС None
         embed = discord.Embed(
             title=self._p(gid, "fun.rules_title"),
             description=self._p(gid, "fun.rules_text"),
@@ -405,10 +407,10 @@ class FunCog(commands.Cog):
     @app_commands.command(name="serverstats", description="Статистика сервера")
     @app_commands.guild_only()
     async def serverstats(self, interaction: discord.Interaction) -> None:
-        guild = interaction.guild
+        guild = guild_of(interaction)
         gid = guild.id
         humans = sum(1 for m in guild.members if not m.bot)
-        bots = guild.member_count - humans
+        bots = (guild.member_count or 0) - humans
         embed = discord.Embed(title=f"📊 {guild.name}", color=accent(gid))
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
@@ -456,7 +458,8 @@ class FunCog(commands.Cog):
         text: str,
         mode: Literal["открыто", "анонимно"] = "открыто",
     ) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
         if user.bot:
             await interaction.response.send_message(
                 self._p(gid, "fun.send_bot"), ephemeral=True
@@ -478,13 +481,13 @@ class FunCog(commands.Cog):
 
         text = text[:1500]
         if mode == "анонимно":
-            dm_text = self._p(gid, "fun.send_dm_anon", guild=interaction.guild.name, text=text)
+            dm_text = self._p(gid, "fun.send_dm_anon", guild=guild.name, text=text)
         else:
             dm_text = self._p(
                 gid,
                 "fun.send_dm_open",
                 sender=interaction.user.display_name,
-                guild=interaction.guild.name,
+                guild=guild.name,
                 text=text,
             )
         try:
@@ -500,10 +503,10 @@ class FunCog(commands.Cog):
         )
         # анонимность — для получателя; модерация всегда видит отправителя
         if self.settings.log_channel:
-            log_channel = interaction.guild.get_channel(self.settings.log_channel)
+            log_channel = guild.get_channel(self.settings.log_channel)
             if log_channel is not None:
                 try:
-                    await log_channel.send(
+                    await cast(discord.abc.Messageable, log_channel).send(
                         f"📨 /send ({mode}): {interaction.user} → {user}: {text[:200]}",
                         allowed_mentions=discord.AllowedMentions.none(),
                     )
@@ -519,7 +522,7 @@ class FunCog(commands.Cog):
         minutes: app_commands.Range[int, 1, 10080],
         text: str,
     ) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         due_at = datetime.now(UTC) + timedelta(minutes=minutes)
         await self.activity.add_reminder.execute(
             interaction.user.id, gid, text[:500], due_at
