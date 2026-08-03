@@ -5,9 +5,11 @@
 хендлеры), а сюда переехали сценарии, которые запускает планировщик. Вью,
 которым нужна ссылка на ког, создаются через фабрики — сервис не знает о коге."""
 
+import functools
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 
@@ -62,7 +64,7 @@ class CinemaService:
         if channel is None:
             return
         try:
-            message = await channel.fetch_message(message_id)
+            message = await cast(discord.abc.Messageable, channel).fetch_message(message_id)
             await message.edit(view=None)
         except discord.HTTPException:
             pass
@@ -78,14 +80,17 @@ class CinemaService:
         channel = self._bot.get_channel(night.channel_id)
         if channel is None:
             return
+        messageable = cast(discord.abc.Messageable, channel)
         gid = night.guild_id
         if result.status == "no_votes":
             try:
-                await channel.send(self._p(gid, "cinema.poll_no_votes"))
+                await messageable.send(self._p(gid, "cinema.poll_no_votes"))
             except discord.HTTPException:
                 pass
             return
         winner = result.winner
+        if winner is None:  # статус != no_votes -> победитель есть; страховка для типов
+            return
         comment = ""
         if self._chat is not None:
             try:
@@ -121,7 +126,7 @@ class CinemaService:
         if winner.poster_url:
             embed.set_thumbnail(url=winner.poster_url)
         try:
-            message = await channel.send(
+            message = await messageable.send(
                 content=comment[:1500] or None,
                 embed=embed,
                 view=self._watched_view(),
@@ -130,9 +135,11 @@ class CinemaService:
         except discord.HTTPException:
             logger.warning("Не удалось объявить победителя киновечера", exc_info=True)
             return
-        await self._cinema.register_message.execute("winner", night.id, channel.id, message.id)
+        await self._cinema.register_message.execute(
+            "winner", cast(int, night.id), channel.id, message.id
+        )
         self._scheduler.schedule(
-            f"remind:{night.id}", night.scheduled_at, lambda n=night: self.remind(n)
+            f"remind:{night.id}", night.scheduled_at, functools.partial(self.remind, night)
         )
 
     async def remind(self, night: MovieNight) -> None:
@@ -146,7 +153,7 @@ class CinemaService:
         if channel is None:
             return
         try:
-            await channel.send(
+            await cast(discord.abc.Messageable, channel).send(
                 self._p(night.guild_id, "cinema.remind", title=_trim(_title_of(winner), 120))
             )
         except discord.HTTPException:
@@ -160,7 +167,9 @@ class CinemaService:
         gid = entry.guild_id
         embed = discord.Embed(
             title=self._p(gid, "cinema.rating_title", title=_trim(_title_of(entry), 200)),
-            description=self._p(gid, "cinema.rating_body", when=_ts(entry.rating_ends_at)),
+            description=self._p(
+                gid, "cinema.rating_body", when=_ts(cast(datetime, entry.rating_ends_at))
+            ),
             color=accent(gid),
         )
         if entry.poster_url:
@@ -172,12 +181,12 @@ class CinemaService:
             logger.warning("Не удалось открыть сбор оценок", exc_info=True)
             return
         await self._cinema.register_message.execute(
-            "rating", entry.id, message.channel.id, message.id
+            "rating", cast(int, entry.id), message.channel.id, message.id
         )
         self._scheduler.schedule(
             f"rating:{entry.id}",
-            entry.rating_ends_at,
-            lambda eid=entry.id: self.finalize_rating(eid),
+            cast(datetime, entry.rating_ends_at),
+            functools.partial(self.finalize_rating, cast(int, entry.id)),
         )
 
     async def _poposya_verdict(self, entry: MovieEntry, guild_id: int) -> tuple[int | None, str]:
@@ -226,7 +235,7 @@ class CinemaService:
         if forum_link is not None:
             if channel is not None:
                 try:
-                    await channel.send(
+                    await cast(discord.abc.Messageable, channel).send(
                         self._p(
                             final.guild_id,
                             "cinema.finalized_forum",
@@ -243,7 +252,7 @@ class CinemaService:
         if channel is None:
             return
         try:
-            summary_message = await channel.send(embed=embed)
+            summary_message = await cast(discord.abc.Messageable, channel).send(embed=embed)
         except discord.HTTPException:
             logger.warning("Не удалось отправить итоги оценок", exc_info=True)
             return

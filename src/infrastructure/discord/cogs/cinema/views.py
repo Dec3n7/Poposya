@@ -4,12 +4,13 @@
 Все persistent-view (timeout=None) переживают рестарт: custom_id стабилен,
 а привязку к сообщению ког восстанавливает из БД в on_ready."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import MovieInfo
+from src.infrastructure.discord.interaction_ctx import guild_of
 
 from .formatting import _title_of, _trim
 
@@ -31,19 +32,19 @@ class MoviePickView(discord.ui.View):
             )
             for i, info in enumerate(results)
         ]
-        select = discord.ui.Select(placeholder="Какой из них?", options=options)
+        select: discord.ui.Select = discord.ui.Select(placeholder="Какой из них?", options=options)
 
         async def on_pick(interaction: discord.Interaction) -> None:
             info = results[int(select.values[0])]
             content = str(
                 cog.persona.phrase(
-                    interaction.guild_id, "cinema.pick_taken", title=_trim(info.title, 100)
+                    guild_of(interaction).id, "cinema.pick_taken", title=_trim(info.title, 100)
                 )
             )
             await interaction.response.edit_message(content=content, view=None)
             await cog.add_entry(interaction, info)
 
-        select.callback = on_pick
+        select.callback = on_pick  # type: ignore[method-assign]  # идиома discord.ui
         self.add_item(select)
 
 
@@ -85,7 +86,7 @@ class CinemaWatchedView(discord.ui.View):
 class ReviewModal(discord.ui.Modal, title="Твой отзыв о фильме"):
     """Окно-форма для текстовой рецензии зрителя."""
 
-    review = discord.ui.TextInput(
+    review: discord.ui.TextInput = discord.ui.TextInput(
         label="Рецензия",
         style=discord.TextStyle.paragraph,
         placeholder="Пара фраз: понравилось или нет и почему…",
@@ -109,22 +110,22 @@ class CinemaRatingView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         for score in range(1, 11):
-            button = discord.ui.Button(
+            button: discord.ui.Button = discord.ui.Button(
                 label=str(score),
                 style=discord.ButtonStyle.secondary,
                 row=0 if score <= 5 else 1,
                 custom_id=f"cinema:rate:{score}",
             )
-            button.callback = self._make_callback(score)
+            button.callback = self._make_callback(score)  # type: ignore[method-assign]
             self.add_item(button)
-        review_btn = discord.ui.Button(
+        review_btn: discord.ui.Button = discord.ui.Button(
             label="Отзыв",
             emoji="✍️",
             style=discord.ButtonStyle.primary,
             row=2,
             custom_id="cinema:review",
         )
-        review_btn.callback = self._open_review
+        review_btn.callback = self._open_review  # type: ignore[method-assign]
         self.add_item(review_btn)
 
     def _make_callback(self, score: int):
@@ -136,7 +137,9 @@ class CinemaRatingView(discord.ui.View):
     async def _open_review(self, interaction: discord.Interaction) -> None:
         # message-id карточки оценок берём из интеракции нажатия — в сабмите
         # модалки его уже не будет
-        await interaction.response.send_modal(ReviewModal(self.cog, interaction.message.id))
+        await interaction.response.send_modal(
+            ReviewModal(self.cog, cast(discord.Message, interaction.message).id)
+        )
 
 
 class NightPollView(discord.ui.View):
@@ -149,7 +152,7 @@ class NightPollView(discord.ui.View):
             discord.SelectOption(label=_trim(_title_of(entry), 95), value=str(entry.id), emoji="🎬")
             for entry in candidates
         ]
-        select = discord.ui.Select(
+        select: discord.ui.Select = discord.ui.Select(
             placeholder="Твой голос…",
             options=options,
             custom_id=f"cinema:poll:{night_id}",
@@ -158,5 +161,5 @@ class NightPollView(discord.ui.View):
         async def on_vote(interaction: discord.Interaction) -> None:
             await cog.handle_night_vote(interaction, int(select.values[0]))
 
-        select.callback = on_vote
+        select.callback = on_vote  # type: ignore[method-assign]  # идиома discord.ui
         self.add_item(select)

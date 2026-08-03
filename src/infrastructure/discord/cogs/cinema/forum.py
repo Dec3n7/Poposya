@@ -4,6 +4,7 @@
 
 import logging
 from collections.abc import Callable
+from typing import cast
 
 import discord
 
@@ -75,7 +76,7 @@ class CinemaForum:
         forum_id = self._cfg(final.guild_id, "cinema_forum_channel")
         if not forum_id:
             return None
-        target = self._bot.get_channel(forum_id)
+        target = self._bot.get_channel(cast(int, forum_id))
         if target is None:
             logger.warning("Форум киноклуба не найден", extra={"channel_id": forum_id})
             return None
@@ -88,14 +89,14 @@ class CinemaForum:
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
                 thread = created.thread
-                await self._post_ratings_into(thread, final.id)
+                await self._post_ratings_into(thread, cast(int, final.id))
                 return thread.mention
             if isinstance(target, discord.TextChannel):
                 # запасной вариант, если указали обычный текстовый канал
                 message = await target.send(embed=embed)
                 try:
                     thread = await message.create_thread(name=name)
-                    await self._post_ratings_into(thread, final.id)
+                    await self._post_ratings_into(thread, cast(int, final.id))
                 except discord.HTTPException:
                     pass
                 return message.jump_url
@@ -116,7 +117,7 @@ class CinemaForum:
     ) -> None:
         """Собирает отзывы зрителей в ветку под итоговым сообщением (фолбэк,
         когда форум не настроен)."""
-        reviews = await self._cinema.list_reviews.execute(entry.id)
+        reviews = await self._cinema.list_reviews.execute(cast(int, entry.id))
         if not reviews:
             return
         try:
