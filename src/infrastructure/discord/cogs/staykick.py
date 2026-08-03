@@ -8,6 +8,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -47,9 +48,9 @@ class _StayButton(discord.ui.DynamicItem[discord.ui.Button], template=r"sk:stay:
         return cls(int(match["gid"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("StayKickCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("StayKickCog")
         if cog is not None:
-            await cog.on_stay(interaction, self.guild_id)
+            await cog.on_stay(interaction, self.guild_id)  # type: ignore[attr-defined]
 
 
 class _LeaveButton(discord.ui.DynamicItem[discord.ui.Button], template=r"sk:leave:(?P<gid>\d+)"):
@@ -68,9 +69,9 @@ class _LeaveButton(discord.ui.DynamicItem[discord.ui.Button], template=r"sk:leav
         return cls(int(match["gid"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        cog = interaction.client.get_cog("StayKickCog")
+        cog = cast(commands.Bot, interaction.client).get_cog("StayKickCog")
         if cog is not None:
-            await cog.on_leave(interaction, self.guild_id)
+            await cog.on_leave(interaction, self.guild_id)  # type: ignore[attr-defined]
 
 
 def _make_view(guild_id: int) -> discord.ui.View:
@@ -108,7 +109,7 @@ class StayKickCog(commands.Cog):
         # клики по кнопкам переживают рестарт: регистрируем динамические items
         self.bot.add_dynamic_items(_StayButton, _LeaveButton)
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._loop_task is not None:
             self._loop_task.cancel()
 

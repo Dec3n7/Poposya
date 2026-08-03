@@ -20,6 +20,7 @@ from src.config import Settings
 from src.domain.banwatch.entities import ServerBan
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class BanwatchCog(commands.Cog):
         # гейтим только показ (/checkuser) — сбор банов идёт всегда
         return await block_if_module_off(interaction, self.settings, self.gs, "banwatch_enabled")
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         for task in self._tasks:
             task.cancel()
 
@@ -145,13 +146,13 @@ class BanwatchCog(commands.Cog):
     @app_commands.guild_only()
     async def checkuser(self, interaction: discord.Interaction, user: discord.User) -> None:
         await interaction.response.defer(ephemeral=True)
-        report = await self.banwatch.check_user.execute(user.id, interaction.guild_id)
+        report = await self.banwatch.check_user.execute(user.id, guild_of(interaction).id)
         if report.count == 0:
             await interaction.followup.send(
                 f"На серверах бота {user.mention} нигде не забанен.", ephemeral=True
             )
             return
-        threshold = int(self._cfg(interaction.guild_id, "banwatch_threshold"))
+        threshold = int(self._cfg(guild_of(interaction).id, "banwatch_threshold"))
         over = " — порог пройден ⚠️" if report.count >= threshold else ""
         embed = discord.Embed(
             title=_trim(f"Бан-история: {user}", 240),
