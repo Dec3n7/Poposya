@@ -74,7 +74,9 @@ def _load_avatar(data: bytes | None, size: int) -> Image.Image | None:
     if not data:
         return None
     try:
-        return Image.open(io.BytesIO(data)).convert("RGBA").resize((size, size), Image.LANCZOS)
+        return Image.open(io.BytesIO(data)).convert("RGBA").resize(
+            (size, size), Image.Resampling.LANCZOS
+        )
     except Exception:
         return None
 

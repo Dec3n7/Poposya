@@ -134,7 +134,7 @@ class PresenceService:
         return _ACTIVITIES
 
     async def _apply(self, activity: discord.BaseActivity) -> None:
-        self._shown = activity.name
+        self._shown = getattr(activity, "name", None)  # name есть у Activity/Game, не у базы
         try:
             await self._bot.change_presence(activity=activity)
         except Exception:

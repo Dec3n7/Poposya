@@ -35,7 +35,7 @@ class DiscordVoiceConnection(IVoiceConnection):
         # reconnect-флаги + HTTP-заголовки (User-Agent) — только для HTTP-стрима;
         # локальному файлу из кэша они не нужны (и дали бы предупреждения ffmpeg)
         is_remote = stream_url.startswith(("http://", "https://"))
-        parts = []
+        parts: list[str] = []
         if is_remote:
             parts.extend((_FFMPEG_BEFORE, _headers_arg(headers)))
         if seek_seconds > 0:

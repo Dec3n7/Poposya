@@ -1,5 +1,6 @@
 import logging
 import uuid
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -53,7 +54,7 @@ async def on_app_command_error(
 ) -> None:
     """Единая сеть безопасности для всех слеш-команд. Коги валидируют свои
     ожидаемые случаи сами; сюда долетает то, что они не поймали."""
-    friendly = _friendly_message(interaction.guild_id, error)
+    friendly = _friendly_message(cast(int, interaction.guild_id), error)
     if friendly is not None:
         await _reply(interaction, friendly)
         return
@@ -77,7 +78,10 @@ async def on_app_command_error(
                 "guild_id": interaction.guild_id,
             },
         )
-    await _reply(interaction, str(_persona.phrase(interaction.guild_id, "errors.internal", code=code)))
+    await _reply(
+        interaction,
+        str(_persona.phrase(cast(int, interaction.guild_id), "errors.internal", code=code)),
+    )
 
 
 def setup_error_handler(bot: commands.Bot, persona=None) -> None:
@@ -86,4 +90,4 @@ def setup_error_handler(bot: commands.Bot, persona=None) -> None:
     global _persona
     if persona is not None:
         _persona = persona
-    bot.tree.on_error = on_app_command_error
+    bot.tree.on_error = on_app_command_error  # type: ignore[method-assign]  # идиома discord.py

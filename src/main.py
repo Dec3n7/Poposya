@@ -1,17 +1,30 @@
 import asyncio
 import logging
 import time
+from typing import cast
 
 import discord
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.application.di.root_container import build_root_container
+from src.application.interfaces.ai_provider import IAIProvider
 from src.config import Settings
+
+# main — композиционный корень: поля RootContainer типизированы как object,
+# чтобы application не тянул infrastructure (ARCHITECTURE.md); здесь сужаем к
+# реальным типам через cast, т.к. entrypoint уже на уровне infrastructure
 from src.infrastructure.db.backup import make_backup_service
 from src.infrastructure.diagnostics import log_boot_summary, probe_dependencies
 from src.infrastructure.discord.client import PoposyaBot
+from src.infrastructure.events.outbox import OutboxDispatcher
+from src.infrastructure.guild_settings import GuildSettingsService
+from src.infrastructure.listener_health import ListenerHealth
 from src.infrastructure.logging.error_counter import install_error_counter
 from src.infrastructure.logging.json_formatter import setup_logging
+from src.infrastructure.persona_listener import PersonaChangeListener
+from src.infrastructure.persona_service import PersonaService
+from src.infrastructure.settings_listener import SettingsChangeListener
 from src.infrastructure.web.app import HealthChecker, measure_event_loop_lag, start_health_server
 
 logger = logging.getLogger(__name__)
@@ -103,7 +116,7 @@ def _background_tasks_metrics(tasks: dict[str, asyncio.Task]):
 
 def _listeners_metrics(listeners: dict[str, object]):
     async def collect() -> dict:
-        return {name: obj.health_snapshot() for name, obj in listeners.items()}
+        return {name: cast(ListenerHealth, obj).health_snapshot() for name, obj in listeners.items()}
 
     return collect
 
@@ -122,7 +135,7 @@ async def _runtime_metrics() -> dict:
 
 
 async def run() -> None:
-    settings = Settings()
+    settings = Settings()  # type: ignore[call-arg]  # pydantic-settings читает поля из env
     setup_logging(settings.log_level, settings.log_format, settings.log_file)
     # строго после setup_logging: он чистит root.handlers
     error_counter = install_error_counter()
@@ -140,11 +153,17 @@ async def run() -> None:
     await probe_dependencies(settings)
 
     container = build_root_container(settings)
+    # сужаем object-поля контейнера к реальным типам (см. импорт-блок выше)
+    guild_settings = cast(GuildSettingsService, container.guild_settings)
+    persona = cast(PersonaService, container.persona)
+    engine = cast(AsyncEngine, container.engine)
+    session_factory = cast("async_sessionmaker[AsyncSession]", container.session_factory)
+    outbox_dispatcher = cast(OutboxDispatcher, container.outbox_dispatcher)
     # пер-гильдийные настройки (/config) — поднять переопределения в память
-    await container.guild_settings.load_all()
+    await guild_settings.load_all()
     # персоны (текст/личность бота) — поднять в память (в проде сид «Попоси» уже
     # в БД из миграции 0031; иначе load_all создаст дефолт-строку идемпотентно)
-    await container.persona.load_all()
+    await persona.load_all()
     bot = PoposyaBot(container)
 
     # командный мост панель→бот: панель кладёт команду в bot_commands + NOTIFY,
@@ -154,7 +173,7 @@ async def run() -> None:
 
     command_executor = DiscordCommandExecutor(bot, container.moderation)
     command_listener = make_command_listener(
-        settings.database_url, container.session_factory, command_executor.execute
+        settings.database_url, session_factory, command_executor.execute
     )
 
     # реестр фоновых задач: заполняется ниже, но метрика ссылается на него уже
@@ -172,7 +191,7 @@ async def run() -> None:
     health.register_metric("gateway", lambda: _as_async(bot.gateway_stats()))
     health.register_metric("cogs", lambda: _as_async(bot.cogs_stats()))
     health.register_metric("database", db_probe.metrics)
-    health.register_metric("outbox", container.outbox_dispatcher.backlog_stats)
+    health.register_metric("outbox", outbox_dispatcher.backlog_stats)
     health.register_metric("background_tasks", _background_tasks_metrics(background))
     health.register_metric("listeners", _listeners_metrics(listeners))
     health.register_metric("errors", lambda: _as_async(error_counter.snapshot()))
@@ -188,22 +207,18 @@ async def run() -> None:
     # умершую задачу, а не сообщать «одна из пяти»
     if backup is not None and backup.enabled:
         background["backup"] = asyncio.create_task(backup.run_forever())
-    background["outbox-dispatcher"] = asyncio.create_task(
-        container.outbox_dispatcher.run_forever()
-    )
+    background["outbox-dispatcher"] = asyncio.create_task(outbox_dispatcher.run_forever())
     # межпроцессная инвалидация кэша настроек (Postgres LISTEN/NOTIFY); на SQLite
     # листенера нет (None), там бот — единственный писатель
     if container.settings_listener is not None:
-        background["settings-listener"] = asyncio.create_task(
-            container.settings_listener.run_forever()
-        )
-        listeners["settings"] = container.settings_listener
+        settings_listener = cast(SettingsChangeListener, container.settings_listener)
+        background["settings-listener"] = asyncio.create_task(settings_listener.run_forever())
+        listeners["settings"] = settings_listener
     # межпроцессная инвалидация кэша персон (панель изменила персону → бот перечитал)
     if container.persona_listener is not None:
-        background["persona-listener"] = asyncio.create_task(
-            container.persona_listener.run_forever()
-        )
-        listeners["persona"] = container.persona_listener
+        persona_listener = cast(PersonaChangeListener, container.persona_listener)
+        background["persona-listener"] = asyncio.create_task(persona_listener.run_forever())
+        listeners["persona"] = persona_listener
     # командный мост (Postgres): исполняет команды панели в Discord
     if command_listener is not None:
         background["command-listener"] = asyncio.create_task(command_listener.run_forever())
@@ -242,10 +257,10 @@ async def run() -> None:
             task.cancel()
         await health_runner.cleanup()
         if container.ai_provider is not None:
-            await container.ai_provider.close()
+            await cast(IAIProvider, container.ai_provider).close()
         if container.chime_provider is not None:
-            await container.chime_provider.close()
-        await container.engine.dispose()
+            await cast(IAIProvider, container.chime_provider).close()
+        await engine.dispose()
 
 
 def main() -> None:

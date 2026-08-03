@@ -1,11 +1,15 @@
 import logging
 import time
 from collections import deque
+from typing import cast
 
 import discord
 from discord.ext import commands
 
 from src.application.di.root_container import RootContainer
+from src.application.staykick.di import StayKickContainer
+from src.infrastructure.guild_settings import GuildSettingsService
+from src.infrastructure.persona_service import PersonaService
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +85,12 @@ class PoposyaBot(commands.Bot):
         )
         mood = MoodTracker()
 
-        gs = self.container.guild_settings
+        gs = cast(GuildSettingsService, self.container.guild_settings)
         music_cog = MusicCog(self, self.container.music, gs, persona=self.container.persona)
         await self.add_cog(music_cog)
         # presence из персоны: строки статуса берутся из библиотек, а по NOTIFY
         # (панель сменила персону/присвоение) статус переустанавливается сразу
-        persona = self.container.persona
+        persona = cast(PersonaService, self.container.persona)
         music_cog.presence.set_lines_provider(persona.presence_lines)
         persona.add_reload_hook(music_cog.presence.refresh)
         await self.add_cog(
@@ -172,7 +176,7 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
-        await self.add_cog(ConfigCog(self, self.container.guild_settings, persona=persona))
+        await self.add_cog(ConfigCog(self, gs, persona=persona))
         await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
         await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))
         await self.add_cog(BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona))
@@ -190,7 +194,11 @@ class PoposyaBot(commands.Bot):
         )
         await self.add_cog(
             StayKickCog(
-                self, self.container.staykick, self.container.settings, gs, persona=persona
+                self,
+                cast(StayKickContainer, self.container.staykick),
+                self.container.settings,
+                gs,
+                persona=persona,
             )
         )
         await self.add_cog(

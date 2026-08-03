@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import aiohttp
@@ -152,7 +152,7 @@ async def probe_dependencies(
         def session_factory() -> aiohttp.ClientSession:
             return aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds))
 
-    probes: list[asyncio.Future] = []
+    probes: list[Awaitable[ProbeResult]] = []
     if settings.groq_api_key:
         probes.append(
             _probe(

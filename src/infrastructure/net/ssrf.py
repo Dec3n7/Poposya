@@ -56,5 +56,5 @@ async def assert_public_url(url: str) -> None:
         infos = await loop.getaddrinfo(host, None)
     except socket.gaierror as exc:
         raise SsrfError("Не удалось разрешить адрес.") from exc
-    if not infos or not all(is_public_ip(info[4][0]) for info in infos):
+    if not infos or not all(is_public_ip(str(info[4][0])) for info in infos):
         raise SsrfError("Адрес ведёт во внутреннюю сеть — запрещено.")

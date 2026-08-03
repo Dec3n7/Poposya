@@ -29,6 +29,7 @@ from src.application.guild_config.schema import (
 )
 from src.application.interfaces.settings_provider import ISettingsProvider
 from src.config import Settings
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.guild import GuildSettingModel
 
 logger = logging.getLogger(__name__)
@@ -610,12 +611,12 @@ class GuildSettingsService(ISettingsProvider):
                     GuildSettingModel.key == key,
                 )
             )
-            if result.rowcount > 0:
+            if rows_affected(result) > 0:
                 await self._notify_change(session, guild_id)
             await session.commit()
         self._cache.get(guild_id, {}).pop(key, None)
         self._resolved.pop(guild_id, None)
-        return result.rowcount > 0
+        return rows_affected(result) > 0
 
     # --- внутреннее ---
 

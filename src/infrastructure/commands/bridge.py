@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.commands import BotCommandModel
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,7 @@ class CommandProcessor:
                 .where(BotCommandModel.id == cmd_id, BotCommandModel.status == PENDING)
                 .values(status=RUNNING, updated_at=_now())
             )
-            if result.rowcount == 0:
+            if rows_affected(result) == 0:
                 await session.rollback()
                 return None
             row = await session.get(BotCommandModel, cmd_id)

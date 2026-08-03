@@ -39,7 +39,8 @@ class ResilientAIProvider(IAIProvider):
                     self._attempts,
                 )
                 await asyncio.sleep(delay)
-        raise last_error  # недостижимо, но успокаивает типизацию
+        assert last_error is not None  # цикл всегда присваивает перед выходом
+        raise last_error
 
     async def close(self) -> None:
         await self._inner.close()

@@ -13,6 +13,7 @@ import base64
 import binascii
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import aiohttp
 import discord
@@ -141,7 +142,7 @@ class DiscordCommandExecutor:
             user = await self._bot.fetch_user(user_id)
         except discord.HTTPException:
             return
-        await cog.notify_punishment(guild, user, key, action, **vars)
+        await cog.notify_punishment(guild, user, key, action, **vars)  # type: ignore[attr-defined]
 
     async def _tempban(self, guild: discord.Guild, command: Command) -> str:
         p = command.payload
@@ -228,7 +229,9 @@ class DiscordCommandExecutor:
         if cog is None:
             raise CommandError("Модуль апелляций недоступен.")
         appeal_id = int(command.payload["appeal_id"])
-        return await cog.resolve_from_panel(guild, appeal_id, approve, command.requested_by)
+        return await cog.resolve_from_panel(  # type: ignore[attr-defined]
+            guild, appeal_id, approve, command.requested_by
+        )
 
     async def _member(self, guild: discord.Guild, user_id: int) -> discord.Member:
         member = guild.get_member(user_id)
@@ -442,7 +445,7 @@ class DiscordCommandExecutor:
         if raw is None or raw == "":
             return discord.Colour.default()
         try:
-            value = int(raw)
+            value = int(cast(str, raw))
         except (TypeError, ValueError) as exc:
             raise CommandError("Цвет должен быть числом.") from exc
         if not 0 <= value <= 0xFFFFFF:
@@ -514,7 +517,10 @@ class DiscordCommandExecutor:
         # верх списка (roles[0]) — самый высокий слот; идём с конца к началу
         positions = dict(zip(reversed(roles), slots, strict=True))
         try:
-            await guild.edit_role_positions(positions=positions, reason="Панель: порядок ролей")
+            await guild.edit_role_positions(
+                positions=positions,  # type: ignore[arg-type]  # Role <: Snowflake, dict инвариантен
+                reason="Панель: порядок ролей",
+            )
         except discord.Forbidden as exc:
             raise CommandError("Нет права Manage Roles.") from exc
         return "Порядок ролей обновлён."
