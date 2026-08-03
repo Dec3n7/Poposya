@@ -8,6 +8,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -72,7 +73,7 @@ class AppealModal(discord.ui.Modal):
         super().__init__(title=title[:45])
         self._guild_id = guild_id
         self._action = action
-        self._text = discord.ui.TextInput(
+        self._text: discord.ui.TextInput = discord.ui.TextInput(
             label=field_label[:45],
             style=discord.TextStyle.paragraph,
             max_length=1000,
@@ -186,8 +187,8 @@ async def _post_review(client: discord.Client, appeal: Appeal) -> None:
         embed.add_field(name="Причина наказания", value=appeal.original_reason[:1024], inline=False)
     embed.set_footer(text=f"Апелляция #{appeal.id}")
     view = discord.ui.View(timeout=None)
-    view.add_item(AppealDecision(appeal.id, True, appeal.action))
-    view.add_item(AppealDecision(appeal.id, False, appeal.action))
+    view.add_item(AppealDecision(cast(int, appeal.id), True, appeal.action))
+    view.add_item(AppealDecision(cast(int, appeal.id), False, appeal.action))
     await channel.send(embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
 
 
@@ -282,9 +283,12 @@ class AppealsCog(commands.Cog):
             return "Эту апелляцию уже разобрали." if result.error == "already" else (
                 "Апелляция не найдена."
             )
+        appeal = result.appeal
+        if appeal is None:  # ok=True гарантирует наличие; страховка для типов
+            return "Апелляция не найдена."
         if approve and guild is not None:
-            await _lift_punishment(guild, result.appeal)
-        await _notify_appellant(self.bot, result.appeal, approve)
+            await _lift_punishment(guild, appeal)
+        await _notify_appellant(self.bot, appeal, approve)
         return "Апелляция принята — наказание снято." if approve else "Апелляция отклонена."
 
     def build_button_view(self, guild_id: int, action: str) -> discord.ui.View | None:

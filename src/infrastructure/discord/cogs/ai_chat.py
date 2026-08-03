@@ -1,8 +1,10 @@
 import asyncio
+import functools
 import logging
 import random
 import time
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -50,7 +52,9 @@ class AIChatCog(commands.Cog):
         # пассивное вклинивание: дебаунс по паузе (таймер на канал) + кулдаун
         self._chime_scheduler = DeferredScheduler("chime")
         self._chime_cooldowns: dict[int, float] = {}  # channel_id -> monotonic
-        event_bus.subscribe(TrackStarted, self._on_track_started)
+        # subscribe ждёт Callable[[DomainEvent], ...]; хендлер сужен под своё
+        # событие — диспетч по типу гарантирует правильный аргумент
+        event_bus.subscribe(TrackStarted, self._on_track_started)  # type: ignore[arg-type]
 
     def _cfg(self, guild_id: int, key: str):
         """Пер-серверное значение AI-настройки (override /config или глобальный дефолт)."""
@@ -72,7 +76,7 @@ class AIChatCog(commands.Cog):
             return False
         return flag_on(self.settings, self.gs, guild_id, sub) if sub is not None else True
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._sweep_task is not None:
             self._sweep_task.cancel()
         for task in self._background:
@@ -193,12 +197,13 @@ class AIChatCog(commands.Cog):
             return True
         ref = message.reference
         if ref is not None and isinstance(ref.resolved, discord.Message):
-            return ref.resolved.author.id == self.bot.user.id
+            return ref.resolved.author.id == cast(discord.ClientUser, self.bot.user).id
         return False
 
     def _clean_content(self, message: discord.Message) -> str:
         content = message.content
-        for pattern in (f"<@{self.bot.user.id}>", f"<@!{self.bot.user.id}>"):
+        uid = cast(discord.ClientUser, self.bot.user).id  # после ready bot.user есть
+        for pattern in (f"<@{uid}>", f"<@!{uid}>"):
             content = content.replace(pattern, "")
         return content.strip()
 
@@ -206,7 +211,8 @@ class AIChatCog(commands.Cog):
         history: list[tuple[str, str]] = []
         try:
             async for msg in message.channel.history(
-                limit=self._cfg(message.guild.id, "ai_context_messages"), before=message
+                limit=self._cfg(cast(discord.Guild, message.guild).id, "ai_context_messages"),
+                before=message,
             ):
                 text = msg.content.strip()
                 if text:
@@ -222,6 +228,8 @@ class AIChatCog(commands.Cog):
         """На обычное сообщение (не к боту) взводим/сдвигаем дебаунс-таймер:
         решение примем на паузе в разговоре, а не на каждой реплике."""
         guild = message.guild
+        if guild is None:  # листенер: guild-only не гарантирован на уровне сигнатуры
+            return
         if not self._cfg(guild.id, "ai_passive_enabled"):
             return
         if self._cfg(guild.id, "ai_passive_only_main_channel"):
@@ -236,14 +244,15 @@ class AIChatCog(commands.Cog):
         self._chime_scheduler.schedule(
             f"chime:{channel_id}",
             when,
-            lambda gid=guild.id, cid=channel_id: self._try_chime(gid, cid),
+            functools.partial(self._try_chime, guild.id, channel_id),
         )
 
     async def _try_chime(self, guild_id: int, channel_id: int) -> None:
         channel = self.bot.get_channel(channel_id)
         if channel is None:
             return
-        history, users = await self._collect_passive_window(channel)
+        messageable = cast(discord.abc.Messageable, channel)
+        history, users = await self._collect_passive_window(messageable)
         if not history or users < self._cfg(guild_id, "ai_passive_min_users"):
             return
         # повторная проверка кулдауна: пока ждали паузу, она могла заговорить
@@ -260,7 +269,7 @@ class AIChatCog(commands.Cog):
         if not text:
             return
         try:
-            await channel.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
+            await messageable.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
             self._chime_cooldowns[channel_id] = time.monotonic()
         except discord.HTTPException:
             logger.warning("Не удалось отправить пассивную реплику", exc_info=True)
@@ -323,7 +332,9 @@ class AIChatCog(commands.Cog):
                 ),
                 now=datetime.now(UTC),
             )
-            await channel.send(comment[:2000], allowed_mentions=discord.AllowedMentions.none())
+            await cast(discord.abc.Messageable, channel).send(
+                comment[:2000], allowed_mentions=discord.AllowedMentions.none()
+            )
         except AIProviderError:
             logger.debug("Комментарий к треку не сгенерировался", exc_info=True)
         except Exception:

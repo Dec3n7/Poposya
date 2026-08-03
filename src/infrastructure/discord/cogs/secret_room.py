@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -11,6 +12,7 @@ from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import RelationshipRoleChanged
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,9 @@ class SecretRoomCog(commands.Cog):
         # тон роли с индексом i = i + 2 => уровень 5 = индекс 3
         self._min_role_index = max(0, settings.secret_room_min_level - 2)
         self._cleanup_task: asyncio.Task | None = None
-        event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)
+        # subscribe ждёт Callable[[DomainEvent], ...]; хендлер сужен под своё
+        # событие — диспетч по типу гарантирует правильный аргумент
+        event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(
@@ -58,7 +62,7 @@ class SecretRoomCog(commands.Cog):
     async def cog_load(self) -> None:
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._cleanup_task is not None:
             self._cleanup_task.cancel()
 
@@ -100,7 +104,8 @@ class SecretRoomCog(commands.Cog):
     @app_commands.describe(code="Ключ из личных сообщений (пусто — показать свой)")
     @app_commands.guild_only()
     async def secret(self, interaction: discord.Interaction, code: str | None = None) -> None:
-        gid = interaction.guild_id
+        guild = guild_of(interaction)
+        gid = guild.id
 
         def p(key: str, **vars: object) -> str:
             return str(self.persona.phrase(gid, key, **vars))
@@ -149,7 +154,6 @@ class SecretRoomCog(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
         overwrites: dict = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             guild.me: discord.PermissionOverwrite(
@@ -179,7 +183,7 @@ class SecretRoomCog(commands.Cog):
 
         expires_at = await self.container.register_secret_room.execute(
             interaction.user.id,
-            interaction.guild_id,
+            guild.id,
             text_channel.id,
             voice_channel.id,
             _now(),
@@ -209,7 +213,9 @@ class SecretRoomCog(commands.Cog):
                         channel = self.bot.get_channel(channel_id)
                         if channel is not None:
                             try:
-                                await channel.delete(reason="Секретная комната: время вышло")
+                                await cast(discord.abc.GuildChannel, channel).delete(
+                                    reason="Секретная комната: время вышло"
+                                )
                             except discord.HTTPException:
                                 logger.warning("Не удалось удалить канал комнаты", exc_info=True)
                     logger.info("Секретная комната закрыта", extra={"guild_id": room.guild_id})

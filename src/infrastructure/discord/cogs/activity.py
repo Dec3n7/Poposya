@@ -3,6 +3,7 @@ import logging
 import random
 import time
 from datetime import UTC, date, datetime
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -108,9 +109,10 @@ class ActivityCog(commands.Cog):
         голосе персоны сервера. None, если AI выключен."""
         if self.chat is None:
             return None
+        chat = self.chat  # захват для замыкания: self.chat в closure снова Optional
 
         async def generate(instruction: str) -> str:
-            return await self.chat.freeform_remark(
+            return await chat.freeform_remark(
                 guild_id, instruction, datetime.now(UTC), mood=self.mood.get(guild_id)
             )
 
@@ -248,7 +250,7 @@ class ActivityCog(commands.Cog):
         if channel is None:
             return
         try:
-            message = await channel.fetch_message(payload.message_id)
+            message = await cast(discord.abc.Messageable, channel).fetch_message(payload.message_id)
         except discord.HTTPException:
             return
         if message.author.bot:
@@ -363,28 +365,28 @@ class ActivityCog(commands.Cog):
         # праздник: объявление раз в день + подъём настроения
         holiday = self.calendar.holiday_name(now.date())
         if holiday:
-            for guild in self.bot.guilds:
-                if not self._feature(guild.id, "activity_holidays"):
+            for g in self.bot.guilds:
+                if not self._feature(g.id, "activity_holidays"):
                     continue
-                key = (guild.id, now.date().isoformat())
+                key = (g.id, now.date().isoformat())
                 if key in self._holiday_announced:
                     continue
                 self._holiday_announced.add(key)
-                self.mood.bump(guild.id, +15)
+                self.mood.bump(g.id, +15)
                 text = await self.persona.render_block(
-                    guild.id, "activity.holiday", self._ai_fn(guild.id), holiday=holiday
+                    g.id, "activity.holiday", self._ai_fn(g.id), holiday=holiday
                 )
                 if text:
                     bonus = str(
                         self.persona.phrase(
-                            guild.id,
+                            g.id,
                             "activity.holiday_bonus",
                             multiplier=self.settings.holiday_points_multiplier,
                         )
                     )
                     if bonus:
                         text += f"\n{bonus}"
-                    await self._send(self._main_channel(guild), text)
+                    await self._send(self._main_channel(g), text)
 
         # мягкое угасание очков при долгой неактивности
         decay = await self.relationship.decay_points.execute(now)
