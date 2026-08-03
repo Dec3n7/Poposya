@@ -3,6 +3,7 @@ import logging
 import random
 import time
 from datetime import UTC, datetime
+from typing import cast
 
 import discord
 from discord import app_commands
@@ -16,6 +17,7 @@ from src.domain.finds.catalog import RARITY_EMOJI, RARITY_LABELS, season_for_mon
 from src.domain.finds.entities import NightFind, Rarity
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -100,7 +102,7 @@ class FindsCog(commands.Cog):
         # отправленные до рестарта, попадают в handle_claim
         self.bot.add_view(FindClaimView(self))
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         for task in [*self._tasks, *self._expiry_tasks.values()]:
             task.cancel()
 
@@ -225,7 +227,7 @@ class FindsCog(commands.Cog):
         except discord.HTTPException:
             logger.warning("Не удалось отправить анонс находки", exc_info=True)
             return None
-        await self.finds.register_find_message.execute(find.id, channel.id, message.id)
+        await self.finds.register_find_message.execute(cast(int, find.id), channel.id, message.id)
         find.channel_id, find.message_id = channel.id, message.id
         self._schedule_expiry(find)
         return find
@@ -235,9 +237,10 @@ class FindsCog(commands.Cog):
     def _schedule_expiry(self, find: NightFind) -> None:
         if find.id is None or find.id in self._expiry_tasks:
             return
+        fid = find.id  # локал: в замыкании find.id снова Optional
         task = asyncio.create_task(self._expire_later(find))
-        self._expiry_tasks[find.id] = task
-        task.add_done_callback(lambda _: self._expiry_tasks.pop(find.id, None))
+        self._expiry_tasks[fid] = task
+        task.add_done_callback(lambda _: self._expiry_tasks.pop(fid, None))
 
     async def _expire_later(self, find: NightFind) -> None:
         delay = (find.expires_at - datetime.now(UTC)).total_seconds()
@@ -260,7 +263,7 @@ class FindsCog(commands.Cog):
         if channel is None:
             return
         try:
-            message = await channel.fetch_message(find.message_id)
+            message = await cast(discord.abc.Messageable, channel).fetch_message(find.message_id)
             embed = message.embeds[0] if message.embeds else None
             if embed is not None:
                 embed.description = f"{embed.description}\n\n{note}"
@@ -272,11 +275,12 @@ class FindsCog(commands.Cog):
 
     async def handle_claim(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        guild = guild_of(interaction)
+        gid = guild.id
         now = datetime.now(UTC)
         result = await self.finds.claim_find.execute(
-            interaction.guild_id, interaction.user.id, interaction.message.id, now
+            gid, interaction.user.id, cast(discord.Message, interaction.message).id, now
         )
-        gid = interaction.guild_id
         if result.status == "gone":
             await interaction.followup.send(self._p(gid, "finds.claim_gone"), ephemeral=True)
             return
@@ -285,7 +289,7 @@ class FindsCog(commands.Cog):
             return
         if result.status == "cooldown":
             await interaction.followup.send(
-                self._p(gid, "finds.claim_cooldown", retry=_ts(result.retry_at)),
+                self._p(gid, "finds.claim_cooldown", retry=_ts(cast(datetime, result.retry_at))),
                 ephemeral=True,
             )
             return
@@ -299,6 +303,8 @@ class FindsCog(commands.Cog):
 
         # success
         item = result.item
+        if item is None:  # success гарантирует предмет; страховка для типов
+            return
         await self._announce_claim(interaction, result)
         await interaction.followup.send(
             self._p(
@@ -313,11 +319,13 @@ class FindsCog(commands.Cog):
 
     async def _announce_claim(self, interaction: discord.Interaction, result: ClaimResult) -> None:
         item = result.item
+        if item is None:  # зовётся только на success; страховка для типов
+            return
         user = interaction.user
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         # закрыть анонс
         try:
-            message = interaction.message
+            message = cast(discord.Message, interaction.message)  # клик по кнопке анонса
             embed = message.embeds[0] if message.embeds else None
             if embed is not None:
                 taken = self._p(
@@ -355,7 +363,7 @@ class FindsCog(commands.Cog):
             color=accent(gid),
         )
         try:
-            await interaction.channel.send(
+            await cast(discord.abc.Messageable, interaction.channel).send(
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
@@ -372,7 +380,7 @@ class FindsCog(commands.Cog):
     @app_commands.guild_only()
     async def spawn_find_command(self, interaction: discord.Interaction) -> None:
         # ВРЕМЕННАЯ команда для проверки цикла находок без ожидания интервала.
-        guild = interaction.guild
+        guild = guild_of(interaction)
         channel = self._announce_channel(guild)
         if channel is None:
             await interaction.response.send_message(
@@ -400,7 +408,7 @@ class FindsCog(commands.Cog):
     @app_commands.command(name="finds", description="Активная ночная находка на сервере")
     @app_commands.guild_only()
     async def finds_command(self, interaction: discord.Interaction) -> None:
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         view = await self.finds.get_active_find.execute(gid, datetime.now(UTC))
         if view is None:
             await interaction.response.send_message(
@@ -431,7 +439,7 @@ class FindsCog(commands.Cog):
     @app_commands.guild_only()
     async def collection_command(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         entries = await self.finds.get_collection.execute(gid, interaction.user.id)
         if not entries:
             await interaction.followup.send(self._p(gid, "finds.collection_empty"), ephemeral=True)
@@ -461,13 +469,15 @@ class FindsCog(commands.Cog):
     async def gift_command(self, interaction: discord.Interaction, item: str) -> None:
         await interaction.response.defer()
         result = await self.finds.gift_item.execute(
-            interaction.guild_id, interaction.user.id, item, datetime.now(UTC)
+            guild_of(interaction).id, interaction.user.id, item, datetime.now(UTC)
         )
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         if result.status != "ok":
             await interaction.followup.send(self._p(gid, "finds.gift_no_item"), ephemeral=True)
             return
         gifted = result.item
+        if gifted is None:  # status=="ok" гарантирует предмет; страховка для типов
+            return
         gift_lines = self.persona.phrase(gid, "finds.gift")
         line = gift_lines.get(gifted.rarity.value, "") if isinstance(gift_lines, dict) else ""
         award = self._p(
@@ -486,7 +496,7 @@ class FindsCog(commands.Cog):
     async def gift_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        entries = await self.finds.get_collection.execute(interaction.guild_id, interaction.user.id)
+        entries = await self.finds.get_collection.execute(guild_of(interaction).id, interaction.user.id)
         seen: dict[str, str] = {}  # item_id -> название с эмодзи
         for entry in entries:
             if entry.gifted_at is None and entry.item.id not in seen:
@@ -507,16 +517,16 @@ class FindsCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         now = datetime.now(UTC)
         result = await self.finds.special_walk.execute(
-            interaction.guild_id,
+            guild_of(interaction).id,
             interaction.user.id,
             now,
             season=season_for_month(now.month),
             holiday=self._holiday_key(now),
         )
-        gid = interaction.guild_id
+        gid = guild_of(interaction).id
         if result.status == "cooldown":
             await interaction.followup.send(
-                self._p(gid, "finds.walk_cooldown", retry=_ts(result.retry_at)),
+                self._p(gid, "finds.walk_cooldown", retry=_ts(cast(datetime, result.retry_at))),
                 ephemeral=True,
             )
             return
@@ -534,6 +544,8 @@ class FindsCog(commands.Cog):
             await interaction.followup.send(f"{line}\n{tail}".strip(), ephemeral=True)
             return
         item = result.item
+        if item is None:  # success гарантирует предмет; страховка для типов
+            return
         sign = "+" if result.points_delta >= 0 else "−"
         line = await self._pick(gid, "finds.walk_success")
         tail = self._p(
