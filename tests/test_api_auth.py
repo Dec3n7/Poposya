@@ -126,6 +126,29 @@ async def test_callback_sets_session_and_me_filters_guilds(client, mock_discord)
     assert icons["20"] is None  # у owner-сервера иконки нет
 
 
+async def test_me_exposes_per_guild_permissions(client, mock_discord):
+    # фронт гасит недоступные действия по этим битам (гвард на бэке всё равно
+    # стережёт — это лишь UX-подсказка)
+    state = await _login_get_state(client)
+    await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+    data = (await client.get("/api/auth/me")).json()
+    perms = {g["id"]: g["perms"] for g in data["guilds"]}
+    # сервер 10: только MANAGE_GUILD -> вход в панель есть, конкретных прав нет
+    assert perms["10"] == {
+        "can_ban": False,
+        "can_kick": False,
+        "can_moderate": False,
+        "can_manage_roles": False,
+    }
+    # сервер 20: владелец -> ADMINISTRATOR покрывает всё
+    assert perms["20"] == {
+        "can_ban": True,
+        "can_kick": True,
+        "can_moderate": True,
+        "can_manage_roles": True,
+    }
+
+
 async def test_me_hides_guilds_without_bot(mock_discord):
     # бот только на сервере 10 -> сервер 20 (owner) в /me не попадёт
     container = build_api_container(make_settings())

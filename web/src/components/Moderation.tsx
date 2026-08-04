@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { GATE } from "../perms";
 import type {
   Ban,
   CrossBanFlagged,
@@ -8,6 +9,7 @@ import type {
   CrossBanRecord,
   CrossBanUser,
   Guild,
+  GuildPerms,
   GuildWarn,
   ModCase,
 } from "../types";
@@ -47,7 +49,17 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone: () => void }) {
+function WarnRow({
+  guildId,
+  w,
+  perms,
+  onDone,
+}: {
+  guildId: string;
+  w: GuildWarn;
+  perms: GuildPerms;
+  onDone: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const name = w.username ?? `ID ${w.user_id}`;
@@ -77,7 +89,12 @@ function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone
       </span>
       <span className="cine-side">
         <span className="mono faint">последний {fmtDate(w.last_at)}</span>
-        <button className="btn ghost small" onClick={clear} disabled={busy}>
+        <button
+          className="btn ghost small"
+          onClick={clear}
+          disabled={busy || !perms.can_moderate}
+          title={perms.can_moderate ? undefined : GATE.moderate}
+        >
           Сбросить
         </button>
       </span>
@@ -85,7 +102,17 @@ function WarnRow({ guildId, w, onDone }: { guildId: string; w: GuildWarn; onDone
   );
 }
 
-function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: () => void }) {
+function BanRow({
+  guildId,
+  ban,
+  perms,
+  onDone,
+}: {
+  guildId: string;
+  ban: Ban;
+  perms: GuildPerms;
+  onDone: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const name = ban.username ?? `ID ${ban.user_id}`;
@@ -126,7 +153,12 @@ function BanRow({ guildId, ban, onDone }: { guildId: string; ban: Ban; onDone: (
       </span>
       <span className="cine-side">
         <span className="mono faint">до {fmtExpires(ban.expires_at)}</span>
-        <button className="btn ghost small" onClick={unban} disabled={busy}>
+        <button
+          className="btn ghost small"
+          onClick={unban}
+          disabled={busy || !perms.can_ban}
+          title={perms.can_ban ? undefined : GATE.ban}
+        >
           Разбанить
         </button>
       </span>
@@ -229,7 +261,7 @@ function CrossBanLookup({ guildId }: { guildId: string }) {
   );
 }
 
-function HistoryLookup({ guildId }: { guildId: string }) {
+function HistoryLookup({ guildId, perms }: { guildId: string; perms: GuildPerms }) {
   const [id, setId] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -319,10 +351,20 @@ function HistoryLookup({ guildId }: { guildId: string }) {
           onChange={(e) => setReason(e.target.value)}
           style={{ flex: 1, minWidth: 180 }}
         />
-        <button className="btn ghost small" onClick={() => act("kick")} disabled={busy}>
+        <button
+          className="btn ghost small"
+          onClick={() => act("kick")}
+          disabled={busy || !perms.can_kick}
+          title={perms.can_kick ? undefined : GATE.kick}
+        >
           {confirmKind === "kick" ? "Точно? Кикнуть" : "Кикнуть"}
         </button>
-        <button className="btn danger small" onClick={() => act("ban")} disabled={busy}>
+        <button
+          className="btn danger small"
+          onClick={() => act("ban")}
+          disabled={busy || !perms.can_ban}
+          title={perms.can_ban ? undefined : GATE.ban}
+        >
           {confirmKind === "ban" ? "Точно? Забанить" : "Забанить навсегда"}
         </button>
       </div>
@@ -408,7 +450,9 @@ export function Moderation({ guild }: { guild: Guild }) {
             hint="Временные баны появятся здесь. Разбан по истечении срока бот делает сам."
           />
         ) : (
-          bans.map((b) => <BanRow key={b.user_id} guildId={guild.id} ban={b} onDone={load} />)
+          bans.map((b) => (
+            <BanRow key={b.user_id} guildId={guild.id} ban={b} perms={guild.perms} onDone={load} />
+          ))
         )}
       </div>
 
@@ -421,7 +465,9 @@ export function Moderation({ guild }: { guild: Guild }) {
         ) : warns.length === 0 ? (
           <EmptyState compact title="Ни у кого нет активных варнов" />
         ) : (
-          warns.map((w) => <WarnRow key={w.user_id} guildId={guild.id} w={w} onDone={load} />)
+          warns.map((w) => (
+            <WarnRow key={w.user_id} guildId={guild.id} w={w} perms={guild.perms} onDone={load} />
+          ))
         )}
       </div>
 
@@ -430,7 +476,7 @@ export function Moderation({ guild }: { guild: Guild }) {
         Единый журнал действий по участнику (бот и панель): варны, муты, кики, баны, чистки.
         Отсюда же можно кикнуть или забанить навсегда по ID.
       </p>
-      <HistoryLookup guildId={guild.id} />
+      <HistoryLookup guildId={guild.id} perms={guild.perms} />
 
       <h2 className="section-title">Кросс-серверные баны</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>

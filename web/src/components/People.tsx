@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api";
 import { IconX } from "../icons";
+import { GATE } from "../perms";
 import { activityMeta, discordColor, roleColor } from "../roles";
 import type {
   CommandResult,
   Guild,
+  GuildPerms,
   MemberRoles,
   ModCase,
   PersonDetail,
@@ -96,10 +98,12 @@ function fmtDate(iso: string | null): string {
 function ModActions({
   guildId,
   userId,
+  perms,
   onActed,
 }: {
   guildId: string;
   userId: string;
+  perms: GuildPerms;
   onActed?: () => void;
 }) {
   const [minutes, setMinutes] = useState("60");
@@ -157,21 +161,24 @@ function ModActions({
         <div className="mod-buttons">
           <button
             className="btn small"
-            disabled={busy !== null}
+            disabled={busy !== null || !perms.can_moderate}
+            title={perms.can_moderate ? undefined : GATE.moderate}
             onClick={() => act("mute", () => api.mute(guildId, userId, mins(), reason))}
           >
             🔇 Мут
           </button>
           <button
             className="btn ghost small"
-            disabled={busy !== null}
+            disabled={busy !== null || !perms.can_moderate}
+            title={perms.can_moderate ? undefined : GATE.moderate}
             onClick={() => act("unmute", () => api.unmute(guildId, userId))}
           >
             Снять мут
           </button>
           <button
             className="btn ghost small"
-            disabled={busy !== null}
+            disabled={busy !== null || !perms.can_kick}
+            title={perms.can_kick ? undefined : GATE.kick}
             onClick={() =>
               confirmKind === "kick"
                 ? act("kick", () => api.kick(guildId, userId, reason))
@@ -182,14 +189,16 @@ function ModActions({
           </button>
           <button
             className="btn small"
-            disabled={busy !== null}
+            disabled={busy !== null || !perms.can_ban}
+            title={perms.can_ban ? undefined : GATE.ban}
             onClick={() => act("ban", () => api.ban(guildId, userId, mins(), reason))}
           >
             🔨 Бан (врем.)
           </button>
           <button
             className="btn danger small"
-            disabled={busy !== null}
+            disabled={busy !== null || !perms.can_ban}
+            title={perms.can_ban ? undefined : GATE.ban}
             onClick={() =>
               confirmKind === "ban_perm"
                 ? act("ban_perm", () => api.banPermanent(guildId, userId, reason))
@@ -272,7 +281,16 @@ function byPosDesc(a: { position: number }, b: { position: number }): number {
   return b.position - a.position;
 }
 
-function MemberRolesSection({ guildId, userId }: { guildId: string; userId: string }) {
+function MemberRolesSection({
+  guildId,
+  userId,
+  perms,
+}: {
+  guildId: string;
+  userId: string;
+  perms: GuildPerms;
+}) {
+  const canManage = perms.can_manage_roles;
   const [data, setData] = useState<MemberRoles | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -373,7 +391,8 @@ function MemberRolesSection({ guildId, userId }: { guildId: string; userId: stri
                     <button
                       className="mrole-x"
                       onClick={() => remove(r.id)}
-                      disabled={busy}
+                      disabled={busy || !canManage}
+                      title={canManage ? undefined : GATE.manageRoles}
                       aria-label={`Снять роль ${r.name}`}
                     >
                       <IconX />
@@ -383,7 +402,7 @@ function MemberRolesSection({ guildId, userId }: { guildId: string; userId: stri
               );
             })}
           </div>
-          {data.assignable.length > 0 && (
+          {data.assignable.length > 0 && canManage && (
             <div className="mrole-add">
               <Dropdown
                 ariaLabel="Выдать роль"
@@ -407,11 +426,13 @@ function MemberRolesSection({ guildId, userId }: { guildId: string; userId: stri
 function PersonCard({
   guildId,
   userId,
+  perms,
   onClose,
   onChanged,
 }: {
   guildId: string;
   userId: string;
+  perms: GuildPerms;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -575,13 +596,18 @@ function PersonCard({
             </label>
           </div>
 
-          <MemberRolesSection guildId={guildId} userId={userId} />
+          <MemberRolesSection guildId={guildId} userId={userId} perms={perms} />
 
           <div className="person-warns">
             <div className="person-warns-head">
               <span className="faint">Варны {warns.length > 0 && `(${warns.length})`}</span>
               {warns.length > 0 && (
-                <button className="btn ghost small" onClick={clearWarns} disabled={busy}>
+                <button
+                  className="btn ghost small"
+                  onClick={clearWarns}
+                  disabled={busy || !perms.can_moderate}
+                  title={perms.can_moderate ? undefined : GATE.moderate}
+                >
                   Сбросить
                 </button>
               )}
@@ -605,6 +631,7 @@ function PersonCard({
           <ModActions
             guildId={guildId}
             userId={userId}
+            perms={perms}
             onActed={() => setModBump((v) => v + 1)}
           />
           <PersonHistory guildId={guildId} userId={userId} reloadKey={modBump} />
@@ -770,6 +797,7 @@ export function People({ guild }: { guild: Guild }) {
         <PersonCard
           guildId={guild.id}
           userId={selected}
+          perms={guild.perms}
           onClose={() => setSelected(null)}
           onChanged={load}
         />

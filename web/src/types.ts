@@ -1,7 +1,17 @@
+// права пользователя Discord на сервере — считает бэкенд (/me), фронт по ним
+// гасит недоступные действия. Гвард на бэке всё равно стережёт границу.
+export interface GuildPerms {
+  can_ban: boolean;
+  can_kick: boolean;
+  can_moderate: boolean; // тайм-аут; сюда же относится сброс варнов
+  can_manage_roles: boolean;
+}
+
 export interface Guild {
   id: string;
   name: string;
   icon: string | null;
+  perms: GuildPerms;
 }
 
 export interface Me {
@@ -543,10 +553,20 @@ export interface WardenSelf {
   version: string;
   uptime_seconds: number;
   dry_run: boolean;
+  paused: boolean; // окно «не вмешиваться» активно (пауза перед деплоем)
+  pause_remaining_seconds: number; // сколько ещё держится пауза; 0 — не на паузе
   interval_seconds: number;
   gateway_connected: boolean;
   notifier_ready: boolean;
   queued_notifications: number;
+}
+
+// ответ действий паузы/возобновления (панель -> бэкенд -> HTTP-API сторожа)
+export interface WardenControlResult {
+  available: boolean; // дошли ли до сторожа
+  paused?: boolean;
+  remaining_seconds?: number;
+  error?: string;
 }
 
 export interface WardenSnapshot {

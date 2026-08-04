@@ -4,10 +4,23 @@
 from pydantic import BaseModel
 
 
+class GuildPermsDTO(BaseModel):
+    """Права пользователя Discord на сервере — вычислены бэкендом из маски сессии.
+    Фронт по ним гасит недоступные действия (не 403 по клику), но границу всё
+    равно стережёт гвард на бэке — это лишь UX-подсказка. Легаси-токен без
+    записанных битов трактуется как «всё можно» (см. Session.has_permission)."""
+
+    can_ban: bool
+    can_kick: bool
+    can_moderate: bool  # тайм-аут; сюда же relies clearwarns
+    can_manage_roles: bool
+
+
 class GuildDTO(BaseModel):
     id: str
     name: str
     icon: str | None = None
+    perms: GuildPermsDTO
 
 
 class MeDTO(BaseModel):

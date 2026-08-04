@@ -14,17 +14,33 @@ from src.api import discord_oauth
 from src.api.container import ApiContainer
 from src.api.dependencies import current_session, get_container
 from src.api.discord_users import avatar_url, guild_icon_url
-from src.api.schemas import GuildDTO, MeDTO
+from src.api.schemas import GuildDTO, GuildPermsDTO, MeDTO
 from src.api.security import (
     OAUTH_STATE_COOKIE,
+    PERM_BAN_MEMBERS,
+    PERM_KICK_MEMBERS,
+    PERM_MANAGE_ROLES,
+    PERM_MODERATE_MEMBERS,
     SESSION_COOKIE,
     Session,
+    SessionGuild,
     encode_session,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _guild_perms(session: Session, g: SessionGuild) -> GuildPermsDTO:
+    """Булевы права для фронта — считает бэкенд, фронт по ним только гасит кнопки.
+    ADMINISTRATOR/легаси-токен покрывают всё через Session.has_permission."""
+    return GuildPermsDTO(
+        can_ban=session.has_permission(g.id, PERM_BAN_MEMBERS),
+        can_kick=session.has_permission(g.id, PERM_KICK_MEMBERS),
+        can_moderate=session.has_permission(g.id, PERM_MODERATE_MEMBERS),
+        can_manage_roles=session.has_permission(g.id, PERM_MANAGE_ROLES),
+    )
 
 
 def _secure_cookies(container: ApiContainer) -> bool:
@@ -118,7 +134,13 @@ async def me(
         username=session.username,
         avatar=avatar_url(session.user_id, session.avatar),
         guilds=[
-            GuildDTO(id=str(g.id), name=g.name, icon=guild_icon_url(g.id, g.icon)) for g in guilds
+            GuildDTO(
+                id=str(g.id),
+                name=g.name,
+                icon=guild_icon_url(g.id, g.icon),
+                perms=_guild_perms(session, g),
+            )
+            for g in guilds
         ],
         is_operator=session.user_id in container.settings.web_operator_ids,
     )

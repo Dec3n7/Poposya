@@ -269,6 +269,15 @@ a {
   border-radius: var(--radius-sm);
   margin-bottom: var(--sp-4);
 }
+/* нейтральный информационный баннер (напр. «только просмотр» без права) */
+.notice {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  color: var(--text-muted, #cbd5e1);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm);
+  margin: var(--sp-3) 0;
+}
 
 /* --- тосты (обратная связь по действиям) --- */
 .toast-stack {

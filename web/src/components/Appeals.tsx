@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { GATE, anyModerator } from "../perms";
 import type { Appeal, Guild } from "../types";
 import { EmptyState } from "./EmptyState";
 import { SkeletonRows } from "./Skeleton";
@@ -25,10 +26,12 @@ function fmtWhen(iso: string): string {
 function AppealCard({
   guildId,
   appeal,
+  canDecide,
   onDone,
 }: {
   guildId: string;
   appeal: Appeal;
+  canDecide: boolean;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -73,10 +76,20 @@ function AppealCard({
       )}
       <div style={{ whiteSpace: "pre-wrap", margin: "2px 0 12px" }}>{appeal.text}</div>
       <div className="role-panel-actions">
-        <button className="btn primary small" onClick={() => decide(true)} disabled={busy}>
+        <button
+          className="btn primary small"
+          onClick={() => decide(true)}
+          disabled={busy || !canDecide}
+          title={canDecide ? undefined : GATE.anyMod}
+        >
           Принять — снять наказание
         </button>
-        <button className="btn ghost small" onClick={() => decide(false)} disabled={busy}>
+        <button
+          className="btn ghost small"
+          onClick={() => decide(false)}
+          disabled={busy || !canDecide}
+          title={canDecide ? undefined : GATE.anyMod}
+        >
           Отклонить
         </button>
       </div>
@@ -101,12 +114,19 @@ export function Appeals({ guild }: { guild: Guild }) {
   }, [guild.id, reloadKey]);
 
   const reload = () => setReloadKey((k) => k + 1);
+  const canDecide = anyModerator(guild.perms);
 
   return (
     <div>
       <p className="sub">
         Открытые апелляции на наказания. «Принять» снимает наказание и уведомляет участника в ЛС.
       </p>
+
+      {!canDecide && (
+        <div className="notice small" role="status">
+          🔒 Только просмотр — для разбора апелляций нужно право модерации (бан, кик или тайм-аут).
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 
@@ -129,7 +149,13 @@ export function Appeals({ guild }: { guild: Guild }) {
       {appeals && appeals.length > 0 && (
         <div style={{ display: "grid", gap: 12 }}>
           {appeals.map((a) => (
-            <AppealCard key={a.id} guildId={guild.id} appeal={a} onDone={reload} />
+            <AppealCard
+              key={a.id}
+              guildId={guild.id}
+              appeal={a}
+              canDecide={canDecide}
+              onDone={reload}
+            />
           ))}
         </div>
       )}

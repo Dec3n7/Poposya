@@ -15,6 +15,7 @@ import {
   IconUpload,
   IconUserPlus,
 } from "../icons";
+import { GATE } from "../perms";
 import { discordColor } from "../roles";
 import { POPOSYA_COLORS, ROLE_TEMPLATES, type RoleTemplate } from "../roleTemplates";
 import type {
@@ -867,9 +868,14 @@ export function Roles({ guild }: { guild: Guild }) {
     return r.status !== "failed";
   }
 
+  // право Discord «Управление ролями» на этом сервере: без него панель ролей
+  // работает в режиме просмотра (гвард на бэке всё равно вернул бы 403 —
+  // здесь гасим кнопки, чтобы не доводить до него). Все write-контролы ролей
+  // под этим одним правом, поэтому гейтим на точках входа.
+  const canManage = guild.perms.can_manage_roles;
   const orderDirty = snapshot !== null;
   const editableIds = roles.filter((r) => r.editable).map((r) => r.id);
-  const canReorder = !orderDirty ? editableIds.length >= 2 : true;
+  const canReorder = canManage && (!orderDirty ? editableIds.length >= 2 : true);
   // любой редактор открыт — порядок не трогаем
   const rowsLocked = editingId !== null || permsId !== null || creating;
 
@@ -1138,7 +1144,8 @@ export function Roles({ guild }: { guild: Guild }) {
               setCreating(true);
               setEditingId(null);
             }}
-            disabled={orderDirty || creating || busy}
+            disabled={orderDirty || creating || busy || !canManage}
+            title={canManage ? undefined : GATE.manageRoles}
           >
             <IconPlus /> Новая роль
           </button>
@@ -1149,6 +1156,11 @@ export function Roles({ guild }: { guild: Guild }) {
         настроить права (щит). Перетаскивай за ручку или жми стрелки — порядок применится по
         кнопке. Administrator панель не выдаёт, опасные права просят подтверждения.
       </p>
+      {!canManage && (
+        <div className="notice small" role="status">
+          🔒 Только просмотр — для управления ролями нужно право Discord «Управление ролями».
+        </div>
+      )}
 
       <div className="role-tools">
         <button className="btn ghost small" onClick={doExport} disabled={busy}>
@@ -1157,28 +1169,32 @@ export function Roles({ guild }: { guild: Guild }) {
         <button
           className="btn ghost small"
           onClick={() => fileRef.current?.click()}
-          disabled={busy || orderDirty}
+          disabled={busy || orderDirty || !canManage}
+          title={canManage ? undefined : GATE.manageRoles}
         >
           <IconUpload /> Импорт
         </button>
         <button
           className={`btn ghost small${tool === "templates" ? " active" : ""}`}
           onClick={() => setTool((t) => (t === "templates" ? null : "templates"))}
-          disabled={busy || orderDirty}
+          disabled={busy || orderDirty || !canManage}
+          title={canManage ? undefined : GATE.manageRoles}
         >
           <IconSparkle /> Шаблоны
         </button>
         <button
           className={`btn ghost small${tool === "autorole" ? " active" : ""}`}
           onClick={() => setTool((t) => (t === "autorole" ? null : "autorole"))}
-          disabled={busy}
+          disabled={busy || !canManage}
+          title={canManage ? undefined : GATE.manageRoles}
         >
           <IconUserPlus /> Автороли
         </button>
         <button
           className={`btn ghost small${tool === "interest" ? " active" : ""}`}
           onClick={() => setTool((t) => (t === "interest" ? null : "interest"))}
-          disabled={busy}
+          disabled={busy || !canManage}
+          title={canManage ? undefined : GATE.manageRoles}
         >
           <IconUserPlus /> Роли по интересам
         </button>
@@ -1330,7 +1346,7 @@ export function Roles({ guild }: { guild: Guild }) {
         <div className="roles-list">
           {roles.map((r, i) => {
             const color = discordColor(r.color);
-            const canDrag = r.editable && !rowsLocked;
+            const canDrag = r.editable && !rowsLocked && canManage;
             if (editingId === r.id) {
               return (
                 <div key={r.id}>
@@ -1459,9 +1475,9 @@ export function Roles({ guild }: { guild: Guild }) {
                           setPermsId(null);
                           setCreating(false);
                         }}
-                        disabled={busy || orderDirty}
+                        disabled={busy || orderDirty || !canManage}
                         aria-label={`Редактировать роль ${r.name}`}
-                        title="Редактировать"
+                        title={canManage ? "Редактировать" : GATE.manageRoles}
                       >
                         <IconPencil />
                       </button>
@@ -1472,9 +1488,9 @@ export function Roles({ guild }: { guild: Guild }) {
                           setEditingId(null);
                           setCreating(false);
                         }}
-                        disabled={busy || orderDirty}
+                        disabled={busy || orderDirty || !canManage}
                         aria-label={`Права роли ${r.name}`}
-                        title="Права роли"
+                        title={canManage ? "Права роли" : GATE.manageRoles}
                       >
                         <IconShield />
                       </button>
