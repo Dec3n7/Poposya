@@ -172,6 +172,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.staykick import StayKickCog
         from src.infrastructure.discord.cogs.steam import SteamCog
         from src.infrastructure.discord.cogs.tempvoice import TempVoiceCog
+        from src.infrastructure.discord.cogs.warden import WardenCog
 
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
@@ -240,6 +241,11 @@ class PoposyaBot(commands.Bot):
             )
         else:
             logger.warning("Ког ai_chat ПРОПУЩЕН: AI выключен (нет GROQ_API_KEY)")
+
+        # /warden — управление внешним сторожем из Discord; подключаем только
+        # когда сторож реально настроен (иначе мёртвой команды в дереве нет)
+        if self.container.settings.warden_api_url and self.container.settings.warden_api_token:
+            await self.add_cog(WardenCog(self, self.container.settings))
 
         names = sorted(c.__class__.__name__.replace("Cog", "").lower() for c in self.cogs.values())
         logger.info("Коги подключены (%d): %s", len(self.cogs), ", ".join(names))

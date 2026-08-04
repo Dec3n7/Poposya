@@ -37,6 +37,7 @@ import type {
   SavedRoleTemplate,
   SettingField,
   Trends,
+  WardenControlResult,
   WardenSnapshot,
   Warn,
 } from "./types";
@@ -414,4 +415,11 @@ export const api = {
   wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
   wardenEnabled: (): Promise<{ enabled: boolean }> =>
     req<{ enabled: boolean }>("/api/warden/enabled"),
+  wardenPause: (minutes: number): Promise<WardenControlResult> =>
+    req<WardenControlResult>("/api/warden/pause", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    }),
+  wardenResume: (): Promise<WardenControlResult> =>
+    req<WardenControlResult>("/api/warden/resume", { method: "POST" }),
 };

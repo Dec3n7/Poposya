@@ -4,6 +4,7 @@ import { api } from "../api";
 import type { WardenSnapshot, WardenTarget } from "../types";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCards } from "./Skeleton";
+import { useToast } from "./Toast";
 
 // Опрос чаще, чем сторож проверяет цели (10с), смысла не имеет: новых данных
 // между его циклами не появляется.
@@ -96,6 +97,8 @@ function TargetCard({ t }: { t: WardenTarget }) {
 export function Warden() {
   const [snap, setSnap] = useState<WardenSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     let alive = true;
@@ -111,6 +114,43 @@ export function Warden() {
       clearInterval(id);
     };
   }, []);
+
+  async function reload() {
+    try {
+      setSnap(await api.wardenStatus());
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+  }
+
+  async function pause(minutes: number) {
+    setBusy(true);
+    try {
+      const r = await api.wardenPause(minutes);
+      if (!r.available) toast.error(`Сторож не ответил${r.error ? ` (${r.error})` : ""}`);
+      else toast.success(`Пауза на ${minutes} мин — рестарты сторожа подавлены`);
+      await reload();
+    } catch {
+      toast.error("Не удалось поставить паузу");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resume() {
+    setBusy(true);
+    try {
+      const r = await api.wardenResume();
+      if (!r.available) toast.error(`Сторож не ответил${r.error ? ` (${r.error})` : ""}`);
+      else toast.success("Пауза снята — действия разрешены");
+      await reload();
+    } catch {
+      toast.error("Не удалось снять паузу");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!snap && failed) {
     return <div className="error-banner">Не удалось получить состояние сторожа</div>;
@@ -155,6 +195,14 @@ export function Warden() {
         </div>
         <div className="warden-chips">
           {w.dry_run && <span className="chip warn">режим наблюдения</span>}
+          {w.paused && (
+            <span className="chip warn">
+              на паузе
+              {w.pause_remaining_seconds
+                ? ` · ещё ${Math.ceil(w.pause_remaining_seconds / 60)}м`
+                : ""}
+            </span>
+          )}
           <span className={`chip ${w.gateway_connected ? "ok" : "bad"}`}>
             gateway {w.gateway_connected ? "✓" : "✗"}
           </span>
@@ -166,6 +214,22 @@ export function Warden() {
           )}
           {snap.incidents_open! > 0 && (
             <span className="chip bad">инцидентов {snap.incidents_open}</span>
+          )}
+          {/* пауза перед деплоем/обслуживанием: сторож наблюдает, но не
+              перезапускает контейнеры, пока идёт окно */}
+          {w.paused ? (
+            <button className="btn small" onClick={resume} disabled={busy}>
+              Возобновить
+            </button>
+          ) : (
+            <>
+              <button className="btn ghost small" onClick={() => pause(15)} disabled={busy}>
+                Пауза 15м
+              </button>
+              <button className="btn ghost small" onClick={() => pause(60)} disabled={busy}>
+                Пауза 1ч
+              </button>
+            </>
           )}
         </div>
       </div>
