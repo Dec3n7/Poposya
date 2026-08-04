@@ -167,6 +167,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.git import GitCog
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
+        from src.infrastructure.discord.cogs.privacy import PrivacyCog
         from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
         from src.infrastructure.discord.cogs.staykick import StayKickCog
@@ -177,6 +178,12 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
+        # приватность: удаление данных при выходе бота + /forgetme
+        from src.infrastructure.privacy_service import PrivacyService
+
+        await self.add_cog(
+            PrivacyCog(self, cast(PrivacyService, self.container.privacy), self.container.settings)
+        )
         await self.add_cog(ConfigCog(self, gs, persona=persona))
         await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
         await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))

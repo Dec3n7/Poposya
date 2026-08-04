@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     outbox_dispatch_interval: int = 60
     outbox_max_attempts: int = 10  # после стольких неудач событие оставляется в покое
 
+    # --- приватность / удаление данных ---
+    # при выходе бота с сервера его данные помечаются и стираются через столько
+    # дней (окно на случай случайного кика/переинвайта; 0 = стирать сразу)
+    privacy_purge_grace_days: int = 30
+    # как часто фоновый цикл проверяет просроченные отметки выхода, часов
+    privacy_purge_interval_hours: int = 6
+
     # --- AI (Groq: OpenAI-совместимый API) ---
     groq_api_key: str = ""
     ai_model: str = "llama-3.3-70b-versatile"

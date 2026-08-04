@@ -48,6 +48,7 @@ class RootContainer:
     build_weekly_digest: object  # BuildWeeklyDigestUseCase; ког дайджеста
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     persona: object  # PersonaService; main вызывает load_all
+    privacy: object  # PrivacyService; удаление данных (on_guild_remove/forgetme)
     engine: object  # AsyncEngine; закрывается в main при завершении
     session_factory: object  # async_sessionmaker; командному мосту в main
     ai_provider: object | None  # IAIProvider; закрывается в main
@@ -148,6 +149,11 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     persona = PersonaService(settings, session_factory)
     persona_listener = make_persona_listener(settings.database_url, persona)
+
+    # приватность: единая точка удаления данных (сервер покинут / участник /forgetme)
+    from src.infrastructure.privacy_service import PrivacyService
+
+    privacy = PrivacyService(session_factory, grace_days=settings.privacy_purge_grace_days)
 
     # --- relationship ---
     from src.domain.shared.holidays import HolidayCalendar
@@ -607,6 +613,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         build_weekly_digest=build_weekly_digest,
         guild_settings=guild_settings,
         persona=persona,
+        privacy=privacy,
         engine=engine,
         session_factory=session_factory,
         ai_provider=ai_provider,
