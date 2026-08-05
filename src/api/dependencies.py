@@ -35,6 +35,9 @@ def current_session(request: Request) -> Session:
     )
     if session is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия недействительна")
+    # серверный отзыв: эпоха в токене устарела (real logout / операторский отзыв)
+    if session.epoch != container.session_epochs.epoch_of(session.user_id):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия отозвана")
     return session
 
 

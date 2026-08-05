@@ -25,6 +25,7 @@ from src.api.security import (
     encode_session,
 )
 from src.config import Settings
+from src.infrastructure.db.models.base import Base
 
 
 def make_settings(**over):
@@ -41,10 +42,15 @@ def make_settings(**over):
 
 
 @pytest.fixture
-def container():
-    c = build_api_container(make_settings())
+async def container(tmp_path):
+    # logout/revoke пишут эпоху сессии в БД — нужна схема (изолированная на тест)
+    settings = make_settings(database_url=f"sqlite+aiosqlite:///{tmp_path / 'api.db'}")
+    c = build_api_container(settings)
+    async with c.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     c.bot_guilds.prime({10, 20})  # бот на серверах 10 и 20 (без похода в Discord)
-    return c
+    yield c
+    await c.engine.dispose()
 
 
 @pytest.fixture
@@ -277,6 +283,61 @@ async def test_me_rejected_after_session_version_bump(mock_discord):
     async with AsyncClient(transport=ASGITransport(app=app2), base_url="http://test") as client2:
         client2.cookies.set("poposya_session", cookie)
         assert (await client2.get("/api/auth/me")).status_code == 401
+
+
+# --- F6: серверный отзыв сессий (эпоха на пользователя) ----------------------
+
+
+async def _login(client) -> None:
+    state = await _login_get_state(client)
+    await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+
+
+async def test_logout_revokes_session_server_side(client, mock_discord):
+    await _login(client)
+    old = client.cookies["poposya_session"]  # копия токена (как утёкший/сохранённый)
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+    assert (await client.post("/api/auth/logout")).status_code == 204
+    # даже с тем же токеном (logout лишь удалил куку в браузере) — сервер отверг
+    client.cookies.set("poposya_session", old)
+    assert (await client.get("/api/auth/me")).status_code == 401
+
+
+async def test_login_after_revoke_still_works(client, mock_discord):
+    await _login(client)
+    await client.post("/api/auth/logout")  # эпоха +1 — прежние токены мертвы
+    await _login(client)  # свежий вход выдаёт токен с новой эпохой
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+
+async def test_revoke_requires_operator(client, mock_discord):
+    await _login(client)  # 42 вошёл, но он НЕ в web_operator_ids
+    assert (await client.post("/api/auth/revoke/99")).status_code == 403
+
+
+async def test_operator_revoke_kills_user_sessions(tmp_path, mock_discord):
+    c = build_api_container(
+        make_settings(
+            database_url=f"sqlite+aiosqlite:///{tmp_path / 'op.db'}",
+            web_operator_ids=[42],  # 42 — оператор бота
+        )
+    )
+    async with c.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    c.bot_guilds.prime({10, 20})
+    app = create_app(c)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            await _login(client)
+            assert (await client.get("/api/auth/me")).status_code == 200
+            # оператор отзывает все сессии пользователя 42
+            assert (await client.post("/api/auth/revoke/42")).status_code == 204
+            assert (await client.get("/api/auth/me")).status_code == 401
+    finally:
+        await c.engine.dispose()
 
 
 # --- интерактивная схема FastAPI выключена по умолчанию (web_docs_enabled) ----

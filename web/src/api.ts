@@ -89,6 +89,9 @@ export const api = {
   loginUrl: (): string => `${BASE}/api/auth/login`,
   me: (): Promise<Me> => req<Me>("/api/auth/me"),
   logout: (): Promise<void> => req<void>("/api/auth/logout", { method: "POST" }),
+  // оператор отзывает все веб-сессии пользователя (разжалованный админ / утёкший токен)
+  revokeSessions: (userId: string): Promise<void> =>
+    req<void>(`/api/auth/revoke/${userId}`, { method: "POST" }),
   settings: (guildId: string): Promise<SettingField[]> =>
     req<SettingField[]>(`/api/guilds/${guildId}/settings`),
   setSetting: (

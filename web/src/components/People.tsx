@@ -427,12 +427,14 @@ function PersonCard({
   guildId,
   userId,
   perms,
+  isOperator,
   onClose,
   onChanged,
 }: {
   guildId: string;
   userId: string;
   perms: GuildPerms;
+  isOperator: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -442,6 +444,7 @@ function PersonCard({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [modBump, setModBump] = useState(0); // счётчик для перезагрузки истории после действий
+  const [revokeArmed, setRevokeArmed] = useState(false); // отзыв веб-сессий — по 2-му клику
   const toast = useToast();
 
   useEffect(() => {
@@ -507,6 +510,22 @@ function PersonCard({
       setD({ ...d, frozen });
       onChanged();
       toast.success(frozen ? "Очки заморожены" : "Заморозка снята");
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Ошибка";
+      setErr(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeSessions() {
+    setBusy(true);
+    setErr("");
+    try {
+      await api.revokeSessions(userId);
+      setRevokeArmed(false);
+      toast.success("Веб-сессии пользователя отозваны");
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Ошибка";
       setErr(message);
@@ -595,6 +614,23 @@ function PersonCard({
               </button>
             </label>
           </div>
+
+          {isOperator && (
+            <div className="person-action" style={{ marginTop: 4 }}>
+              <span className="faint">
+                Веб-панель · отозвать все сессии (выйдет из панели на всех устройствах)
+              </span>
+              <button
+                className="btn ghost small"
+                onClick={() => (revokeArmed ? revokeSessions() : setRevokeArmed(true))}
+                onBlur={() => setRevokeArmed(false)}
+                disabled={busy}
+                title="Только оператор бота. Пригодится для разжалованного админа или утёкшего токена."
+              >
+                {revokeArmed ? "Точно? Отозвать" : "Отозвать веб-сессии"}
+              </button>
+            </div>
+          )}
 
           <MemberRolesSection guildId={guildId} userId={userId} perms={perms} />
 
@@ -696,7 +732,7 @@ function PersonRow({
   );
 }
 
-export function People({ guild }: { guild: Guild }) {
+export function People({ guild, isOperator }: { guild: Guild; isOperator: boolean }) {
   const [list, setList] = useState<PersonListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -798,6 +834,7 @@ export function People({ guild }: { guild: Guild }) {
           guildId={guild.id}
           userId={selected}
           perms={guild.perms}
+          isOperator={isOperator}
           onClose={() => setSelected(null)}
           onChanged={load}
         />

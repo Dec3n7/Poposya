@@ -43,6 +43,7 @@ async def _load_state_when_ready(container: ApiContainer) -> None:
         try:
             await container.guild_settings.load_all()
             await container.persona.load_all()
+            await container.session_epochs.load_all()
             return
         except SQLAlchemyError as exc:
             if attempt == _SCHEMA_WAIT_ATTEMPTS:

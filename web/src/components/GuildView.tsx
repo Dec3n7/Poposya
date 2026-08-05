@@ -344,7 +344,7 @@ export function GuildView({
               чинится сама, как только уходишь на другую и возвращаешься */}
           <ErrorBoundary key={tab}>
             {tab === "overview" && <Dashboard guild={guild} />}
-            {tab === "people" && <People guild={guild} />}
+            {tab === "people" && <People guild={guild} isOperator={me.is_operator} />}
             {tab === "roles" && <Roles guild={guild} />}
             {tab === "cinema" && <Cinema guild={guild} />}
             {tab === "music" && <Music guild={guild} />}

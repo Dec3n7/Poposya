@@ -63,6 +63,7 @@ from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.guild_settings import GuildSettingsService
 from src.infrastructure.persona_listener import PersonaChangeListener, make_persona_listener
 from src.infrastructure.persona_service import PersonaService
+from src.infrastructure.session_epoch import SessionEpochService
 from src.infrastructure.settings_listener import SettingsChangeListener, make_settings_listener
 
 
@@ -77,6 +78,8 @@ class ApiContainer:
     persona: PersonaService
     # серверы, где есть бот (проверка «есть что настраивать») — кэш поверх Discord
     bot_guilds: BotGuildsCache
+    # эпохи веб-сессий для серверного отзыва (real logout / операторский отзыв)
+    session_epochs: SessionEpochService
     # read-use-case'ы для дашборда (те же классы, что у бота)
     leaderboard: GetLeaderboardUseCase
     list_watchlist: ListWatchlistUseCase
@@ -171,6 +174,7 @@ def assemble_container(
         guild_settings=guild_settings,
         persona=persona,
         bot_guilds=BotGuildsCache(settings.discord_token),
+        session_epochs=SessionEpochService(session_factory),
         leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=guild_settings),
         list_watchlist=ListWatchlistUseCase(uow_factory),
         top_watched=TopWatchedUseCase(uow_factory),

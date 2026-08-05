@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 
 from src.api import discord_oauth
 from src.api.container import ApiContainer
-from src.api.dependencies import current_session, get_container
+from src.api.dependencies import current_session, get_container, require_operator
 from src.api.discord_users import avatar_url, guild_icon_url
 from src.api.schemas import GuildDTO, GuildPermsDTO, MeDTO
 from src.api.security import (
@@ -24,6 +24,7 @@ from src.api.security import (
     SESSION_COOKIE,
     Session,
     SessionGuild,
+    decode_session,
     encode_session,
 )
 
@@ -95,7 +96,11 @@ async def callback(
         guilds=discord_oauth.manageable_guilds(guilds),
     )
     jwt_token = encode_session(
-        s.web_session_secret, session, s.web_session_ttl_hours, s.web_session_version
+        s.web_session_secret,
+        session,
+        s.web_session_ttl_hours,
+        s.web_session_version,
+        container.session_epochs.epoch_of(session.user_id),
     )
     resp = RedirectResponse(s.web_allowed_origin)
     resp.delete_cookie(OAUTH_STATE_COOKIE)
@@ -111,10 +116,32 @@ async def callback(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(container: ApiContainer = Depends(get_container)) -> Response:
+async def logout(
+    request: Request, container: ApiContainer = Depends(get_container)
+) -> Response:
+    # серверный отзыв: бампим эпоху пользователя, чтобы токен (в т.ч. скопированный
+    # из этой куки) стал недействителен, а не только «забываем» куку в браузере
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        s = container.settings
+        session = decode_session(s.web_session_secret, token, s.web_session_version)
+        if session is not None:
+            await container.session_epochs.bump(session.user_id)
     resp = Response(status_code=status.HTTP_204_NO_CONTENT)
     resp.delete_cookie(SESSION_COOKIE, samesite="lax", secure=_secure_cookies(container))
     return resp
+
+
+@router.post("/revoke/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_user(
+    user_id: int,
+    _operator: Session = Depends(require_operator),
+    container: ApiContainer = Depends(get_container),
+) -> Response:
+    """Оператор бота отзывает ВСЕ веб-сессии пользователя (разжалованный админ,
+    утёкший токен). Гейт — только оператор (web_operator_ids)."""
+    await container.session_epochs.bump(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=MeDTO)

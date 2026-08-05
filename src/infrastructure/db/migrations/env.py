@@ -15,6 +15,7 @@ import src.infrastructure.db.models.persona  # noqa: F401
 import src.infrastructure.db.models.privacy  # noqa: F401
 import src.infrastructure.db.models.relationship  # noqa: F401
 import src.infrastructure.db.models.roles  # noqa: F401
+import src.infrastructure.db.models.session_epoch  # noqa: F401
 import src.infrastructure.db.models.staykick  # noqa: F401
 import src.infrastructure.db.models.tempvoice  # noqa: F401
 from src.config import Settings

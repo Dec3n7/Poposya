@@ -45,6 +45,9 @@ class Session:
     # серверы, где пользователь может управлять настройками (MANAGE_GUILD/админ);
     # пересечение с серверами бота проверяется отдельно на бэкенде
     guilds: list[SessionGuild]
+    # эпоха сессии пользователя из токена (claim `ep`); сверяется с серверной для
+    # отзыва (real logout / операторский отзыв). Легаси-токен без claim = 0.
+    epoch: int = 0
 
     def can_manage(self, guild_id: int) -> bool:
         return any(g.id == guild_id for g in self.guilds)
@@ -61,7 +64,9 @@ class Session:
         return False
 
 
-def encode_session(secret: str, session: Session, ttl_hours: int, version: int = 1) -> str:
+def encode_session(
+    secret: str, session: Session, ttl_hours: int, version: int = 1, epoch: int = 0
+) -> str:
     now = int(time.time())
     payload = {
         "sub": str(session.user_id),
@@ -77,8 +82,10 @@ def encode_session(secret: str, session: Session, ttl_hours: int, version: int =
             }
             for g in session.guilds
         ],
-        # sv — версия сессии для серверного отзыва (см. web_session_version)
+        # sv — глобальная версия сессий (аварийный logout всех, web_session_version)
         "sv": version,
+        # ep — эпоха сессий ЭТОГО пользователя (индивидуальный отзыв/real logout)
+        "ep": epoch,
         "iat": now,
         "exp": now + ttl_hours * 3600,
     }
@@ -114,6 +121,8 @@ def decode_session(secret: str, token: str, version: int = 1) -> Session | None:
             username=payload["username"],
             avatar=payload.get("avatar"),
             guilds=guilds,
+            # нет claim `ep` (легаси-токен) = эпоха 0
+            epoch=int(payload.get("ep", 0)),
         )
     except (KeyError, ValueError, TypeError):
         return None
