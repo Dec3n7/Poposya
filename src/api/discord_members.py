@@ -53,9 +53,7 @@ async def fetch_guild_member(bot_token: str, guild_id: int, user_id: int) -> dic
     headers = {"Authorization": f"Bot {bot_token}"}
     try:
         async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(
-                f"{DISCORD_API}/guilds/{guild_id}/members/{user_id}"
-            ) as resp:
+            async with session.get(f"{DISCORD_API}/guilds/{guild_id}/members/{user_id}") as resp:
                 if resp.status != 200:
                     return None
                 m = await resp.json()

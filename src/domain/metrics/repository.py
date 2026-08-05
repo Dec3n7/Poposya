@@ -15,9 +15,7 @@ class IMetricsRepository(ABC):
         ...
 
     @abstractmethod
-    async def series(
-        self, guild_id: int, since: date
-    ) -> dict[str, list[tuple[date, float]]]:
+    async def series(self, guild_id: int, since: date) -> dict[str, list[tuple[date, float]]]:
         """Серии по метрикам, начиная с `since` включительно, старые→новые.
         Ключ — имя метрики, значение — точки (день, значение)."""
         ...

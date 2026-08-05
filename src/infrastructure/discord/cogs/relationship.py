@@ -248,7 +248,10 @@ class RelationshipCog(commands.Cog):
         )
         await interaction.response.send_message(
             self._p(
-                gid, "relationship.points_set", mention=user.mention, points=info.points,
+                gid,
+                "relationship.points_set",
+                mention=user.mention,
+                points=info.points,
                 status=role_name,
             ),
             ephemeral=True,

@@ -252,7 +252,10 @@ class ActivityCog(commands.Cog):
         if not self._feature(guild.id, "activity_album"):
             return
         album = resolve_channel(
-            guild, self._cfg(guild.id, "album_channel_id"), self.settings.album_channel, fallback=False
+            guild,
+            self._cfg(guild.id, "album_channel_id"),
+            self.settings.album_channel,
+            fallback=False,
         )
         if album is None or payload.channel_id == album.id:
             return

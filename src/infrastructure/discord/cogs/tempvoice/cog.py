@@ -359,7 +359,9 @@ class TempVoiceCog(commands.Cog):
             return None
         if target.temp.owner_id != interaction.user.id:
             await interaction.response.send_message(
-                self._p(guild_of(interaction).id, "tempvoice.not_owner", owner_id=target.temp.owner_id),
+                self._p(
+                    guild_of(interaction).id, "tempvoice.not_owner", owner_id=target.temp.owner_id
+                ),
                 ephemeral=True,
             )
             return None
@@ -583,7 +585,9 @@ class TempVoiceCog(commands.Cog):
             return
         await self._show(interaction, target, owner_id=interaction.user.id)
         await interaction.followup.send(
-            self._p(guild_of(interaction).id, "tempvoice.claimed", previous_owner_id=result.owner_id),
+            self._p(
+                guild_of(interaction).id, "tempvoice.claimed", previous_owner_id=result.owner_id
+            ),
             ephemeral=True,
         )
         logger.info(

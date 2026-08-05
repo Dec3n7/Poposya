@@ -284,11 +284,11 @@ class PersonaService(PhraseResolver):
         template = persona.prompt if persona and persona.prompt else self._file_prompt
         return PromptTemplate(template).render(self._with_identity(guild_id, variables))
 
-    def render_chime_prompt(
-        self, guild_id: int, variables: dict[str, object] | None = None
-    ) -> str:
+    def render_chime_prompt(self, guild_id: int, variables: dict[str, object] | None = None) -> str:
         persona = self._persona_for(guild_id)
-        template = persona.chime_prompt if persona and persona.chime_prompt else self._file_chime_prompt
+        template = (
+            persona.chime_prompt if persona and persona.chime_prompt else self._file_chime_prompt
+        )
         return PromptTemplate(template).render(self._with_identity(guild_id, variables))
 
     def _with_identity(
@@ -516,9 +516,7 @@ class PersonaService(PhraseResolver):
             "prompt": persona.prompt,
             "chime_prompt": persona.chime_prompt,
             "attributes": persona.attributes,
-            "phrases": [
-                {"key": p.key, "value": p.value, "mode": p.mode} for p in phrases.values()
-            ],
+            "phrases": [{"key": p.key, "value": p.value, "mode": p.mode} for p in phrases.values()],
         }
 
     async def import_persona(self, data: dict) -> Persona:

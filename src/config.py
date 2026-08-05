@@ -402,7 +402,7 @@ class Settings(BaseSettings):
                     f"{_MIN_SESSION_SECRET_LEN} символов, когда включена веб-панель "
                     "(задан DISCORD_CLIENT_ID) — иначе сессии подделываемы. "
                     'Сгенерируйте: python -c "import secrets; '
-                    "print(secrets.token_urlsafe(32))\""
+                    'print(secrets.token_urlsafe(32))"'
                 )
             if not self.discord_client_secret:
                 raise ValueError(

@@ -13,7 +13,9 @@ NOW = datetime(2026, 7, 31, 12, 0, tzinfo=UTC)
 
 
 def make_repo(**over):
-    base = dict(guild_id=10, owner="psf", name="requests", thread_id=555, added_by=1, created_at=NOW)
+    base = dict(
+        guild_id=10, owner="psf", name="requests", thread_id=555, added_by=1, created_at=NOW
+    )
     base.update(over)
     return TrackedRepo(**base)
 

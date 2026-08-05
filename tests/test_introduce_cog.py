@@ -82,7 +82,9 @@ async def test_interest_toggle_button():
 
 
 class FakeRole:
-    def __init__(self, rid=555, name="🎮 Игры", position=1, default=False, managed=False, permissions=0):
+    def __init__(
+        self, rid=555, name="🎮 Игры", position=1, default=False, managed=False, permissions=0
+    ):
         self.id = rid
         self.name = name
         self.position = position

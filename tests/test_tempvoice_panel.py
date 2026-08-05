@@ -151,7 +151,10 @@ async def test_button_outside_temp_without_voice_refused():
     cog, _ = make_cog(temp_ids=())
     interaction = _interaction()
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_voice"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.not_in_voice"].default
+    )
 
 
 # --- замок и видимость ---
@@ -192,7 +195,10 @@ async def test_permission_failure_is_explained():
     channel.set_permissions = AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403), "no"))
     interaction = _interaction(channel=channel)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.action_failed"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.action_failed"].default
+    )
     interaction.response.edit_message.assert_not_awaited()
 
 
@@ -252,7 +258,10 @@ async def test_limit_rejects_garbage_and_out_of_range():
     for raw in ("много", "-1", "100"):
         interaction = _interaction()
         await cog.apply_limit(interaction, raw)
-        assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.limit_bad"].default
+        assert (
+            interaction.response.send_message.await_args.args[0]
+            == PHRASE_SPECS["tempvoice.limit_bad"].default
+        )
         interaction.channel.edit.assert_not_awaited()
 
 
@@ -281,7 +290,10 @@ async def test_kick_absent_member_says_so():
     interaction = _interaction(channel=_channel(members=[]))
     await cog.apply_member_action(interaction, "kick", target)
     target.move_to.assert_not_awaited()
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_here"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.not_here"].default
+    )
 
 
 async def test_permit_grants_connect():
@@ -318,7 +330,10 @@ async def test_cannot_target_self():
     interaction = _interaction(user_id=OWNER_ID)
     await cog.apply_member_action(interaction, "kick", owner)
     owner.move_to.assert_not_awaited()
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.self_target"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.self_target"].default
+    )
 
 
 # --- «Забрать» ---
@@ -391,7 +406,10 @@ async def test_hub_button_without_voice_explains():
     cog, _ = make_cog()
     interaction = _interaction(channel=_channel(channel_id=HUB_ID), in_voice=None)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_voice"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.not_in_voice"].default
+    )
 
 
 async def test_hub_button_from_ordinary_voice_explains():
@@ -399,7 +417,10 @@ async def test_hub_button_from_ordinary_voice_explains():
     ordinary = _channel(channel_id=777)  # обычный войс, не каморка
     interaction = _interaction(channel=_channel(channel_id=HUB_ID), in_voice=ordinary)
     await cog.on_lock(interaction)
-    assert interaction.response.send_message.await_args.args[0] == PHRASE_SPECS["tempvoice.not_in_temp"].default
+    assert (
+        interaction.response.send_message.await_args.args[0]
+        == PHRASE_SPECS["tempvoice.not_in_temp"].default
+    )
 
 
 async def test_hub_button_respects_ownership():

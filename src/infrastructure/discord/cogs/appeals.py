@@ -51,9 +51,10 @@ def _appeals_channel_id(client: discord.Client, guild_id: int) -> int:
 def _appeals_on(client: discord.Client, guild_id: int) -> bool:
     settings = client.container.settings  # type: ignore[attr-defined]
     gs = client.container.guild_settings  # type: ignore[attr-defined]
-    return flag_on(settings, gs, guild_id, "appeals_enabled") and _appeals_channel_id(
-        client, guild_id
-    ) > 0
+    return (
+        flag_on(settings, gs, guild_id, "appeals_enabled")
+        and _appeals_channel_id(client, guild_id) > 0
+    )
 
 
 def _can_resolve(member: discord.Member, action: str) -> bool:
@@ -232,7 +233,9 @@ async def _handle_decision(
         appeal_id, approve, member.id, datetime.now(UTC)
     )
     if not result.ok:
-        text = "Эту апелляцию уже разобрали." if result.error == "already" else "Апелляция не найдена."
+        text = (
+            "Эту апелляцию уже разобрали." if result.error == "already" else "Апелляция не найдена."
+        )
         await interaction.response.send_message(text, ephemeral=True)
         return
 
@@ -280,8 +283,10 @@ class AppealsCog(commands.Cog):
             appeal_id, approve, resolver_id, datetime.now(UTC)
         )
         if not result.ok:
-            return "Эту апелляцию уже разобрали." if result.error == "already" else (
-                "Апелляция не найдена."
+            return (
+                "Эту апелляцию уже разобрали."
+                if result.error == "already"
+                else ("Апелляция не найдена.")
             )
         appeal = result.appeal
         if appeal is None:  # ok=True гарантирует наличие; страховка для типов

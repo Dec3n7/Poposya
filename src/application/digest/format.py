@@ -130,9 +130,7 @@ def facts_block(view: DigestView) -> str:
     if view.watched_titles:
         lines.append(f"- Смотрели в киноклубе: {', '.join(view.watched_titles)}.")
     if view.top_collector:
-        lines.append(
-            f"- Коллекционер: {view.top_collector.name} ({view.top_collector.detail})."
-        )
+        lines.append(f"- Коллекционер: {view.top_collector.name} ({view.top_collector.detail}).")
     return "\n".join(lines)
 
 
@@ -161,7 +159,6 @@ def render_plain(view: DigestView) -> str:
         lines.append(f"🎬 В киноклубе смотрели: {', '.join(view.watched_titles)}.")
     if view.top_collector:
         lines.append(
-            f"🎁 Коллекционер недели — {view.top_collector.name} "
-            f"({view.top_collector.detail})."
+            f"🎁 Коллекционер недели — {view.top_collector.name} ({view.top_collector.detail})."
         )
     return "\n".join(lines)

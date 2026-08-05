@@ -166,9 +166,7 @@ class DiscordCommandExecutor:
         expires_at = await self._moderation.temp_ban.execute(
             user_id, guild.id, command.requested_by, reason, minutes, now
         )
-        await self._log_case(
-            guild.id, user_id, command.requested_by, CASE_TEMPBAN, reason, minutes
-        )
+        await self._log_case(guild.id, user_id, command.requested_by, CASE_TEMPBAN, reason, minutes)
         return f"Забанен до {expires_at.strftime('%d.%m.%Y %H:%M UTC')}."
 
     async def _unban(self, guild: discord.Guild, command: Command) -> str:
@@ -221,9 +219,7 @@ class DiscordCommandExecutor:
     async def _appeal_reject(self, guild: discord.Guild, command: Command) -> str:
         return await self._appeal_resolve(guild, command, approve=False)
 
-    async def _appeal_resolve(
-        self, guild: discord.Guild, command: Command, approve: bool
-    ) -> str:
+    async def _appeal_resolve(self, guild: discord.Guild, command: Command, approve: bool) -> str:
         # разбор делает ког апелляций: снятие наказания + ЛС + смена статуса
         cog = self._bot.get_cog("AppealsCog")
         if cog is None:

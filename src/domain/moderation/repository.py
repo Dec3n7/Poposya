@@ -52,13 +52,9 @@ class IModCaseRepository(ABC):
         """Сохраняет кейс и возвращает его же с проставленным id."""
 
     @abstractmethod
-    async def list_for_user(
-        self, guild_id: int, user_id: int, limit: int = 50
-    ) -> list[ModCase]:
+    async def list_for_user(self, guild_id: int, user_id: int, limit: int = 50) -> list[ModCase]:
         """История по участнику, свежие сверху."""
 
     @abstractmethod
-    async def count_for_user(
-        self, guild_id: int, user_id: int, actions: Sequence[str]
-    ) -> int:
+    async def count_for_user(self, guild_id: int, user_id: int, actions: Sequence[str]) -> int:
         """Сколько раз к участнику применялись действия из actions (для эскалации)."""

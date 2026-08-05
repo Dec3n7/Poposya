@@ -20,9 +20,9 @@ def test_cookiefile_skipped_when_missing(tmp_path):
 def test_cookies_from_browser_takes_precedence(tmp_path):
     f = tmp_path / "cookies.txt"
     f.write_text("x")
-    opts = YtDlpAudioSource(
-        cookies_from_browser="chrome", cookies_file=str(f)
-    )._opts_with_cookies({})
+    opts = YtDlpAudioSource(cookies_from_browser="chrome", cookies_file=str(f))._opts_with_cookies(
+        {}
+    )
     assert opts["cookiesfrombrowser"] == ("chrome",)
     assert "cookiefile" not in opts
 

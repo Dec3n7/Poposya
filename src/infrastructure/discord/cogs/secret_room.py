@@ -49,9 +49,7 @@ class SecretRoomCog(commands.Cog):
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(
-            interaction, self.settings, self.gs, "secret_room_enabled"
-        )
+        return await block_if_module_off(interaction, self.settings, self.gs, "secret_room_enabled")
 
     def _role_names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""

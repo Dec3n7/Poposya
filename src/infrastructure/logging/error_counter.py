@@ -63,9 +63,7 @@ class ErrorRateCounter(logging.Handler):
             "by_level": dict(by_level),
             "top_loggers": dict(by_logger.most_common(3)),
             "total_since_start": total_since_start,
-            "seconds_since_last": (
-                round(time.monotonic() - events[-1][0], 1) if events else None
-            ),
+            "seconds_since_last": (round(time.monotonic() - events[-1][0], 1) if events else None),
         }
 
 

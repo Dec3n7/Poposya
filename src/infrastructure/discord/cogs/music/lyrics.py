@@ -310,7 +310,12 @@ class LyricsService:
                     try:
                         await message.edit(
                             embed=self._karaoke_embed(
-                                guild_id, player.current.title, blocks, index, player.elapsed(), ansi
+                                guild_id,
+                                player.current.title,
+                                blocks,
+                                index,
+                                player.elapsed(),
+                                ansi,
                             )
                         )
                     except discord.NotFound:

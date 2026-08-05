@@ -11,8 +11,6 @@ class IGitHubClient(ABC):
         """Карточка репозитория или None, если его нет (404)."""
 
     @abstractmethod
-    async def list_releases(
-        self, owner: str, name: str, etag: str | None = None
-    ) -> ReleasesPage:
+    async def list_releases(self, owner: str, name: str, etag: str | None = None) -> ReleasesPage:
         """Последние релизы, новейший первым. При переданном etag использует
         условный запрос (If-None-Match) и может вернуть not_modified."""

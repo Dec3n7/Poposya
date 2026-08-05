@@ -245,9 +245,7 @@ async def test_render_block_static_mode_skips_ai(svc):
 async def test_render_block_silent_returns_none(svc):
     persona = await svc.create_persona("Молчунья")
     await svc.assign(701, persona.id)
-    await svc.set_phrase(
-        persona.id, "activity.welcome", "не важно {name}", mode="silent"
-    )
+    await svc.set_phrase(persona.id, "activity.welcome", "не важно {name}", mode="silent")
     assert await svc.render_block(701, "activity.welcome", None, name="X") is None
 
 

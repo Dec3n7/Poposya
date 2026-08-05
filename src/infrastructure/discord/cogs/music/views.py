@@ -220,7 +220,11 @@ class LikedListView(discord.ui.View):
             for i, t in enumerate(self._page_tracks(), 1)
         ]
         title = (
-            str(self._persona.phrase(self._guild_id, "music.liked_title_self", count=len(self.tracks)))
+            str(
+                self._persona.phrase(
+                    self._guild_id, "music.liked_title_self", count=len(self.tracks)
+                )
+            )
             if self.owner.id == viewer_id
             else str(
                 self._persona.phrase(
@@ -301,7 +305,11 @@ class LikedListView(discord.ui.View):
             return
         if await self._enqueue(interaction, [resolved], False):
             await interaction.followup.send(
-                str(self._persona.phrase(gid, "music.liked_view_added", title=trim(resolved.title, 100))),
+                str(
+                    self._persona.phrase(
+                        gid, "music.liked_view_added", title=trim(resolved.title, 100)
+                    )
+                ),
                 ephemeral=True,
             )
 

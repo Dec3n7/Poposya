@@ -59,10 +59,14 @@ class SqlAlchemyPersonaRepository(IPersonaRepository):
 
     async def get_default(self) -> Persona | None:
         row = (
-            await self._session.execute(
-                select(PersonaModel).where(PersonaModel.is_default.is_(True))
+            (
+                await self._session.execute(
+                    select(PersonaModel).where(PersonaModel.is_default.is_(True))
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         return _to_persona(row) if row else None
 
     async def create(self, persona: Persona) -> Persona:

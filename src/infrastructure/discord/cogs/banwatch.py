@@ -123,12 +123,14 @@ class BanwatchCog(commands.Cog):
                     )
                 )
         except discord.Forbidden:
-            logger.warning("Нет права Ban Members — баны сервера недоступны",
-                           extra={"guild_id": guild.id})
+            logger.warning(
+                "Нет права Ban Members — баны сервера недоступны", extra={"guild_id": guild.id}
+            )
             return
         except discord.HTTPException:
-            logger.warning("Не удалось прочитать баны сервера", exc_info=True,
-                           extra={"guild_id": guild.id})
+            logger.warning(
+                "Не удалось прочитать баны сервера", exc_info=True, extra={"guild_id": guild.id}
+            )
             return
         try:
             await self.banwatch.sync_guild.execute(guild.id, bans)
@@ -160,9 +162,7 @@ class BanwatchCog(commands.Cog):
             color=accent(interaction.guild_id),
         )
         for rec in report.records[:15]:
-            when = (
-                f"<t:{int(rec.banned_at.timestamp())}:D>" if rec.banned_at else "дата неизвестна"
-            )
+            when = f"<t:{int(rec.banned_at.timestamp())}:D>" if rec.banned_at else "дата неизвестна"
             # причину бана чужого сервера не показываем (см. _records_json в
             # api/routers/moderation.py) — только где и когда
             embed.add_field(

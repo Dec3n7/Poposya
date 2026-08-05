@@ -37,9 +37,7 @@ class SqlAlchemyAppealRepository(IAppealRepository):
             review_message_id=appeal.review_message_id,
             resolver_id=appeal.resolver_id,
             created_at=appeal.created_at.replace(tzinfo=None),
-            resolved_at=(
-                appeal.resolved_at.replace(tzinfo=None) if appeal.resolved_at else None
-            ),
+            resolved_at=(appeal.resolved_at.replace(tzinfo=None) if appeal.resolved_at else None),
         )
         self._session.add(row)
         await self._session.flush()  # нужен id (кнопки/панель ссылаются на апелляцию)
@@ -80,6 +78,4 @@ class SqlAlchemyAppealRepository(IAppealRepository):
         row.text = appeal.text
         row.review_message_id = appeal.review_message_id
         row.resolver_id = appeal.resolver_id
-        row.resolved_at = (
-            appeal.resolved_at.replace(tzinfo=None) if appeal.resolved_at else None
-        )
+        row.resolved_at = appeal.resolved_at.replace(tzinfo=None) if appeal.resolved_at else None

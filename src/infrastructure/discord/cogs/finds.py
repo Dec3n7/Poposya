@@ -394,8 +394,7 @@ class FindsCog(commands.Cog):
         )
         if view.find.channel_id and view.find.message_id:
             url = (
-                f"https://discord.com/channels/"
-                f"{gid}/{view.find.channel_id}/{view.find.message_id}"
+                f"https://discord.com/channels/{gid}/{view.find.channel_id}/{view.find.message_id}"
             )
             body += "\n" + self._p(gid, "finds.active_jump", url=url)
         embed = discord.Embed(
@@ -466,7 +465,9 @@ class FindsCog(commands.Cog):
     async def gift_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        entries = await self.finds.get_collection.execute(guild_of(interaction).id, interaction.user.id)
+        entries = await self.finds.get_collection.execute(
+            guild_of(interaction).id, interaction.user.id
+        )
         seen: dict[str, str] = {}  # item_id -> название с эмодзи
         for entry in entries:
             if entry.gifted_at is None and entry.item.id not in seen:
@@ -508,9 +509,7 @@ class FindsCog(commands.Cog):
             return
         if result.status == "fail":
             line = await self._pick(gid, "finds.walk_fail")
-            tail = self._p(
-                gid, "finds.walk_fail_tail", cost=result.cost, total=result.points_total
-            )
+            tail = self._p(gid, "finds.walk_fail_tail", cost=result.cost, total=result.points_total)
             await interaction.followup.send(f"{line}\n{tail}".strip(), ephemeral=True)
             return
         item = result.item

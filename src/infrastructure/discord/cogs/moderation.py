@@ -245,9 +245,7 @@ class ModerationCog(commands.Cog):
             self._p(guild.id, "moderation.say_sent", channel=target.mention),
             ephemeral=True,
         )
-        await self._log(
-            guild, f"💬 /say от {interaction.user} в #{target.name}: {text[:200]}"
-        )
+        await self._log(guild, f"💬 /say от {interaction.user} в #{target.name}: {text[:200]}")
 
     async def _enforce_warn(
         self,
@@ -327,7 +325,9 @@ class ModerationCog(commands.Cog):
         # 1) масс-упоминания: один месседж с кучей пингов -> сразу мут
         mention_limit = self._cfg(gid, "spam_mention_limit")
         if mention_limit and len(message.mentions) > mention_limit:
-            await self._punish_spam(message, member, gid, "moderation.spam_mention", "масс-упоминания")
+            await self._punish_spam(
+                message, member, gid, "moderation.spam_mention", "масс-упоминания"
+            )
             return
 
         # 2) чужие инвайт-ссылки от не-модеров: удаляем и выдаём варн
@@ -450,9 +450,7 @@ class ModerationCog(commands.Cog):
             user.id, gid, interaction.user.id, reason, _now()
         )
         if result.action == "tempban":
-            expires_at = await self._enforce_warn(
-                guild, user, result, reason, interaction.user.id
-            )
+            expires_at = await self._enforce_warn(guild, user, result, reason, interaction.user.id)
             when = f"<t:{int(expires_at.timestamp())}:f>" if expires_at else "—"
             await interaction.response.send_message(
                 self._p(
@@ -547,12 +545,8 @@ class ModerationCog(commands.Cog):
             ephemeral=True,
         )
         if count:
-            await self._case(
-                gid, user.id, interaction.user.id, CASE_CLEARWARNS, f"снято {count}"
-            )
-            await self._log(
-                guild, f"🧹 Сброс варнов ({count}): {user} — {interaction.user}"
-            )
+            await self._case(gid, user.id, interaction.user.id, CASE_CLEARWARNS, f"снято {count}")
+            await self._log(guild, f"🧹 Сброс варнов ({count}): {user} — {interaction.user}")
 
     # --- мут / анмут ---
 
@@ -655,9 +649,7 @@ class ModerationCog(commands.Cog):
                 delete_message_seconds=0,
             )
         except discord.Forbidden:
-            await interaction.followup.send(
-                self._p(gid, "moderation.ban_no_perm"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "moderation.ban_no_perm"), ephemeral=True)
             return
         expires_at = await self.container.temp_ban.execute(
             user.id, gid, interaction.user.id, reason, minutes, now
@@ -693,9 +685,7 @@ class ModerationCog(commands.Cog):
             )
             return
         try:
-            await guild.unban(
-                discord.Object(id=uid), reason=f"Досрочно: {interaction.user}"
-            )
+            await guild.unban(discord.Object(id=uid), reason=f"Досрочно: {interaction.user}")
         except discord.NotFound:
             await interaction.response.send_message(
                 self._p(gid, "moderation.unban_not_banned"), ephemeral=True
@@ -775,12 +765,12 @@ class ModerationCog(commands.Cog):
             self._p(gid, "moderation.kicked", mention=user.mention, reason=reason),
             allowed_mentions=discord.AllowedMentions(users=True),
         )
-        await self._log(
-            guild, f"👢 Кик: {user} — {interaction.user} (причина: {reason})"
-        )
+        await self._log(guild, f"👢 Кик: {user} — {interaction.user} (причина: {reason})")
 
     @app_commands.command(name="ban", description="Забанить участника навсегда")
-    @app_commands.describe(user="Кого", reason="Причина", delete_days="Удалить сообщения за N дней (0–7)")
+    @app_commands.describe(
+        user="Кого", reason="Причина", delete_days="Удалить сообщения за N дней (0–7)"
+    )
     @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def ban(
@@ -807,9 +797,7 @@ class ModerationCog(commands.Cog):
                 delete_message_seconds=delete_days * 86400,
             )
         except discord.Forbidden:
-            await interaction.followup.send(
-                self._p(gid, "moderation.ban_no_perm"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "moderation.ban_no_perm"), ephemeral=True)
             return
         # перманентный бан не пишем в temp_bans — авторазбан его не трогает
         await self._case(gid, user.id, interaction.user.id, CASE_BAN, reason)
@@ -817,9 +805,7 @@ class ModerationCog(commands.Cog):
             self._p(gid, "moderation.banned", mention=user.mention, reason=reason),
             allowed_mentions=discord.AllowedMentions(users=True),
         )
-        await self._log(
-            guild, f"🔨 Бан навсегда: {user} — {interaction.user} (причина: {reason})"
-        )
+        await self._log(guild, f"🔨 Бан навсегда: {user} — {interaction.user} (причина: {reason})")
 
     # --- история модерации по участнику ---
 

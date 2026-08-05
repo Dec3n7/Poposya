@@ -98,7 +98,9 @@ async def test_count_for_user_filters_by_action(uow_factory):
     log = LogModCaseUseCase(uow_factory)
     for action in ("mute", "warn_mute", "warn_mute", "kick"):
         await log.execute(
-            ModCase(guild_id=10, user_id=1, moderator_id=0, action=action, reason="", created_at=NOW)
+            ModCase(
+                guild_id=10, user_id=1, moderator_id=0, action=action, reason="", created_at=NOW
+            )
         )
     async with uow_factory() as uow:
         n = await uow.mod_cases.count_for_user(10, 1, ("warn_mute", "warn_tempban"))

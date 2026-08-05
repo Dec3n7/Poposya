@@ -93,7 +93,10 @@ class RoleSyncService:
 
         names = self._names_for(guild.id)
         newcomer = self._newcomer_for(guild.id)
-        managed = {name: discord.utils.get(guild.roles, name=name) for name in self._managed_names(guild.id)}
+        managed = {
+            name: discord.utils.get(guild.roles, name=name)
+            for name in self._managed_names(guild.id)
+        }
 
         if role_index is not None and 0 <= role_index < len(names):
             desired = managed.get(names[role_index])

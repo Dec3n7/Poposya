@@ -359,7 +359,12 @@ class UpcomingBirthdaysUseCase:
         async with self._uow_factory() as uow:
             profiles = await uow.relationships.all_for_guild(guild_id)
         upcoming = [
-            (p.user_id, p.birthday_month, p.birthday_day, _days_until_birthday(today, p.birthday_month, p.birthday_day))
+            (
+                p.user_id,
+                p.birthday_month,
+                p.birthday_day,
+                _days_until_birthday(today, p.birthday_month, p.birthday_day),
+            )
             for p in profiles
             if p.birthday_month and p.birthday_day
         ]
@@ -453,7 +458,9 @@ class ListProfilesUseCase:
     заморозка, последний диалог. Без фильтра по очкам — 0-очковые и
     замороженные тоже нужны."""
 
-    def __init__(self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None):
+    def __init__(
+        self, uow_factory: UowFactory, policy: PointsToLevelPolicy, settings_provider=None
+    ):
         self._uow_factory = uow_factory
         self._policy = policy
         self._settings = settings_provider

@@ -32,9 +32,7 @@ class SqlAlchemyMetricsRepository(IMetricsRepository):
             )
             await self._session.execute(stmt)
 
-    async def series(
-        self, guild_id: int, since: date
-    ) -> dict[str, list[tuple[date, float]]]:
+    async def series(self, guild_id: int, since: date) -> dict[str, list[tuple[date, float]]]:
         stmt = (
             select(
                 GuildMetricDailyModel.metric,

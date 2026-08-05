@@ -370,5 +370,7 @@ async def test_movie_night_register_message_and_close_both_survive(uow_factory):
         nights = {nid: await uow.movie_nights.get(nid) for nid in ids}
     for nid, night in nights.items():
         assert night.poll_message_id != 0, f"ночь {nid}: poll_message_id затёрт закрытием"
-        assert night.status == "scheduled", f"ночь {nid}: закрытие затёрто привязкой (status={night.status})"
+        assert night.status == "scheduled", (
+            f"ночь {nid}: закрытие затёрто привязкой (status={night.status})"
+        )
         assert night.winner_entry_id is not None, f"ночь {nid}: победитель затёрт привязкой"

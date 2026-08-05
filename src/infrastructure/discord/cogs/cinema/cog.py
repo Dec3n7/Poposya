@@ -234,9 +234,7 @@ class CinemaCog(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
-            await interaction.followup.send(
-                self._p(gid, "cinema.card_send_failed"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.card_send_failed"), ephemeral=True)
             return
         await self.cinema.register_message.execute(
             "card", cast(int, saved.id), channel.id, message.id
@@ -248,9 +246,7 @@ class CinemaCog(commands.Cog):
     async def handle_vote(self, interaction: discord.Interaction, value: int) -> None:
         await interaction.response.defer(ephemeral=True)
         message = cast(discord.Message, interaction.message)  # клик по кнопке карточки
-        result = await self.cinema.vote_movie.execute(
-            message.id, interaction.user.id, value
-        )
+        result = await self.cinema.vote_movie.execute(message.id, interaction.user.id, value)
         gid = guild_of(interaction).id
         if result.status == "gone":
             await interaction.followup.send(self._p(gid, "cinema.vote_gone"), ephemeral=True)
@@ -316,9 +312,7 @@ class CinemaCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         gid = guild_of(interaction).id
         if not movie.isdigit():
-            await interaction.followup.send(
-                self._p(gid, "cinema.pick_from_hints"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.pick_from_hints"), ephemeral=True)
             return
         status, entry = await self.cinema.remove_movie.execute(
             gid,
@@ -350,9 +344,7 @@ class CinemaCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         gid = guild_of(interaction).id
         if not movie.isdigit():
-            await interaction.followup.send(
-                self._p(gid, "cinema.pick_from_hints"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.pick_from_hints"), ephemeral=True)
             return
         entry = await self.cinema.open_rating.execute(int(movie), datetime.now(UTC))
         if entry is None:
@@ -430,13 +422,9 @@ class CinemaCog(commands.Cog):
         when = self._parse_when(day, time)
         now = datetime.now(UTC)
         if when is None or when < now + timedelta(minutes=15):
-            await interaction.followup.send(
-                self._p(gid, "cinema.night_bad_time"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "cinema.night_bad_time"), ephemeral=True)
             return
-        result = await self.cinema.start_night.execute(
-            gid, interaction.user.id, when, now
-        )
+        result = await self.cinema.start_night.execute(gid, interaction.user.id, when, now)
         if result.status == "busy":
             await interaction.followup.send(self._p(gid, "cinema.night_busy"), ephemeral=True)
             return
@@ -576,7 +564,9 @@ class CinemaCog(commands.Cog):
         try:
             embed = cast(discord.Message, interaction.message).embeds[0]
             embed.set_footer(
-                text=self._p(gid, "cinema.rating_footer", count=result.count, reviews=result.reviews)
+                text=self._p(
+                    gid, "cinema.rating_footer", count=result.count, reviews=result.reviews
+                )
             )
             await cast(discord.Message, interaction.message).edit(embed=embed)
         except (discord.HTTPException, IndexError):
@@ -604,11 +594,11 @@ class CinemaCog(commands.Cog):
             )
             embed = message.embeds[0]
             embed.set_footer(
-                text=self._p(gid, "cinema.rating_footer", count=result.count, reviews=result.reviews)
+                text=self._p(
+                    gid, "cinema.rating_footer", count=result.count, reviews=result.reviews
+                )
             )
             await message.edit(embed=embed)
         except (discord.HTTPException, IndexError, AttributeError):
             pass
-        await interaction.followup.send(
-            self._p(gid, "cinema.review_recorded"), ephemeral=True
-        )
+        await interaction.followup.send(self._p(gid, "cinema.review_recorded"), ephemeral=True)

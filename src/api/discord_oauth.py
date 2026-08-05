@@ -64,14 +64,14 @@ def manageable_guilds(guilds: list[dict]) -> list[SessionGuild]:
         if g.get("owner"):
             perms |= _ADMINISTRATOR
         result.append(
-            SessionGuild(id=int(g["id"]), name=g.get("name", ""), icon=g.get("icon"), permissions=perms)
+            SessionGuild(
+                id=int(g["id"]), name=g.get("name", ""), icon=g.get("icon"), permissions=perms
+            )
         )
     return result
 
 
-async def exchange_code(
-    client_id: str, client_secret: str, code: str, redirect_uri: str
-) -> str:
+async def exchange_code(client_id: str, client_secret: str, code: str, redirect_uri: str) -> str:
     """Код авторизации -> access_token пользователя."""
     data = {
         "client_id": client_id,

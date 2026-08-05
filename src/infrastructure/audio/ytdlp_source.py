@@ -41,8 +41,7 @@ class YtDlpAudioSource(IAudioSource):
         # работает»: скажем об этом громко один раз, а не роняем каждый extract
         if cookies_file and not cookies_from_browser and not os.path.exists(cookies_file):
             logger.warning(
-                "YTDLP_COOKIES_FILE указывает на несуществующий файл — cookies не "
-                "применяются: %s",
+                "YTDLP_COOKIES_FILE указывает на несуществующий файл — cookies не применяются: %s",
                 cookies_file,
             )
         # одна закачка за раз: не отбираем канал у живого стрима текущего трека

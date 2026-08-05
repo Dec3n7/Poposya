@@ -193,7 +193,19 @@ async def test_batch_rejects_broken_invariant_422(client):
 async def test_batch_updates_rate_limits(client):
     resp = await client.put(
         f"/api/guilds/{GUILD}/settings/batch",
-        json={"values": {"ai_rate_limits_by_level": {"1": 3, "2": 6, "3": 9, "4": 12, "5": 15, "6": 18, "7": 21}}},
+        json={
+            "values": {
+                "ai_rate_limits_by_level": {
+                    "1": 3,
+                    "2": 6,
+                    "3": 9,
+                    "4": 12,
+                    "5": 15,
+                    "6": 18,
+                    "7": 21,
+                }
+            }
+        },
     )
     assert resp.status_code == 204
     data = (await client.get(f"/api/guilds/{GUILD}/settings/complex")).json()
@@ -545,9 +557,27 @@ async def test_moderation_guild_warns_counts(client, uow_factory, monkeypatch):
     now = datetime.now(UTC)
     async with uow_factory() as uow:
         # user 9 — два варна (последний свежее), user 8 — один
-        await uow.warns.add(Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason="a", created_at=now - timedelta(days=2)))
-        await uow.warns.add(Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason="b", created_at=now))
-        await uow.warns.add(Warn(guild_id=GUILD, user_id=8, moderator_id=1, reason="c", created_at=now - timedelta(days=1)))
+        await uow.warns.add(
+            Warn(
+                guild_id=GUILD,
+                user_id=9,
+                moderator_id=1,
+                reason="a",
+                created_at=now - timedelta(days=2),
+            )
+        )
+        await uow.warns.add(
+            Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason="b", created_at=now)
+        )
+        await uow.warns.add(
+            Warn(
+                guild_id=GUILD,
+                user_id=8,
+                moderator_id=1,
+                reason="c",
+                created_at=now - timedelta(days=1),
+            )
+        )
         await uow.commit()
 
     rows = (await client.get(f"/api/guilds/{GUILD}/moderation/warns")).json()
@@ -687,7 +717,9 @@ async def _fake_bot(container, execute):
 async def test_moderation_ban_requires_session(container):
     app = create_app(container)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as anon:
-        resp = await anon.post(f"/api/guilds/{GUILD}/moderation/ban", json={"user_id": "1", "minutes": 5})
+        resp = await anon.post(
+            f"/api/guilds/{GUILD}/moderation/ban", json={"user_id": "1", "minutes": 5}
+        )
     assert resp.status_code == 401
 
 
@@ -719,9 +751,7 @@ async def test_moderation_command_failure_surfaces(client, container):
 
     task, stop, _seen = await _fake_bot(container, execute)
     try:
-        resp = await client.post(
-            f"/api/guilds/{GUILD}/moderation/unban", json={"user_id": "42"}
-        )
+        resp = await client.post(f"/api/guilds/{GUILD}/moderation/unban", json={"user_id": "42"})
     finally:
         stop.set()
         await task
@@ -743,9 +773,7 @@ async def test_music_control_command(client, container):
 
     task, stop, seen = await _fake_bot(container, execute)
     try:
-        resp = await client.post(
-            f"/api/guilds/{GUILD}/music/control", json={"action": "pause"}
-        )
+        resp = await client.post(f"/api/guilds/{GUILD}/music/control", json={"action": "pause"})
     finally:
         stop.set()
         await task
@@ -812,16 +840,27 @@ async def test_summary_badge_counts(client, uow_factory):
         await uow.relationships.save(p)
         # активный бан + просроченный (не считается)
         await uow.temp_bans.add(
-            TempBan(guild_id=GUILD, user_id=42, moderator_id=1, reason="x",
-                    expires_at=now + timedelta(hours=1))
+            TempBan(
+                guild_id=GUILD,
+                user_id=42,
+                moderator_id=1,
+                reason="x",
+                expires_at=now + timedelta(hours=1),
+            )
         )
         await uow.temp_bans.add(
-            TempBan(guild_id=GUILD, user_id=43, moderator_id=1, reason="old",
-                    expires_at=now - timedelta(hours=1))
+            TempBan(
+                guild_id=GUILD,
+                user_id=43,
+                moderator_id=1,
+                reason="old",
+                expires_at=now - timedelta(hours=1),
+            )
         )
         # варн участнику
-        await uow.warns.add(Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason="спам",
-                                 created_at=now))
+        await uow.warns.add(
+            Warn(guild_id=GUILD, user_id=9, moderator_id=1, reason="спам", created_at=now)
+        )
         await uow.commit()
 
     data = (await client.get(f"/api/guilds/{GUILD}/summary")).json()
@@ -982,12 +1021,20 @@ async def test_music_now_playing(client, uow_factory, monkeypatch):
                 guild_id=GUILD,
                 is_active=True,
                 current=PlayerTrack(
-                    title="Song", url="http://x", duration=200, requested_by=5,
-                    uploader="Artist", thumbnail=None,
+                    title="Song",
+                    url="http://x",
+                    duration=200,
+                    requested_by=5,
+                    uploader="Artist",
+                    thumbnail=None,
                 ),
                 queue=[PlayerTrack(title="Next", url="http://y", duration=100, requested_by=6)],
-                position_seconds=42, is_paused=False, repeat="all", volume=0.8,
-                position_at=now, updated_at=now,
+                position_seconds=42,
+                is_paused=False,
+                repeat="all",
+                volume=0.8,
+                position_at=now,
+                updated_at=now,
             )
         )
         await uow.commit()
@@ -1030,7 +1077,11 @@ async def test_modules_list_and_toggle(client):
 
     mods2 = (await client.get(f"/api/guilds/{GUILD}/settings/modules")).json()
     album = next(
-        s for m in mods2 if m["key"] == "activity" for s in m["subs"] if s["key"] == "activity_album"
+        s
+        for m in mods2
+        if m["key"] == "activity"
+        for s in m["subs"]
+        if s["key"] == "activity_album"
     )
     assert album["value"] is False and album["is_override"] is True
 

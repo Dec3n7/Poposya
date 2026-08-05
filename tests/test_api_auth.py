@@ -239,8 +239,14 @@ def test_session_roundtrip_preserves_permissions():
 
 def test_has_permission_specific_bit():
     sess = Session(
-        user_id=1, username="u", avatar=None,
-        guilds=[SessionGuild(id=10, name="G", icon=None, permissions=PERM_MANAGE_GUILD | PERM_BAN_MEMBERS)],
+        user_id=1,
+        username="u",
+        avatar=None,
+        guilds=[
+            SessionGuild(
+                id=10, name="G", icon=None, permissions=PERM_MANAGE_GUILD | PERM_BAN_MEMBERS
+            )
+        ],
     )
     assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
     assert sess.has_permission(10, PERM_MODERATE_MEMBERS) is False  # права нет
@@ -249,7 +255,9 @@ def test_has_permission_specific_bit():
 
 def test_has_permission_administrator_covers_all():
     sess = Session(
-        user_id=1, username="u", avatar=None,
+        user_id=1,
+        username="u",
+        avatar=None,
         guilds=[SessionGuild(id=10, name="G", icon=None, permissions=PERM_ADMINISTRATOR)],
     )
     assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
@@ -259,7 +267,9 @@ def test_has_permission_administrator_covers_all():
 def test_has_permission_legacy_none_is_permissive():
     # легаси-токен без записанных битов -> старое поведение (всё можно до перелогина)
     sess = Session(
-        user_id=1, username="u", avatar=None,
+        user_id=1,
+        username="u",
+        avatar=None,
         guilds=[SessionGuild(id=10, name="G", icon=None)],  # permissions=None
     )
     assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
@@ -328,9 +338,7 @@ async def test_operator_revoke_kills_user_sessions(tmp_path, mock_discord):
     c.bot_guilds.prime({10, 20})
     app = create_app(c)
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await _login(client)
             assert (await client.get("/api/auth/me")).status_code == 200
             # оператор отзывает все сессии пользователя 42

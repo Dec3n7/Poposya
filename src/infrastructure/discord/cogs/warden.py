@@ -99,9 +99,7 @@ class WardenCog(commands.Cog):
                 f"Сторож не ответил ({type(exc).__name__}).", ephemeral=True
             )
             return
-        await interaction.followup.send(
-            "▶ Пауза снята — действия снова разрешены.", ephemeral=True
-        )
+        await interaction.followup.send("▶ Пауза снята — действия снова разрешены.", ephemeral=True)
 
     @warden.command(name="status", description="Кратко: режим и открытые инциденты сторожа")
     async def status(self, interaction: discord.Interaction) -> None:

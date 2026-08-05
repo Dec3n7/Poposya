@@ -107,9 +107,18 @@ async def complex_settings(
         }
 
     return {
-        "role_thresholds": {"label": _COMPLEX_LABELS["relationship_role_thresholds"], **field("relationship_role_thresholds")},
-        "role_names": {"label": _COMPLEX_LABELS["relationship_role_names"], **field("relationship_role_names")},
-        "rate_limits": {"label": _COMPLEX_LABELS["ai_rate_limits_by_level"], **field("ai_rate_limits_by_level")},
+        "role_thresholds": {
+            "label": _COMPLEX_LABELS["relationship_role_thresholds"],
+            **field("relationship_role_thresholds"),
+        },
+        "role_names": {
+            "label": _COMPLEX_LABELS["relationship_role_names"],
+            **field("relationship_role_names"),
+        },
+        "rate_limits": {
+            "label": _COMPLEX_LABELS["ai_rate_limits_by_level"],
+            **field("ai_rate_limits_by_level"),
+        },
     }
 
 
@@ -130,7 +139,10 @@ async def update_batch(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     await record_audit(
-        container, guild_id, session.user_id, "settings.batch",
+        container,
+        guild_id,
+        session.user_id,
+        "settings.batch",
         details={"keys": list(body.values.keys())},
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -152,8 +164,12 @@ async def update_setting(
     except ValueError as exc:  # невалидное значение или нарушен инвариант
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     await record_audit(
-        container, guild_id, session.user_id, "settings.set",
-        target=key, details={"value": body.value},
+        container,
+        guild_id,
+        session.user_id,
+        "settings.set",
+        target=key,
+        details={"value": body.value},
     )
     return _field(service, guild_id, key)
 
@@ -169,7 +185,5 @@ async def reset_setting(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "неизвестная настройка")
     service = container.guild_settings
     await service.reset(guild_id, key)  # вернётся глобальный дефолт
-    await record_audit(
-        container, guild_id, session.user_id, "settings.reset", target=key
-    )
+    await record_audit(container, guild_id, session.user_id, "settings.reset", target=key)
     return _field(service, guild_id, key)

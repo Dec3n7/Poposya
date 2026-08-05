@@ -51,9 +51,7 @@ _FAIL_NOTIFY_COOLDOWN = 15
 
 
 class MusicPlayerService:
-    def __init__(
-        self, bot: commands.Bot, container: MusicContainer, presence=None, persona=None
-    ):
+    def __init__(self, bot: commands.Bot, container: MusicContainer, presence=None, persona=None):
         self.bot = bot
         self.settings = container.settings
         # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
@@ -220,9 +218,13 @@ class MusicPlayerService:
         )
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
-        embed.add_field(name=self._p(gid, "music.field_volume"), value=f"{int(player.volume * 100)}%")
+        embed.add_field(
+            name=self._p(gid, "music.field_volume"), value=f"{int(player.volume * 100)}%"
+        )
         embed.add_field(name=self._p(gid, "music.field_repeat"), value=REPEAT_LABELS[player.repeat])
-        embed.add_field(name=self._p(gid, "music.field_requester"), value=f"<@{track.requested_by}>")
+        embed.add_field(
+            name=self._p(gid, "music.field_requester"), value=f"<@{track.requested_by}>"
+        )
         if self.radio is not None and self.radio.is_enabled(player.guild_id):
             embed.add_field(
                 name=self._p(gid, "music.field_radio"), value=self._p(gid, "music.field_radio_on")
@@ -260,8 +262,12 @@ class MusicPlayerService:
     def _player_snapshot(self, player: GuildPlayer) -> PlayerState:
         def pt(t: Track) -> PlayerTrack:
             return PlayerTrack(
-                title=t.title, url=t.url, duration=t.duration, requested_by=t.requested_by,
-                uploader=t.uploader, thumbnail=t.thumbnail,
+                title=t.title,
+                url=t.url,
+                duration=t.duration,
+                requested_by=t.requested_by,
+                uploader=t.uploader,
+                thumbnail=t.thumbnail,
             )
 
         cur = player.current

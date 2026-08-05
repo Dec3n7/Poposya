@@ -275,9 +275,15 @@ class SteamCog(commands.Cog):
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             except discord.HTTPException:
-                logger.warning("Не удалось отправить последнюю новость при добавлении", exc_info=True)
+                logger.warning(
+                    "Не удалось отправить последнюю новость при добавлении", exc_info=True
+                )
 
-        no_news = "" if snapshot.latest_news else "\nОфициальных новостей пока нет — сообщу, когда появятся."
+        no_news = (
+            ""
+            if snapshot.latest_news
+            else "\nОфициальных новостей пока нет — сообщу, когда появятся."
+        )
         await interaction.followup.send(
             f"Отслеживаю **{snapshot.info.name}** → {created.thread.mention}.{no_news}",
             ephemeral=True,

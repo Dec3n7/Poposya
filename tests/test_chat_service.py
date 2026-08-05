@@ -382,7 +382,9 @@ async def test_persona_prompt_reaches_provider():
     assert "Я НЕ ПОПОСЯ, я альтер-эго." in provider.calls[0][0]
 
     provider2 = FakeProvider(reply="ок")
-    svc2 = make_service(provider=provider2, persona=_FakePersona("АЛЬТЕР"), rank=FakeRank(make_rank()))
+    svc2 = make_service(
+        provider=provider2, persona=_FakePersona("АЛЬТЕР"), rank=FakeRank(make_rank())
+    )
     await svc2.comment_on_event(10, 1, "Гость", "включил трек", NOW)
     assert "АЛЬТЕР" in provider2.calls[0][0]
 

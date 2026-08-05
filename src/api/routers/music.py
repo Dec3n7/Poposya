@@ -141,9 +141,7 @@ async def control(
 ) -> dict:
     """Управление живой сессией плеера через командный мост: pause/resume/
     skip/stop. Запуск нового трека невозможен — для него нужен участник в войсе."""
-    cmd = await run_command(
-        container, guild_id, f"music.{body.action}", {}, session.user_id
-    )
+    cmd = await run_command(container, guild_id, f"music.{body.action}", {}, session.user_id)
     await record_audit(
         container, guild_id, session.user_id, f"music.{body.action}", result=cmd.get("status")
     )
@@ -178,9 +176,7 @@ async def seek(
     cmd = await run_command(
         container, guild_id, "music.seek", {"position": body.position}, session.user_id
     )
-    await record_audit(
-        container, guild_id, session.user_id, "music.seek", result=cmd.get("status")
-    )
+    await record_audit(container, guild_id, session.user_id, "music.seek", result=cmd.get("status"))
     return cmd
 
 

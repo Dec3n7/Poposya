@@ -65,6 +65,7 @@ _INTEREST_EMOJI = {
     "Кино": "🎬",
 }
 
+
 class SurveyView(discord.ui.View):
     """Персистентные кнопки анкеты: переживают рестарт бота. Кнопки и их
     подписи — структурные енумы (регистрируются глобально, без контекста
@@ -114,9 +115,7 @@ class SurveyView(discord.ui.View):
 
         async def callback(interaction: discord.Interaction) -> None:
             gid = guild_of(interaction).id
-            await self.container.set_survey_choice.execute(
-                interaction.user.id, gid, field, value
-            )
+            await self.container.set_survey_choice.execute(interaction.user.id, gid, field, value)
             ack = str(self.persona.phrase(gid, "introduce.ack"))
             if field == "season":
                 seasons = self.persona.phrase(gid, "introduce.season_replies")
@@ -156,9 +155,7 @@ class SurveyView(discord.ui.View):
             role_name = await self._sync_interest_role(interaction, interest, added)
             if role_name:
                 rkey = (
-                    "introduce.interest_role_added"
-                    if added
-                    else "introduce.interest_role_removed"
+                    "introduce.interest_role_added" if added else "introduce.interest_role_removed"
                 )
                 reply += " " + str(self.persona.phrase(gid, rkey, role=role_name))
             await interaction.response.send_message(reply, ephemeral=True)
@@ -228,11 +225,7 @@ class SurveyView(discord.ui.View):
             lines.append(f"*{'; '.join(summary)}.*")
         if result.first_time and result.bonus_awarded:
             lines.append(
-                str(
-                    self.persona.phrase(
-                        gid, "introduce.survey_bonus", bonus=result.bonus_awarded
-                    )
-                )
+                str(self.persona.phrase(gid, "introduce.survey_bonus", bonus=result.bonus_awarded))
             )
         elif not result.first_time:
             lines.append(str(self.persona.phrase(gid, "introduce.survey_updated")))
@@ -258,9 +251,7 @@ class IntroduceCog(commands.Cog):
         self.persona = persona if persona is not None else RegistryPersona()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(
-            interaction, self.settings, self.gs, "introduce_enabled"
-        )
+        return await block_if_module_off(interaction, self.settings, self.gs, "introduce_enabled")
 
     async def cog_load(self) -> None:
         # регистрация персистентной view: кнопки работают после рестарта
@@ -331,6 +322,4 @@ class IntroduceCog(commands.Cog):
             embed=self._survey_embed(guild.id),
             view=SurveyView(self.container, self.settings, self.persona, guild_settings=self.gs),
         )
-        await interaction.followup.send(
-            self._p(guild.id, "introduce.published"), ephemeral=True
-        )
+        await interaction.followup.send(self._p(guild.id, "introduce.published"), ephemeral=True)

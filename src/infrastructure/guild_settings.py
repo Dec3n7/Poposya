@@ -494,10 +494,14 @@ class GuildSettingsService(ISettingsProvider):
         бота остаётся устаревшим до рестарта. Сбрасывает мемоизацию resolved."""
         async with self._session_factory() as session:
             rows = (
-                await session.execute(
-                    select(GuildSettingModel).where(GuildSettingModel.guild_id == guild_id)
+                (
+                    await session.execute(
+                        select(GuildSettingModel).where(GuildSettingModel.guild_id == guild_id)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         parsed = {
             row.key: value
             for row in rows

@@ -252,7 +252,9 @@ class MusicCog(commands.Cog):
             for i, t in enumerate(recent, 1)
         ]
         embed = discord.Embed(
-            title=self._p(guild_of(interaction).id, "music.history_title", count=len(player.history)),
+            title=self._p(
+                guild_of(interaction).id, "music.history_title", count=len(player.history)
+            ),
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
@@ -275,9 +277,7 @@ class MusicCog(commands.Cog):
         gid = guild_of(interaction).id
         player = self.service.get_player(gid)
         tracks = player.all_tracks() if player else []
-        error = await self.container.save_playlist.execute(
-            gid, name, interaction.user.id, tracks
-        )
+        error = await self.container.save_playlist.execute(gid, name, interaction.user.id, tracks)
         replies = {
             "": self._p(gid, "music.playlist_saved", name=name.strip()[:50], count=len(tracks)),
             "empty": self._p(gid, "music.save_queue_empty"),
@@ -477,9 +477,7 @@ class MusicCog(commands.Cog):
             if await self.lyrics.start_karaoke(
                 cast(discord.abc.Messageable, interaction.channel), gid, track, synced
             ):
-                await interaction.followup.send(
-                    self._p(gid, "music.karaoke_on"), ephemeral=True
-                )
+                await interaction.followup.send(self._p(gid, "music.karaoke_on"), ephemeral=True)
             else:
                 await interaction.followup.send(
                     self._p(gid, "music.karaoke_no_synced"), ephemeral=True
@@ -487,9 +485,7 @@ class MusicCog(commands.Cog):
             return
 
         if not plain:
-            await interaction.followup.send(
-                self._p(gid, "music.lyrics_not_found"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "music.lyrics_not_found"), ephemeral=True)
             return
         await interaction.followup.send(embed=self.lyrics.plain_embed(track, plain), ephemeral=True)
 
@@ -515,12 +511,12 @@ class MusicCog(commands.Cog):
         try:
             raw = (await file.read()).decode("utf-8", errors="replace")
         except discord.HTTPException:
-            await interaction.followup.send(self._p(gid, "music.lrc_download_failed"), ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "music.lrc_download_failed"), ephemeral=True
+            )
             return
         if not self.lyrics.set_synced_lrc(player.current.video_id, raw):
-            await interaction.followup.send(
-                self._p(gid, "music.lrc_no_timecodes"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "music.lrc_no_timecodes"), ephemeral=True)
             return
         await interaction.followup.send(self._p(gid, "music.lrc_accepted"), ephemeral=True)
 
@@ -537,9 +533,7 @@ class MusicCog(commands.Cog):
         gid = guild_of(interaction).id
         player = self.service.get_player(gid)
         tracks = player.all_tracks() if player else []
-        error = await self.container.save_playlist.execute(
-            gid, name, interaction.user.id, tracks
-        )
+        error = await self.container.save_playlist.execute(gid, name, interaction.user.id, tracks)
         replies = {
             "": self._p(gid, "music.playlist_saved", name=name.strip()[:50], count=len(tracks)),
             "empty": self._p(gid, "music.playlist_save_empty"),
@@ -562,7 +556,9 @@ class MusicCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         tracks = await self.container.load_playlist.execute(gid, name, member.id)
         if tracks is None:
-            await interaction.followup.send(self._p(gid, "music.playlist_not_found"), ephemeral=True)
+            await interaction.followup.send(
+                self._p(gid, "music.playlist_not_found"), ephemeral=True
+            )
             return
         if await self.service.enqueue_tracks(interaction, tracks):
             await interaction.followup.send(
@@ -620,9 +616,7 @@ class MusicCog(commands.Cog):
     async def taste(self, interaction: discord.Interaction, user: discord.Member) -> None:
         gid = guild_of(interaction).id
         if user.bot:
-            await interaction.response.send_message(
-                self._p(gid, "music.taste_bot"), ephemeral=True
-            )
+            await interaction.response.send_message(self._p(gid, "music.taste_bot"), ephemeral=True)
             return
         if user.id == interaction.user.id:
             await interaction.response.send_message(
@@ -693,9 +687,7 @@ class MusicCog(commands.Cog):
                 self._p(guild_id, "music.radio_off"), ephemeral=True
             )
             return
-        await interaction.response.send_message(
-            self._p(guild_id, "music.radio_on"), ephemeral=True
-        )
+        await interaction.response.send_message(self._p(guild_id, "music.radio_on"), ephemeral=True)
         # если прямо сейчас тишина — начинаем не дожидаясь следующего idle
         player = self.service.get_player(guild_id)
         if player is not None and player.current is None:
@@ -725,9 +717,7 @@ class MusicCog(commands.Cog):
         replies = {
             "liked": self._p(gid, "music.like_liked", title=title),
             "unliked": self._p(gid, "music.like_unliked", title=title),
-            "limit": self._p(
-                gid, "music.like_limit", limit=self.settings.music_liked_max_per_user
-            ),
+            "limit": self._p(gid, "music.like_limit", limit=self.settings.music_liked_max_per_user),
         }
         await interaction.followup.send(replies[status], ephemeral=True)
 
@@ -800,9 +790,7 @@ class MusicCog(commands.Cog):
             member.id, track, requested_by=member.id
         )
         if resolved is None:
-            await interaction.followup.send(
-                self._p(gid, "music.liked_play_dead"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "music.liked_play_dead"), ephemeral=True)
             return
         if await self.service.enqueue_tracks(interaction, [resolved]):
             await interaction.followup.send(
@@ -852,9 +840,7 @@ class MusicCog(commands.Cog):
         gid = guild_of(interaction).id
         liked = await self.container.list_liked.execute(interaction.user.id)
         tracks = [t.to_track(interaction.user.id) for t in liked]
-        error = await self.container.save_playlist.execute(
-            gid, name, interaction.user.id, tracks
-        )
+        error = await self.container.save_playlist.execute(gid, name, interaction.user.id, tracks)
         replies = {
             "": self._p(gid, "music.liked_saved", name=name.strip()[:50], count=len(tracks)),
             "empty": self._p(gid, "music.liked_save_empty"),

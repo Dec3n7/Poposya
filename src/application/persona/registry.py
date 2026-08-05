@@ -1874,8 +1874,7 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             "music.liked_all_queued",
             "music",
             "template",
-            "▶️ Все лайки в очереди: **{count}** треков{note}. "
-            "Умершие видео пропущу сама.",
+            "▶️ Все лайки в очереди: **{count}** треков{note}. Умершие видео пропущу сама.",
             label="/liked all: все лайки в очереди",
             placeholders=("count", "note"),
             allowed_modes=STATIC_MODES,
@@ -2630,8 +2629,7 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             "cinema.poll_no_votes",
             "cinema",
             "str",
-            "🍿 Никто не проголосовал — киновечер отменяется. "
-            "Посмотрю одна. Мне не привыкать.",
+            "🍿 Никто не проголосовал — киновечер отменяется. Посмотрю одна. Мне не привыкать.",
             label="Киновечер: никто не проголосовал",
             allowed_modes=STATIC_MODES,
         ),
@@ -2944,13 +2942,11 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             "dict",
             {
                 "already_owner": "Это и так твоя каморка. Расслабься.",
-                "owner_present": "Хозяин на месте. Забирать чужое при живом "
-                "хозяине — не ко мне.",
+                "owner_present": "Хозяин на месте. Забирать чужое при живом хозяине — не ко мне.",
                 "not_in_channel": "Сначала зайди внутрь, потом забирай.",
                 "not_temp": "Это обычный канал, а не каморка. Кнопки тут ни при чём.",
             },
-            label="Каморка: отказы «Забрать» (already_owner/owner_present/"
-            "not_in_channel/not_temp)",
+            label="Каморка: отказы «Забрать» (already_owner/owner_present/not_in_channel/not_temp)",
             allowed_modes=STATIC_MODES,
         ),
         _spec(
@@ -3457,8 +3453,7 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             "fun.birthday_saved",
             "fun",
             "template",
-            "Записала: {day}.{month}. Я помню дни рождения своих гостей — "
-            "теперь и твой. ✂️👁🖤",
+            "Записала: {day}.{month}. Я помню дни рождения своих гостей — теперь и твой. ✂️👁🖤",
             label="/birthday: дата записана",
             placeholders=("day", "month"),
             allowed_modes=STATIC_MODES,

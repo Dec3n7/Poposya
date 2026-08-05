@@ -71,9 +71,7 @@ class BuildWeeklyDigestUseCase:
 
             # --- коллекционер недели (топ по находкам, всё-время) ---
             collectors = await uow.collections.top_collectors(guild_id, 1)
-            top_collector = (
-                DigestPerson(collectors[0][0], collectors[0][1]) if collectors else None
-            )
+            top_collector = DigestPerson(collectors[0][0], collectors[0][1]) if collectors else None
 
             # --- кино: что попало в золотой фонд за эту неделю ---
             watched = await uow.movies.list_watched(guild_id)

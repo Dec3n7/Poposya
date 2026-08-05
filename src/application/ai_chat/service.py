@@ -291,15 +291,15 @@ class ChatService:
         )
         return ChatReply(text=text, rate_limited=False, award=award, stale_session=stale)
 
-    async def weekly_digest(
-        self, guild_id: int, facts: str, tone_hint: str, now: datetime
-    ) -> str:
+    async def weekly_digest(self, guild_id: int, facts: str, tone_hint: str, now: datetime) -> str:
         """Недельный дайджест голосом персоны. facts — сухие числа/имена (их
         нельзя выдумывать и менять), tone_hint — подсказка настроения от
         статистики недели. Целимся в 100–150 слов единым связным текстом."""
         variables = self._base_variables(now, 2, False, "", False)
-        system = self._render_base(guild_id, variables) + "\n---\n" + self._phrase_str(
-            guild_id, "digest.instruction", tone=tone_hint
+        system = (
+            self._render_base(guild_id, variables)
+            + "\n---\n"
+            + self._phrase_str(guild_id, "digest.instruction", tone=tone_hint)
         )
         text = await self._queue.run(
             lambda: self._provider.generate(system, [ChatMessage("user", facts)]),
@@ -313,8 +313,15 @@ class ChatService:
         """Короткая реплика на событие (включённый трек и т.п.)."""
         rank = await self._get_rank.execute(user_id, guild_id)
         variables = self._base_variables(now, rank.level, rank.is_exclusive, "", False)
-        system_prompt = self._render_base(guild_id, variables) + "\n---\n" + self._phrase_str(
-            guild_id, "ai_chat.event_instruction", instruction=instruction, user_display=user_display
+        system_prompt = (
+            self._render_base(guild_id, variables)
+            + "\n---\n"
+            + self._phrase_str(
+                guild_id,
+                "ai_chat.event_instruction",
+                instruction=instruction,
+                user_display=user_display,
+            )
         )
         text = await self._queue.run(
             lambda: self._provider.generate(system_prompt, [ChatMessage("user", instruction)]),
@@ -333,8 +340,7 @@ class ChatService:
             "\n---\n"
             f"{self._mood_line(guild_id, mood)}"
             f"{self._holiday_line(guild_id, now)}"
-            f"{instruction}\n"
-            + self._phrase_str(guild_id, "ai_chat.freeform_tail")
+            f"{instruction}\n" + self._phrase_str(guild_id, "ai_chat.freeform_tail")
         )
         text = await self._queue.run(
             lambda: self._provider.generate(system_prompt, [ChatMessage("user", instruction)]),
@@ -387,7 +393,12 @@ class ChatService:
         return _parse_chime_decision(raw)
 
     async def _generate_chime(
-        self, guild_id: int, history: list[tuple[str, str]], hook: str, now: datetime, mood: int | None
+        self,
+        guild_id: int,
+        history: list[tuple[str, str]],
+        hook: str,
+        now: datetime,
+        mood: int | None,
     ) -> str:
         variables = self._base_variables(now, 2, False, "", False)
         system = self._render_base(guild_id, variables) + (
@@ -551,7 +562,9 @@ class ChatService:
             extra.append(self._phrase_str(gid, "ai_chat.became_exclusive"))
         elif award.role_index != award.previous_role_index:
             extra.append(
-                self._phrase_str(gid, "ai_chat.role_up", status=self._role_name(gid, award.role_index))
+                self._phrase_str(
+                    gid, "ai_chat.role_up", status=self._role_name(gid, award.role_index)
+                )
             )
         extra.append(self._phrase_str(gid, "ai_chat.answer_tail"))
         return prompt + "\n" + "\n".join(extra)

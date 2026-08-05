@@ -87,8 +87,12 @@ async def create_persona(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.create",
-        target=created.id, details={"name": body.name, "duplicate_of": body.duplicate_of},
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.create",
+        target=created.id,
+        details={"name": body.name, "duplicate_of": body.duplicate_of},
     )
     return _detail(service, _require(service, created.id))
 
@@ -108,13 +112,19 @@ async def duplicate_persona(
     _require(service, persona_id)
     created = await service.create_persona(body.name, duplicate_of=persona_id)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.duplicate",
-        target=created.id, details={"from": persona_id},
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.duplicate",
+        target=created.id,
+        details={"from": persona_id},
     )
     return _detail(service, _require(service, created.id))
 
 
-@router.post("/personas/import", response_model=PersonaDetailDTO, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/personas/import", response_model=PersonaDetailDTO, status_code=status.HTTP_201_CREATED
+)
 async def import_persona(
     body: dict,
     op: Session = Depends(require_operator),
@@ -123,8 +133,12 @@ async def import_persona(
     service: PersonaService = container.persona
     created = await service.import_persona(body)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.import",
-        target=created.id, details={"name": created.name},
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.import",
+        target=created.id,
+        details={"name": created.name},
     )
     return _detail(service, _require(service, created.id))
 
@@ -150,7 +164,11 @@ async def rename_persona(
     _require(service, persona_id)
     await service.update_persona(persona_id, name=body.name)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.rename", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.rename",
+        target=persona_id,
         details={"name": body.name},
     )
     return _detail(service, _require(service, persona_id))
@@ -183,7 +201,11 @@ async def set_prompt(
     _require(service, persona_id)
     await service.update_persona(persona_id, prompt=body.prompt)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.prompt", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.prompt",
+        target=persona_id,
         details={"reset": body.prompt == ""},
     )
     return _detail(service, _require(service, persona_id))
@@ -200,7 +222,11 @@ async def set_chime_prompt(
     _require(service, persona_id)
     await service.update_persona(persona_id, chime_prompt=body.prompt)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.chime_prompt", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.chime_prompt",
+        target=persona_id,
         details={"reset": body.prompt == ""},
     )
     return _detail(service, _require(service, persona_id))
@@ -249,7 +275,11 @@ async def set_identity(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.identity", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.identity",
+        target=persona_id,
         details={"presence_lines": len(body.presence)},
     )
     return _identity_dto(service, persona_id)
@@ -302,7 +332,11 @@ async def replace_phrases(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     if not body.dry_run and changes:
         await record_audit(
-            container, _GLOBAL, op.user_id, "persona.replace", target=persona_id,
+            container,
+            _GLOBAL,
+            op.user_id,
+            "persona.replace",
+            target=persona_id,
             details={"find": body.find, "replace": body.replace, "keys": len(changes)},
         )
     return [
@@ -327,7 +361,11 @@ async def set_phrase(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.phrase", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.phrase",
+        target=persona_id,
         details={"key": key},
     )
     return _phrase_dto(service, persona_id, key)
@@ -346,7 +384,11 @@ async def reset_phrase(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого ключа фразы")
     await service.reset_phrase(persona_id, key)
     await record_audit(
-        container, _GLOBAL, op.user_id, "persona.phrase_reset", target=persona_id,
+        container,
+        _GLOBAL,
+        op.user_id,
+        "persona.phrase_reset",
+        target=persona_id,
         details={"key": key},
     )
     return _phrase_dto(service, persona_id, key)
@@ -387,7 +429,5 @@ async def assign_guild_persona(
         await service.assign(guild_id, body.persona_id)
     except ValueError as exc:  # персоны не существует
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
-    await record_audit(
-        container, guild_id, op.user_id, "persona.assign", target=body.persona_id
-    )
+    await record_audit(container, guild_id, op.user_id, "persona.assign", target=body.persona_id)
     return GuildPersonaDTO(guild_id=str(guild_id), persona_id=body.persona_id)

@@ -116,9 +116,7 @@ async def callback(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(
-    request: Request, container: ApiContainer = Depends(get_container)
-) -> Response:
+async def logout(request: Request, container: ApiContainer = Depends(get_container)) -> Response:
     # серверный отзыв: бампим эпоху пользователя, чтобы токен (в т.ч. скопированный
     # из этой куки) стал недействителен, а не только «забываем» куку в браузере
     token = request.cookies.get(SESSION_COOKIE)

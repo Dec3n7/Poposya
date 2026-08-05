@@ -142,9 +142,7 @@ async def test_poll_detects_only_newer_than_baseline(uow_factory):
 async def test_poll_skips_drafts(uow_factory):
     await _add(uow_factory, baseline=rel(1, 0))
     github = FakeGitHub(
-        pages={
-            ("psf", "requests"): ReleasesPage(releases=[rel(2, 30, draft=True), rel(3, 40)])
-        }
+        pages={("psf", "requests"): ReleasesPage(releases=[rel(2, 30, draft=True), rel(3, 40)])}
     )
     updates = await PollReleasesUseCase(uow_factory, github).execute()
     assert [r.id for r in updates[0].new_releases] == [3]
@@ -153,9 +151,7 @@ async def test_poll_skips_drafts(uow_factory):
 async def test_poll_no_new_saves_etag(uow_factory):
     await _add(uow_factory, baseline=rel(2, 30))  # отметка на новейшем
     github = FakeGitHub(
-        pages={
-            ("psf", "requests"): ReleasesPage(releases=[rel(1, 0), rel(2, 30)], etag="e-saved")
-        }
+        pages={("psf", "requests"): ReleasesPage(releases=[rel(1, 0), rel(2, 30)], etag="e-saved")}
     )
     updates = await PollReleasesUseCase(uow_factory, github).execute()
     assert updates == []

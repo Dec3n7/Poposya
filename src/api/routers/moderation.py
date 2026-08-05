@@ -165,7 +165,9 @@ async def history(
             "duration_minutes": c.duration_minutes,
             "source": c.source,
             "moderator_id": str(c.moderator_id) if c.moderator_id else None,
-            "moderator_name": users.get(c.moderator_id, {}).get("username") if c.moderator_id else None,
+            "moderator_name": users.get(c.moderator_id, {}).get("username")
+            if c.moderator_id
+            else None,
             "created_at": c.created_at.isoformat(),
         }
         for c in cases
@@ -182,8 +184,12 @@ async def clear_warns(
     """Сброс всех варнов участника. Чистая БД — в Discord ничего не меняется."""
     cleared = await container.clear_warns.execute(user_id, guild_id)
     await record_audit(
-        container, guild_id, session.user_id, "warns.clear",
-        target=user_id, result=f"снято {cleared}",
+        container,
+        guild_id,
+        session.user_id,
+        "warns.clear",
+        target=user_id,
+        result=f"снято {cleared}",
     )
     return {"cleared": cleared}
 
@@ -277,8 +283,13 @@ async def ban(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.ban", target=body.user_id,
-        details={"minutes": body.minutes, "reason": body.reason}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.ban",
+        target=body.user_id,
+        details={"minutes": body.minutes, "reason": body.reason},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -294,8 +305,12 @@ async def unban(
         container, guild_id, "mod.unban", {"user_id": body.user_id}, session.user_id
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.unban",
-        target=body.user_id, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.unban",
+        target=body.user_id,
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -315,8 +330,13 @@ async def mute(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.mute", target=body.user_id,
-        details={"minutes": body.minutes, "reason": body.reason}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.mute",
+        target=body.user_id,
+        details={"minutes": body.minutes, "reason": body.reason},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -332,8 +352,12 @@ async def unmute(
         container, guild_id, "mod.unmute", {"user_id": body.user_id}, session.user_id
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.unmute",
-        target=body.user_id, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.unmute",
+        target=body.user_id,
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -353,8 +377,13 @@ async def kick(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.kick", target=body.user_id,
-        details={"reason": body.reason}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.kick",
+        target=body.user_id,
+        details={"reason": body.reason},
+        result=cmd.get("status"),
     )
     return cmd
 
@@ -375,7 +404,12 @@ async def ban_permanent(
         session.user_id,
     )
     await record_audit(
-        container, guild_id, session.user_id, "mod.ban_perm", target=body.user_id,
-        details={"reason": body.reason, "delete_days": body.delete_days}, result=cmd.get("status"),
+        container,
+        guild_id,
+        session.user_id,
+        "mod.ban_perm",
+        target=body.user_id,
+        details={"reason": body.reason, "delete_days": body.delete_days},
+        result=cmd.get("status"),
     )
     return cmd

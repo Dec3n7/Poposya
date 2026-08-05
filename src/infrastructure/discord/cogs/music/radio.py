@@ -78,9 +78,7 @@ class RadioService:
             items = await self._container.list_playlists.execute(guild_id)
             if items:
                 name = random.choice(items)[0]
-                tracks = await self._container.load_playlist.execute(
-                    guild_id, name, bot_id
-                )
+                tracks = await self._container.load_playlist.execute(guild_id, name, bot_id)
                 fresh = [t for t in tracks or [] if t.video_id not in history] or (tracks or [])
         if not fresh:
             # ни лайков, ни плейлистов — добираем «похожие» из YouTube Mix

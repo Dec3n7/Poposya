@@ -116,7 +116,9 @@ def _background_tasks_metrics(tasks: dict[str, asyncio.Task]):
 
 def _listeners_metrics(listeners: dict[str, object]):
     async def collect() -> dict:
-        return {name: cast(ListenerHealth, obj).health_snapshot() for name, obj in listeners.items()}
+        return {
+            name: cast(ListenerHealth, obj).health_snapshot() for name, obj in listeners.items()
+        }
 
     return collect
 

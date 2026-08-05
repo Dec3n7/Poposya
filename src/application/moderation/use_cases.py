@@ -95,7 +95,9 @@ class WarnUserUseCase:
             count = await uow.warns.count(user_id, guild_id, since=since)
             if count < threshold:
                 await uow.commit()
-                return WarnResult(count=count, threshold=threshold, action="none", minutes=0, offense=0)
+                return WarnResult(
+                    count=count, threshold=threshold, action="none", minutes=0, offense=0
+                )
 
             # порог достигнут: определяем строгость по числу прошлых авто-наказаний
             prior = await uow.mod_cases.count_for_user(guild_id, user_id, ESCALATION_CASES)

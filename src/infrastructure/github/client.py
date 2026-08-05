@@ -112,9 +112,7 @@ class GitHubClient(IGitHubClient):
             return _parse_repo(owner, name, data)
         return None
 
-    async def list_releases(
-        self, owner: str, name: str, etag: str | None = None
-    ) -> ReleasesPage:
+    async def list_releases(self, owner: str, name: str, etag: str | None = None) -> ReleasesPage:
         data, status, resp_etag, remaining = await self._request(
             f"/repos/{owner}/{name}/releases?per_page=10", etag
         )

@@ -56,8 +56,6 @@ class GetTrendsUseCase:
     def __init__(self, uow_factory: UowFactory):
         self._uow_factory = uow_factory
 
-    async def execute(
-        self, guild_id: int, since: date
-    ) -> dict[str, list[tuple[date, float]]]:
+    async def execute(self, guild_id: int, since: date) -> dict[str, list[tuple[date, float]]]:
         async with self._uow_factory() as uow:
             return await uow.metrics.series(guild_id, since)

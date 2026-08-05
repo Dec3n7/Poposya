@@ -167,9 +167,7 @@ class SqlAlchemyModCaseRepository(IModCaseRepository):
         await self._session.flush()  # нужен id (эскалация/панель ссылаются на кейс)
         return _case_to_domain(row)
 
-    async def list_for_user(
-        self, guild_id: int, user_id: int, limit: int = 50
-    ) -> list[ModCase]:
+    async def list_for_user(self, guild_id: int, user_id: int, limit: int = 50) -> list[ModCase]:
         stmt = (
             select(ModCaseModel)
             .where(ModCaseModel.guild_id == guild_id, ModCaseModel.user_id == user_id)
@@ -179,9 +177,7 @@ class SqlAlchemyModCaseRepository(IModCaseRepository):
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_case_to_domain(row) for row in rows]
 
-    async def count_for_user(
-        self, guild_id: int, user_id: int, actions: Sequence[str]
-    ) -> int:
+    async def count_for_user(self, guild_id: int, user_id: int, actions: Sequence[str]) -> int:
         if not actions:
             return 0
         stmt = (

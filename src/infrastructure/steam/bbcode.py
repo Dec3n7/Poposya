@@ -54,9 +54,7 @@ def to_markdown(contents: str) -> str:
     text = re.sub(r"\[spoiler\](.*?)\[/spoiler\]", r"||\1||", text, flags=re.I | re.S)
     text = re.sub(r"\[code\](.*?)\[/code\]", r"\n```\n\1\n```\n", text, flags=re.I | re.S)
     # видео-превью Steam в тексте бесполезны — убираем целиком
-    text = re.sub(
-        r"\[previewyoutube=[^\]]*\](.*?)\[/previewyoutube\]", "", text, flags=re.I | re.S
-    )
+    text = re.sub(r"\[previewyoutube=[^\]]*\](.*?)\[/previewyoutube\]", "", text, flags=re.I | re.S)
 
     # списки
     text = re.sub(r"\[/?(?:list|olist)\]", "\n", text, flags=re.I)

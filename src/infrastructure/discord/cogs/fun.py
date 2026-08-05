@@ -273,9 +273,7 @@ class FunCog(commands.Cog):
         gid = guild.id
         target = user or interaction.user
         if target.bot:
-            await interaction.response.send_message(
-                self._p(gid, "fun.profile_bot"), ephemeral=True
-            )
+            await interaction.response.send_message(self._p(gid, "fun.profile_bot"), ephemeral=True)
             return
         await interaction.response.defer()
         info = await self.relationship.get_rank.execute(target.id, gid)
@@ -330,7 +328,9 @@ class FunCog(commands.Cog):
         if info.user_notes:
             known.extend(f"• {line}" for line in info.user_notes.splitlines() if line.strip())
         elif info.survey.interests:
-            known.append(self._p(gid, "fun.profile_known_interests", interests=info.survey.interests))
+            known.append(
+                self._p(gid, "fun.profile_known_interests", interests=info.survey.interests)
+            )
         if info.survey.season:
             known.append(self._p(gid, "fun.profile_known_season", season=info.survey.season))
         if not known:
@@ -360,7 +360,9 @@ class FunCog(commands.Cog):
             badges.append(self._pd(gid, "fun.profile_badges", "deep"))
         if info.is_exclusive:
             badges.append(self._pd(gid, "fun.profile_badges", "exclusive"))
-        embed.add_field(name=self._p(gid, "fun.profile_field_badges"), value="\n".join(badges) or "—")
+        embed.add_field(
+            name=self._p(gid, "fun.profile_field_badges"), value="\n".join(badges) or "—"
+        )
 
         embed.set_footer(text=self._pd(gid, "fun.profile_footers", str(info.level)))
         await interaction.followup.send(embed=embed)
@@ -378,13 +380,9 @@ class FunCog(commands.Cog):
         # а запись в БД на холодном старте может не успеть (ошибка 10062)
         await interaction.response.defer(ephemeral=True)
         gid = guild_of(interaction).id
-        ok = await self.relationship.set_birthday.execute(
-            interaction.user.id, gid, day, month
-        )
+        ok = await self.relationship.set_birthday.execute(interaction.user.id, gid, day, month)
         if not ok:
-            await interaction.followup.send(
-                self._p(gid, "fun.birthday_invalid"), ephemeral=True
-            )
+            await interaction.followup.send(self._p(gid, "fun.birthday_invalid"), ephemeral=True)
             return
         await interaction.followup.send(
             self._p(gid, "fun.birthday_saved", day=f"{day:02d}", month=f"{month:02d}"),
@@ -461,14 +459,10 @@ class FunCog(commands.Cog):
         guild = guild_of(interaction)
         gid = guild.id
         if user.bot:
-            await interaction.response.send_message(
-                self._p(gid, "fun.send_bot"), ephemeral=True
-            )
+            await interaction.response.send_message(self._p(gid, "fun.send_bot"), ephemeral=True)
             return
         if user.id == interaction.user.id:
-            await interaction.response.send_message(
-                self._p(gid, "fun.send_self"), ephemeral=True
-            )
+            await interaction.response.send_message(self._p(gid, "fun.send_self"), ephemeral=True)
             return
         key = f"send:{gid}:{interaction.user.id}"
         if not self._send_limiter.try_acquire(key, self.settings.send_per_hour):
@@ -524,9 +518,7 @@ class FunCog(commands.Cog):
     ) -> None:
         gid = guild_of(interaction).id
         due_at = datetime.now(UTC) + timedelta(minutes=minutes)
-        await self.activity.add_reminder.execute(
-            interaction.user.id, gid, text[:500], due_at
-        )
+        await self.activity.add_reminder.execute(interaction.user.id, gid, text[:500], due_at)
         await interaction.response.send_message(
             self._p(
                 gid,

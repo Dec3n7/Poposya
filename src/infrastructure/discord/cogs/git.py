@@ -162,7 +162,9 @@ class GitCog(commands.Cog):
         embed.add_field(name="Тег", value=_trim(tag, 100), inline=True)
         if release.prerelease:
             embed.add_field(name="Тип", value="pre-release", inline=True)
-        footer = f"🚀 Новый релиз · {release.author}".strip(" ·") if release.author else "🚀 Новый релиз"
+        footer = (
+            f"🚀 Новый релиз · {release.author}".strip(" ·") if release.author else "🚀 Новый релиз"
+        )
         embed.set_footer(text=_trim(footer, 100))
         return embed
 
@@ -225,8 +227,7 @@ class GitCog(commands.Cog):
         parsed = parse_repo_ref(repo)
         if parsed is None:
             await interaction.followup.send(
-                "Не разобрал ссылку. Формат: `owner/name` или "
-                "`https://github.com/owner/name`.",
+                "Не разобрал ссылку. Формат: `owner/name` или `https://github.com/owner/name`.",
                 ephemeral=True,
             )
             return
@@ -311,7 +312,9 @@ class GitCog(commands.Cog):
             except discord.HTTPException:
                 logger.warning("Не удалось отправить последний релиз при добавлении", exc_info=True)
 
-        no_releases = "" if snapshot.latest else "\nУ репозитория пока нет релизов — сообщу, когда появится."
+        no_releases = (
+            "" if snapshot.latest else "\nУ репозитория пока нет релизов — сообщу, когда появится."
+        )
         await interaction.followup.send(
             f"Отслеживаю `{owner}/{name}` → {created.thread.mention}.{no_releases}{budget_warning}",
             ephemeral=True,

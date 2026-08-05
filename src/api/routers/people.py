@@ -71,9 +71,7 @@ async def people(
             "has_profile": p is not None,
             "next_threshold": p.next_threshold if p else None,
             "role_progress": p.role_progress if p else 0.0,
-            "last_dialog_at": (
-                p.last_dialog_at.isoformat() if p and p.last_dialog_at else None
-            ),
+            "last_dialog_at": (p.last_dialog_at.isoformat() if p and p.last_dialog_at else None),
         }
         for m in members
         for p in [by_id.get(m["user_id"])]
@@ -103,8 +101,12 @@ async def set_points(
 ) -> dict:
     await container.set_points.execute(user_id, guild_id, body.value)
     await record_audit(
-        container, guild_id, session.user_id, "points.set",
-        target=user_id, details={"value": body.value},
+        container,
+        guild_id,
+        session.user_id,
+        "points.set",
+        target=user_id,
+        details={"value": body.value},
     )
     rank = await container.get_rank.execute(user_id, guild_id)
     users = await fetch_users(container.settings.discord_token, [user_id])
@@ -121,7 +123,11 @@ async def toggle_freeze(
     """Тоглит заморозку (не начисляем очки замороженному). Возвращает новое состояние."""
     frozen = await container.toggle_freeze.execute(user_id, guild_id)
     await record_audit(
-        container, guild_id, session.user_id, "freeze.toggle",
-        target=user_id, result="frozen" if frozen else "unfrozen",
+        container,
+        guild_id,
+        session.user_id,
+        "freeze.toggle",
+        target=user_id,
+        result="frozen" if frozen else "unfrozen",
     )
     return {"frozen": frozen}

@@ -105,9 +105,7 @@ class _LimitsModal(discord.ui.Modal):
 
 
 class ConfigCog(commands.Cog):
-    def __init__(
-        self, bot: commands.Bot, guild_settings: GuildSettingsService, persona=None
-    ):
+    def __init__(self, bot: commands.Bot, guild_settings: GuildSettingsService, persona=None):
         self.bot = bot
         self.settings = guild_settings
         self.persona = persona if persona is not None else RegistryPersona()
@@ -172,9 +170,7 @@ class ConfigCog(commands.Cog):
             parsed = await self.settings.set(gid, spec.key, raw)
         except ValueError as exc:
             await interaction.response.send_message(
-                self._p(
-                    gid, "config.apply_rejected", error=exc, key=spec.key, label=spec.label
-                ),
+                self._p(gid, "config.apply_rejected", error=exc, key=spec.key, label=spec.label),
                 ephemeral=True,
             )
             return
@@ -229,9 +225,7 @@ class ConfigCog(commands.Cog):
         rng = ""
         if spec.kind in ("int", "float") and (spec.min is not None or spec.max is not None):
             rng = self._p(gid, "config.show_range", min=spec.min, max=spec.max)
-        note = self._p(
-            gid, "config.show_overridden" if overridden else "config.show_default_note"
-        )
+        note = self._p(gid, "config.show_overridden" if overridden else "config.show_default_note")
         embed = discord.Embed(
             title=f"⚙️ {spec.key}",
             description=self._p(

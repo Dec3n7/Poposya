@@ -233,7 +233,9 @@ async def test_warn_normal():
 
 async def test_warn_triggers_mute():
     container = make_container()
-    container.warn_user.execute.return_value = warn_result(3, 3, action="mute", minutes=120, offense=1)
+    container.warn_user.execute.return_value = warn_result(
+        3, 3, action="mute", minutes=120, offense=1
+    )
     cog = make_cog(container)
     interaction = make_interaction()
     user = make_member()
@@ -504,9 +506,7 @@ async def test_antispam_warns_on_flood():
 
 async def test_antispam_disabled_by_flag():
     """Подфлаг moderation_antispam выключен — на флуд не реагируем."""
-    cog = make_cog(
-        settings=make_settings(spam_limit=3, spam_window=100, moderation_antispam=False)
-    )
+    cog = make_cog(settings=make_settings(spam_limit=3, spam_window=100, moderation_antispam=False))
     channel = MagicMock()
     channel.send = AsyncMock()
     for _ in range(5):
