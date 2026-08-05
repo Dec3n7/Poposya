@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import { IconX } from "../icons";
+import { useRefetchOnFocus } from "../refresh";
 import type { Cinema as CinemaData, Guild, MovieRating, WatchedItem, WatchlistItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EmptyState } from "./EmptyState";
+import { RefreshButton } from "./RefreshButton";
 import { Skeleton, SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
 
@@ -143,15 +145,18 @@ function WatchlistRow({
 export function Cinema({ guild }: { guild: Guild }) {
   const [data, setData] = useState<CinemaData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function load() {
+    setBusy(true);
     api
       .cinema(guild.id)
       .then(setData)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить киноклуб");
-      });
+      })
+      .finally(() => setBusy(false));
   }
 
   useEffect(() => {
@@ -160,6 +165,7 @@ export function Cinema({ guild }: { guild: Guild }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
+  useRefetchOnFocus(load);
 
   if (error) return <div className="error-banner">{error}</div>;
   if (!data)
@@ -176,6 +182,9 @@ export function Cinema({ guild }: { guild: Guild }) {
 
   return (
     <div>
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
       <h2 className="section-title">Вотчлист</h2>
       <div className="card leader-card">
         {data.watchlist.length === 0 ? (

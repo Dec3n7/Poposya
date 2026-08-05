@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { useRefetchOnFocus } from "../refresh";
 import type { AuditEntry, Guild } from "../types";
 import { Dropdown } from "./Dropdown";
 import { EmptyState } from "./EmptyState";
+import { RefreshButton } from "./RefreshButton";
 import { SkeletonRows } from "./Skeleton";
 
 // человекочитаемые названия действий
@@ -142,18 +144,27 @@ export function Audit({ guild }: { guild: Guild }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState(""); // "" = все; иначе группа
   const [limit, setLimit] = useState(100);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    setEntries(null);
-    setError(null);
+  function load() {
+    setBusy(true);
     api
       .audit(guild.id, limit)
       .then(setEntries)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить журнал");
-      });
+      })
+      .finally(() => setBusy(false));
+  }
+
+  useEffect(() => {
+    setEntries(null);
+    setError(null);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id, limit]);
+  useRefetchOnFocus(load);
 
   const shown = useMemo(() => {
     if (!entries) return [];
@@ -175,6 +186,9 @@ export function Audit({ guild }: { guild: Guild }) {
 
   return (
     <div>
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
       <h2 className="section-title">Действия через панель</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
         Кто и что делал из панели: роли, модерация, очки, настройки, удаления. Действия командами

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api";
 import { IconX } from "../icons";
 import { GATE } from "../perms";
+import { useRefetchOnFocus } from "../refresh";
 import { activityMeta, discordColor, roleColor } from "../roles";
 import type {
   CommandResult,
@@ -17,6 +18,7 @@ import type {
 import { Dropdown } from "./Dropdown";
 import { EmptyState } from "./EmptyState";
 import { ACTION_LABELS } from "./Moderation";
+import { RefreshButton } from "./RefreshButton";
 import { RoleChip } from "./RoleChip";
 import { Skeleton, SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
@@ -742,15 +744,18 @@ export function People({ guild, isOperator }: { guild: Guild; isOperator: boolea
   const [frozen, setFrozen] = useState<"" | "yes" | "no">("");
   const [profile, setProfile] = useState<"" | "yes" | "no">("");
   const [sort, setSort] = useState<SortKey>("points");
+  const [busy, setBusy] = useState(false);
 
   function load() {
+    setBusy(true);
     api
       .people(guild.id)
       .then(setList)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить людей");
-      });
+      })
+      .finally(() => setBusy(false));
   }
 
   useEffect(() => {
@@ -758,7 +763,9 @@ export function People({ guild, isOperator }: { guild: Guild; isOperator: boolea
     setSelected(null);
     setError(null);
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
+  useRefetchOnFocus(load);
 
   const roles = useMemo(() => {
     const set = new Set<string>();
@@ -839,6 +846,10 @@ export function People({ guild, isOperator }: { guild: Guild; isOperator: boolea
           onChanged={load}
         />
       )}
+
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
 
       <div className="people-filters">
         <input

@@ -161,8 +161,7 @@ export function Music({ guild }: { guild: Guild }) {
 
       <h2 className="section-title">Плейлисты</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
-        Создаются и играют в Discord. «Сейчас играет» и очередь появятся позже — для них нужен
-        живой канал к боту.
+        Создаются и играют в Discord командой /playlist. Здесь их можно посмотреть и удалить.
       </p>
       <div className="card leader-card">
         {list.length === 0 ? (

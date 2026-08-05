@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { useRefetchOnFocus } from "../refresh";
 import type {
   ActivityStats,
   BirthdayEntry,
@@ -15,6 +16,7 @@ import { EmptyState } from "./EmptyState";
 import { Heatmap } from "./Heatmap";
 import { MiniBars } from "./MiniBars";
 import { PulseHero, type PulseItem } from "./PulseHero";
+import { RefreshButton } from "./RefreshButton";
 import { RoleDonut } from "./RoleDonut";
 import { Skeleton, SkeletonCards, SkeletonRows } from "./Skeleton";
 import { Spark } from "./Spark";
@@ -109,29 +111,60 @@ export function Dashboard({ guild }: { guild: Guild }) {
   const [days, setDays] = useState<number>(30);
   const [board, setBoard] = useState<BoardTab>("points");
   const [heatMode, setHeatMode] = useState<"messages" | "voice">("voice");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    setData(null);
-    setError(null);
-    setBoard("points");
-    api
+  // три источника «Обзора» грузятся независимо: сводка привязана к серверу,
+  // тренды и активность — ещё и к периоду. Ручное/фокус-обновление тянет все три
+  // без обнуления состояния (данные не мигают скелетоном, меняются на месте).
+  function loadOverview() {
+    return api
       .overview(guild.id)
       .then(setData)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить сводку");
       });
+  }
+  function loadTrends() {
+    return api
+      .trends(guild.id, days)
+      .then(setTrends)
+      .catch(() => setTrends({}));
+  }
+  function loadActivity() {
+    return api
+      .activity(guild.id, days)
+      .then(setActivity)
+      .catch(() => setActivity(null));
+  }
+  function load() {
+    setBusy(true);
+    setError(null);
+    Promise.allSettled([loadOverview(), loadTrends(), loadActivity()]).finally(() =>
+      setBusy(false),
+    );
+  }
+
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    setBoard("points");
+    loadOverview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
 
   useEffect(() => {
     setTrends({});
-    api.trends(guild.id, days).then(setTrends).catch(() => setTrends({}));
+    loadTrends();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id, days]);
 
   useEffect(() => {
     setActivity(null);
-    api.activity(guild.id, days).then(setActivity).catch(() => setActivity(null));
+    loadActivity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id, days]);
+  useRefetchOnFocus(load);
 
   // прирост участников по дням = разности соседних точек серии members
   const memberDeltas = useMemo<TrendPoint[]>(() => {
@@ -230,6 +263,9 @@ export function Dashboard({ guild }: { guild: Guild }) {
 
   return (
     <div className="dashboard">
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
       <PulseHero
         guild={guild}
         online={data.online}

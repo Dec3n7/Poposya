@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
+import { useRefetchOnFocus } from "../refresh";
 import type { FindsOverview, Guild } from "../types";
 import { EmptyState } from "./EmptyState";
+import { RefreshButton } from "./RefreshButton";
 import { Skeleton, SkeletonRows } from "./Skeleton";
 
 function fmtExpires(iso: string): string {
@@ -18,18 +20,27 @@ function fmtExpires(iso: string): string {
 export function Finds({ guild }: { guild: Guild }) {
   const [data, setData] = useState<FindsOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    setData(null);
-    setError(null);
+  function load() {
+    setBusy(true);
     api
       .finds(guild.id)
       .then(setData)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
         else setError(e instanceof Error ? e.message : "Не удалось загрузить находки");
-      });
+      })
+      .finally(() => setBusy(false));
+  }
+
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
+  useRefetchOnFocus(load);
 
   if (error) return <div className="error-banner">{error}</div>;
   if (!data)
@@ -50,6 +61,9 @@ export function Finds({ guild }: { guild: Guild }) {
 
   return (
     <div>
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
       <h2 className="section-title">Сейчас на сервере</h2>
       {data.active ? (
         <div className="card pad find-active">

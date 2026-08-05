@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import { GATE } from "../perms";
+import { useRefetchOnFocus } from "../refresh";
 import type {
   Ban,
   CrossBanFlagged,
@@ -14,6 +15,7 @@ import type {
   ModCase,
 } from "../types";
 import { EmptyState } from "./EmptyState";
+import { RefreshButton } from "./RefreshButton";
 import { SkeletonRows } from "./Skeleton";
 import { useToast } from "./Toast";
 
@@ -401,23 +403,27 @@ export function Moderation({ guild }: { guild: Guild }) {
   const [warns, setWarns] = useState<GuildWarn[] | null>(null);
   const [crossban, setCrossban] = useState<CrossBanList | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function load() {
-    api
-      .bans(guild.id)
-      .then(setBans)
-      .catch((e) => {
-        if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
-        else setError(e instanceof Error ? e.message : "Не удалось загрузить баны");
-      });
-    api
-      .guildWarns(guild.id)
-      .then(setWarns)
-      .catch(() => setWarns([]));
-    api
-      .crossban(guild.id)
-      .then(setCrossban)
-      .catch(() => setCrossban(null));
+    setBusy(true);
+    Promise.allSettled([
+      api
+        .bans(guild.id)
+        .then(setBans)
+        .catch((e) => {
+          if (e instanceof ApiError && e.status === 404) setError("Попоси нет на этом сервере.");
+          else setError(e instanceof Error ? e.message : "Не удалось загрузить баны");
+        }),
+      api
+        .guildWarns(guild.id)
+        .then(setWarns)
+        .catch(() => setWarns([])),
+      api
+        .crossban(guild.id)
+        .then(setCrossban)
+        .catch(() => setCrossban(null)),
+    ]).finally(() => setBusy(false));
   }
 
   useEffect(() => {
@@ -428,11 +434,15 @@ export function Moderation({ guild }: { guild: Guild }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guild.id]);
+  useRefetchOnFocus(load);
 
   if (error) return <div className="error-banner">{error}</div>;
 
   return (
     <div>
+      <div className="tab-tools">
+        <RefreshButton onClick={load} busy={busy} />
+      </div>
       <h2 className="section-title">Активные временные баны</h2>
       <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
         Бан/мут выдаются из карточки человека (вкладка «Люди»). Здесь — разбан. Автоматический

@@ -241,6 +241,31 @@ a {
   color: var(--fg-faint);
   margin: var(--sp-5) 0 var(--sp-2);
 }
+/* тонкая панель инструментов read-вкладки: кнопка «Обновить» справа сверху.
+   когда сразу за ней идёт заголовок секции — гасим его верхний отступ, чтобы
+   не копился двойной зазор */
+.tab-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.tab-tools + .section-title {
+  margin-top: 0;
+}
+.refresh-ic {
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+}
+.refresh-ic.spin {
+  animation: spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-ic.spin {
+    animation: none;
+  }
+}
 .spinner {
   width: 22px;
   height: 22px;
