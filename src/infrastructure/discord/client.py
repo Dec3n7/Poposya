@@ -1,6 +1,7 @@
 import logging
 import time
 from collections import deque
+from pathlib import Path
 from typing import cast
 
 import discord
@@ -136,9 +137,7 @@ class PoposyaBot(commands.Bot):
             )
         )
         await self.add_cog(
-            FindsCog(
-                self, self.container.finds, self.container.settings, mood, gs, persona=persona
-            )
+            FindsCog(self, self.container.finds, self.container.settings, mood, gs, persona=persona)
         )
         tmdb = TmdbClient(self.container.settings.tmdb_api_key)
         kinopoisk = KinopoiskClient(self.container.settings.kinopoisk_api_key)
@@ -188,9 +187,15 @@ class PoposyaBot(commands.Bot):
         # онбординг: приветствие при входе бота на новый сервер
         await self.add_cog(OnboardingCog(self, self.container.settings, persona=persona))
         await self.add_cog(ConfigCog(self, gs, persona=persona))
-        await self.add_cog(GitCog(self, self.container.repos, self.container.settings, gs, persona=persona))
-        await self.add_cog(SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona))
-        await self.add_cog(BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona))
+        await self.add_cog(
+            GitCog(self, self.container.repos, self.container.settings, gs, persona=persona)
+        )
+        await self.add_cog(
+            SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona)
+        )
+        await self.add_cog(
+            BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona)
+        )
         await self.add_cog(
             AppealsCog(self, self.container.appeals, self.container.settings, gs, persona=persona)
         )
@@ -213,7 +218,9 @@ class PoposyaBot(commands.Bot):
             )
         )
         await self.add_cog(
-            TempVoiceCog(self, self.container.tempvoice, self.container.settings, gs, persona=persona)
+            TempVoiceCog(
+                self, self.container.tempvoice, self.container.settings, gs, persona=persona
+            )
         )
 
         await self.add_cog(
@@ -271,8 +278,59 @@ class PoposyaBot(commands.Bot):
                 "Слеш-команды синхронизированы с dev-гильдией", extra={"guild_id": dev_guild_id}
             )
         else:
-            await self.tree.sync()
-            logger.info("Слеш-команды синхронизированы глобально (может занять до часа)")
+            await self._sync_global_if_changed()
+
+    async def _sync_global_if_changed(self) -> None:
+        """Глобальный синк команд только при изменении их набора.
+
+        `tree.sync()` шлёт полный список команд в Discord на каждый рестарт;
+        Discord это дедуплицирует, но вызов всё равно rate-limited. Сверяем
+        отпечаток дерева с прошлым запуском и синкаем, лишь когда он изменился.
+        Любая неуверенность (нет отпечатка / не прочитать маркер) => синкаем,
+        чтобы не пропустить реальное изменение команд.
+        """
+        fingerprint = self._command_fingerprint()
+        marker = self._sync_marker_path()
+        if fingerprint is not None:
+            try:
+                previous: str | None = marker.read_text(encoding="utf-8").strip()
+            except OSError:
+                previous = None
+            if previous == fingerprint:
+                logger.info("Слеш-команды не менялись с прошлого старта — глобальный синк пропущен")
+                return
+        await self.tree.sync()
+        logger.info("Слеш-команды синхронизированы глобально (может занять до часа)")
+        if fingerprint is not None:
+            try:
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(fingerprint, encoding="utf-8")
+            except OSError:
+                logger.warning(
+                    "Не удалось сохранить отпечаток команд — следующий старт синкнет заново"
+                )
+
+    def _command_fingerprint(self) -> str | None:
+        """SHA-256 полезной нагрузки, которую tree.sync() отправил бы в Discord.
+        Меняется при любой правке команд (имена/описания/параметры/права).
+        None при сбое — вызывающий тогда синкает безусловно."""
+        try:
+            import hashlib
+            import json
+
+            payload = [
+                cmd.to_dict(self.tree)
+                for cmd in sorted(self.tree.get_commands(), key=lambda c: c.qualified_name)
+            ]
+            blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+            return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+        except Exception:
+            logger.exception("Не удалось вычислить отпечаток команд — синкну безусловно")
+            return None
+
+    def _sync_marker_path(self) -> Path:
+        # рядом с прочими персистентными данными (в Docker — volume bot_data)
+        return Path(self.container.settings.backup_dir).parent / ".command_sync"
 
     async def on_ready(self) -> None:
         self._was_connected = True
@@ -321,7 +379,9 @@ class PoposyaBot(commands.Bot):
         иначе json_response выдаст невалидный JSON с литералом NaN."""
         self._trim_connection_windows()
         latency = self.latency
-        latency_ms = round(latency * 1000, 1) if latency == latency and latency != float("inf") else None
+        latency_ms = (
+            round(latency * 1000, 1) if latency == latency and latency != float("inf") else None
+        )
         return {
             "ready": self.is_ready(),
             "latency_ms": latency_ms,
