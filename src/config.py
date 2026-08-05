@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # ключ подписи JWT-сессий (сгенерировать своим secrets.token_urlsafe)
     web_session_secret: str = ""
     web_allowed_origin: str = "http://localhost:5173"  # адрес фронта для CORS
+    # публичный адрес панели (напр. https://panel.example.com) — если задан,
+    # бот показывает ссылку на панель в приветствии при входе на сервер. Пусто =
+    # панель локальная/не опубликована, ссылку не показываем.
+    web_public_url: str = ""
     web_api_port: int = 8081
     web_session_ttl_hours: int = 24
     # серверный «рубильник» сессий: версия вшивается в JWT (claim sv), при
