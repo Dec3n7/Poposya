@@ -80,4 +80,16 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
       role("Роза", "#f0899f"),
     ],
   },
+  {
+    key: "feature_managers",
+    name: "Менеджеры контента",
+    description:
+      "Роли-маркеры без прав для делегирования команд /git и /steam не-админам. " +
+      "Создай, выдай кому нужно, затем впиши имя роли (или её ID) в настройку " +
+      "git_manager_role / steam_manager_role — панель «Настройки» или /config.",
+    roles: [
+      role("Git-куратор", "#6ab0d8"),
+      role("Steam-куратор", "#57c46a"),
+    ],
+  },
 ];
