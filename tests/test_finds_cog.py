@@ -118,61 +118,6 @@ def test_announce_channel_prefers_config_id():
     assert cog._announce_channel(guild) is forum_ch
 
 
-async def test_spawnfind_no_channel():
-    cog = make_cog()
-    interaction = make_interaction()
-    interaction.guild.text_channels = []  # канала «основной» нет
-    interaction.guild.get_channel = MagicMock(return_value=None)
-    await type(cog).spawn_find_command.callback(cog, interaction)
-    assert "Не нашла канал" in interaction.response.send_message.await_args.args[0]
-
-
-async def test_spawnfind_active_exists():
-    container = make_container()
-    from src.application.finds.use_cases import ActiveFindView
-
-    find = NightFind(
-        guild_id=10,
-        location_id="nezu_square",
-        item_id="postcard_90s",
-        created_at=NOW,
-        expires_at=NOW + timedelta(hours=1),
-    )
-    container.get_active_find.execute.return_value = ActiveFindView(
-        find=find, location=catalog.get_location("nezu_square"), item=COMMON
-    )
-    cog = make_cog(container, settings=make_settings(main_channel="c"))
-    interaction = make_interaction()
-    ch = SimpleNamespace(name="c")
-    interaction.guild.text_channels = [ch]
-    await type(cog).spawn_find_command.callback(cog, interaction)
-    assert "уже висит" in interaction.response.send_message.await_args.args[0]
-
-
-async def test_spawnfind_forces_spawn(monkeypatch):
-    from unittest.mock import AsyncMock as AM
-
-    cog = make_cog(settings=make_settings(main_channel="c"))
-    interaction = make_interaction()
-    channel = SimpleNamespace(name="c", mention="#c")
-    interaction.guild.text_channels = [channel]
-    cog.finds.get_active_find.execute = AM(return_value=None)
-    find = NightFind(
-        guild_id=10,
-        location_id="x",
-        item_id="y",
-        created_at=NOW,
-        expires_at=NOW + timedelta(hours=1),
-    )
-    cog._try_spawn = AM(return_value=find)
-    await type(cog).spawn_find_command.callback(cog, interaction)
-    cog._try_spawn.assert_awaited_once()
-    assert cog._try_spawn.await_args.kwargs.get("force") is True or cog._try_spawn.await_args.args[
-        1:
-    ] == (True,)
-    assert "заспавнена" in interaction.followup.send.await_args.args[0]
-
-
 async def test_on_message_tracks_main_activity():
     cog = make_cog(settings=make_settings(main_channel="основной"))
     msg = MagicMock()
@@ -592,7 +537,8 @@ async def test_try_spawn_active_find_already_present_returns_none():
     guild = MagicMock()
     guild.id = 10
     guild.text_channels = [SimpleNamespace(name="c")]
-    result = await cog._try_spawn(guild, force=True)
+    cog._main_last_activity[10] = time.monotonic()  # сервер «живой» — гейт активности пройден
+    result = await cog._try_spawn(guild)
     assert result is None
 
 
@@ -616,8 +562,9 @@ async def test_try_spawn_full_success_flow():
     channel.id = 100
     channel.send = AsyncMock(return_value=SimpleNamespace(id=555))
     guild.text_channels = [channel]
+    cog._main_last_activity[10] = time.monotonic()  # сервер «живой» — гейт активности пройден
     try:
-        result = await cog._try_spawn(guild, force=True)
+        result = await cog._try_spawn(guild)
         assert result is find
         channel.send.assert_awaited_once()
         container.register_find_message.execute.assert_awaited_once_with(77, 100, 555)
@@ -647,7 +594,8 @@ async def test_try_spawn_send_http_exception_returns_none():
     channel.name = "c"
     channel.send = AsyncMock(side_effect=http_error())
     guild.text_channels = [channel]
-    result = await cog._try_spawn(guild, force=True)
+    cog._main_last_activity[10] = time.monotonic()  # сервер «живой» — гейт активности пройден
+    result = await cog._try_spawn(guild)
     assert result is None
     container.register_find_message.execute.assert_not_awaited()
 
@@ -920,9 +868,6 @@ async def test_announce_claim_public_send_http_exception_logged():
     await cog._announce_claim(interaction, result)  # не падает
 
 
-# --- /spawnfind: провал спавна -------------------------------------------------
-
-
 async def test_find_claim_view_button_delegates_to_handle_claim():
     cog = make_cog()
     cog.handle_claim = AsyncMock()
@@ -930,14 +875,3 @@ async def test_find_claim_view_button_delegates_to_handle_claim():
     interaction = make_interaction()
     await view.claim_button.callback(interaction)
     cog.handle_claim.assert_awaited_once_with(interaction)
-
-
-async def test_spawnfind_reports_failure_to_spawn():
-    cog = make_cog(settings=make_settings(main_channel="c"))
-    interaction = make_interaction()
-    channel = SimpleNamespace(name="c", mention="#c")
-    interaction.guild.text_channels = [channel]
-    cog.finds.get_active_find.execute = AsyncMock(return_value=None)
-    cog._try_spawn = AsyncMock(return_value=None)
-    await type(cog).spawn_find_command.callback(cog, interaction)
-    assert "Не вышло" in interaction.followup.send.await_args.args[0]

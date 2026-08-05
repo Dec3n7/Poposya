@@ -606,41 +606,6 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             placeholders=("item_emoji", "item", "sign", "delta", "cost", "total"),
             allowed_modes=STATIC_MODES,
         ),
-        # --- находки: админ-команда спавна ---
-        _spec(
-            "finds.admin_no_channel",
-            "finds",
-            "str",
-            "Не нашла канал для находок. Задай его: "
-            "`/config set finds_channel_id #канал` — или создай канал «основной».",
-            label="/spawnfind: канал не найден",
-            allowed_modes=STATIC_MODES,
-        ),
-        _spec(
-            "finds.admin_active_exists",
-            "finds",
-            "str",
-            "Активная находка уже висит — сначала заберите её.",
-            label="/spawnfind: находка уже есть",
-            allowed_modes=STATIC_MODES,
-        ),
-        _spec(
-            "finds.admin_spawned",
-            "finds",
-            "template",
-            "🌙 Находка заспавнена в {channel_mention}.",
-            label="/spawnfind: успех",
-            placeholders=("channel_mention",),
-            allowed_modes=STATIC_MODES,
-        ),
-        _spec(
-            "finds.admin_spawn_failed",
-            "finds",
-            "str",
-            "Не вышло заспавнить — глянь логи бота.",
-            label="/spawnfind: не вышло",
-            allowed_modes=STATIC_MODES,
-        ),
         # --- тайная комната ---
         _spec(
             "secret_room.dm",

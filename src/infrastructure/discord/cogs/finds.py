@@ -182,20 +182,18 @@ class FindsCog(commands.Cog):
                 except Exception:
                     logger.exception("Спавн находки упал", extra={"guild_id": guild.id})
 
-    async def _try_spawn(self, guild: discord.Guild, force: bool = False) -> NightFind | None:
+    async def _try_spawn(self, guild: discord.Guild) -> NightFind | None:
         # «сервер живой»: находку спавним только если в основном канале недавно
-        # была активность — иначе Попося гуляет молча. Форс из /spawnfind
-        # (админ-тест) этот гейт игнорирует, как и проверку настроения ниже.
-        if not force:
-            last = self._main_last_activity.get(guild.id)
-            if last is None or time.monotonic() - last > _ACTIVITY_WINDOW_SECONDS:
-                return None  # сервер спит — Попося гуляет молча
+        # была активность — иначе Попося гуляет молча.
+        last = self._main_last_activity.get(guild.id)
+        if last is None or time.monotonic() - last > _ACTIVITY_WINDOW_SECONDS:
+            return None  # сервер спит — Попося гуляет молча
         channel = self._announce_channel(guild)
         if channel is None:
             return None
         mood = self.mood.get(guild.id)
-        # плохое настроение — может и не поделиться находкой (форс игнорирует)
-        if not force and mood <= 30 and self._rng.random() < 0.5:
+        # плохое настроение — может и не поделиться находкой
+        if mood <= 30 and self._rng.random() < 0.5:
             return None
         now = datetime.now(UTC)
         holiday = self._holiday_key(now)
@@ -376,39 +374,6 @@ class FindsCog(commands.Cog):
             logger.warning("Не удалось объявить об успехе находки", exc_info=True)
 
     # --- слеш-команды ---
-
-    @app_commands.command(
-        name="spawnfind",
-        description="[тест] Форс-спавн ночной находки прямо сейчас (админ)",
-    )
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.guild_only()
-    async def spawn_find_command(self, interaction: discord.Interaction) -> None:
-        # ВРЕМЕННАЯ команда для проверки цикла находок без ожидания интервала.
-        guild = guild_of(interaction)
-        channel = self._announce_channel(guild)
-        if channel is None:
-            await interaction.response.send_message(
-                self._p(guild.id, "finds.admin_no_channel"), ephemeral=True
-            )
-            return
-        existing = await self.finds.get_active_find.execute(guild.id, datetime.now(UTC))
-        if existing is not None:
-            await interaction.response.send_message(
-                self._p(guild.id, "finds.admin_active_exists"), ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        find = await self._try_spawn(guild, force=True)
-        if find is not None:
-            await interaction.followup.send(
-                self._p(guild.id, "finds.admin_spawned", channel_mention=channel.mention),
-                ephemeral=True,
-            )
-        else:
-            await interaction.followup.send(
-                self._p(guild.id, "finds.admin_spawn_failed"), ephemeral=True
-            )
 
     @app_commands.command(name="finds", description="Активная ночная находка на сервере")
     @app_commands.guild_only()
