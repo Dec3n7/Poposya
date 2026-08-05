@@ -383,6 +383,9 @@ class Settings(BaseSettings):
     # либо путь к файлу cookies в формате Netscape
     ytdlp_cookies_from_browser: str | None = None
     ytdlp_cookies_file: str | None = None
+    # приоритетные player-клиенты yt-dlp через запятую (напр. "web_safari,web") —
+    # лечит 403 на ссылках, привязанных к клиенту (c=ANDROID_VR). Пусто = дефолт yt-dlp
+    ytdlp_player_clients: str = ""
 
     @model_validator(mode="after")
     def _validate_web_panel_secrets(self) -> "Settings":

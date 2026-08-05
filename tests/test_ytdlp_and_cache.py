@@ -226,10 +226,13 @@ def test_opts_with_cookies_from_browser():
     assert opts["cookiesfrombrowser"] == ("firefox",)
 
 
-def test_opts_with_cookies_file():
-    src = YtDlpAudioSource(cookies_file="/path/cookies.txt")
+def test_opts_with_cookies_file(tmp_path):
+    # применяется только существующий файл (гард от падения yt-dlp на кривом пути)
+    f = tmp_path / "cookies.txt"
+    f.write_text("x")
+    src = YtDlpAudioSource(cookies_file=str(f))
     opts = src._opts_with_cookies({})
-    assert opts["cookiefile"] == "/path/cookies.txt"
+    assert opts["cookiefile"] == str(f)
 
 
 # --- AudioCache -------------------------------------------------------------

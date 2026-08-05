@@ -62,7 +62,10 @@ services:
       start_period: 60s   # время на миграции и подключение к Discord
     volumes:
       - bot_data:/app/data
-      # - ./cookies.txt:/app/data/cookies.txt:ro
+      # секреты для yt-dlp: положи ./secrets/youtube-cookies.txt (Netscape-формат)
+      # и укажи YTDLP_COOKIES_FILE=/app/secrets/youtube-cookies.txt в .env.
+      # Каталог монтируется всегда (не ломается, если файла ещё нет).
+      - ./secrets:/app/secrets:ro
 
   # Веб-панель (REST API) — отдельный процесс, та же Postgres и та же бизнес-логика.
   # Живёт под профилем postgres: панель без общей БД смысла не имеет (SQLite —

@@ -317,6 +317,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         cookies_from_browser=settings.ytdlp_cookies_from_browser,
         cookies_file=settings.ytdlp_cookies_file,
         cache=audio_cache,
+        player_clients=settings.ytdlp_player_clients,
     )
     music = MusicContainer(
         settings=settings,

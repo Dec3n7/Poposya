@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import Any
 
 import yt_dlp
@@ -27,11 +28,23 @@ class YtDlpAudioSource(IAudioSource):
         cookies_from_browser: str | None = None,
         cookies_file: str | None = None,
         cache: AudioCache | None = None,
+        player_clients: str = "",
     ):
         # Cookies нужны, когда YouTube отвечает "Sign in to confirm you're not a bot"
+        # и лечат часть упрямых 403 (ссылки, привязанные к клиенту)
         self._cookies_from_browser = cookies_from_browser
         self._cookies_file = cookies_file
+        # приоритетные player-клиенты (CSV -> список); пусто = дефолт yt-dlp
+        self._player_clients = [c.strip() for c in player_clients.split(",") if c.strip()]
         self._cache = cache
+        # заданный, но отсутствующий файл cookies — частая причина «почему не
+        # работает»: скажем об этом громко один раз, а не роняем каждый extract
+        if cookies_file and not cookies_from_browser and not os.path.exists(cookies_file):
+            logger.warning(
+                "YTDLP_COOKIES_FILE указывает на несуществующий файл — cookies не "
+                "применяются: %s",
+                cookies_file,
+            )
         # одна закачка за раз: не отбираем канал у живого стрима текущего трека
         self._download_lock = asyncio.Lock()
         # метаданные (просмотры/дата) из полного извлечения при старте трека —
@@ -146,8 +159,13 @@ class YtDlpAudioSource(IAudioSource):
     def _opts_with_cookies(self, opts: dict) -> dict:
         if self._cookies_from_browser:
             opts["cookiesfrombrowser"] = (self._cookies_from_browser,)
-        elif self._cookies_file:
+        # только существующий файл: yt-dlp падает на несуществующем cookiefile,
+        # а путь может быть задан «на будущее» (том ещё не смонтирован/файл не создан)
+        elif self._cookies_file and os.path.exists(self._cookies_file):
             opts["cookiefile"] = self._cookies_file
+        if self._player_clients:
+            extractor_args = opts.setdefault("extractor_args", {})
+            extractor_args["youtube"] = {"player_client": list(self._player_clients)}
         return opts
 
     async def _extract(self, target: str, flat: bool) -> dict | None:
