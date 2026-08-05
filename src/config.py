@@ -167,7 +167,9 @@ class Settings(BaseSettings):
 
     # --- каналы ---
     welcome_channel: str = "bots"  # канал приветствий/прощаний (по названию)
+    welcome_channel_id: int = 0  # по ID (через /config); 0 = имя выше → авто (system)
     main_channel: str = "основной"  # главный канал: активность, случайные реплики
+    main_channel_id: int = 0  # по ID (через /config); 0 = имя выше → авто (system)
     log_channel: int = 0  # ID канала логов модерации (0 = отключено)
 
     # --- анкета знакомства (/introduce) ---
@@ -207,6 +209,7 @@ class Settings(BaseSettings):
 
     # --- альбом Попоси (starboard) ---
     album_channel: str = "альбом-попоси"  # канал-альбом (по названию)
+    album_channel_id: int = 0  # по ID (через /config); 0 = имя выше (без авто-фолбэка)
     album_reaction_threshold: int = 5  # реакций для попадания в альбом
     album_reaction_emoji: str = ""  # конкретное эмодзи; пусто = любое
 

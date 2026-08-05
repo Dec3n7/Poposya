@@ -15,6 +15,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.shared.holidays import HolidayCalendar
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.channels import is_designated_main, resolve_channel
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -91,10 +92,20 @@ class ActivityCog(commands.Cog):
     # --- каналы ---
 
     def _welcome_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        return discord.utils.get(guild.text_channels, name=self.settings.welcome_channel)
+        return resolve_channel(
+            guild,
+            self._cfg(guild.id, "welcome_channel_id"),
+            self.settings.welcome_channel,
+            fallback=True,
+        )
 
     def _main_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        return discord.utils.get(guild.text_channels, name=self.settings.main_channel)
+        return resolve_channel(
+            guild,
+            self._cfg(guild.id, "main_channel_id"),
+            self.settings.main_channel,
+            fallback=True,
+        )
 
     async def _send(self, channel: discord.TextChannel | None, text: str | None) -> None:
         if channel is None or not text:
@@ -178,7 +189,11 @@ class ActivityCog(commands.Cog):
 
         # человеческая активность в главном канале сбрасывает «одиночество»
         # и поднимает настроение (+2, не чаще раза в минуту)
-        if getattr(message.channel, "name", None) == self.settings.main_channel:
+        if is_designated_main(
+            message.channel,
+            self._cfg(message.guild.id, "main_channel_id"),
+            self.settings.main_channel,
+        ):
             now_mono_main = time.monotonic()
             self._main_last_activity[message.guild.id] = now_mono_main
             self._lonely_notified.discard(message.guild.id)
@@ -236,7 +251,9 @@ class ActivityCog(commands.Cog):
             return
         if not self._feature(guild.id, "activity_album"):
             return
-        album = discord.utils.get(guild.text_channels, name=self.settings.album_channel)
+        album = resolve_channel(
+            guild, self._cfg(guild.id, "album_channel_id"), self.settings.album_channel, fallback=False
+        )
         if album is None or payload.channel_id == album.id:
             return
         # фильтр по конкретному эмодзи, если задан

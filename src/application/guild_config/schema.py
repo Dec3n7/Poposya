@@ -32,6 +32,9 @@ CHANNEL_KEYS: frozenset[str] = frozenset(
         "finds_channel_id",
         "tempvoice_hub_channel",
         "tempvoice_category",
+        "main_channel_id",
+        "welcome_channel_id",
+        "album_channel_id",
     }
 )
 
@@ -156,6 +159,10 @@ class GuildSettings(BaseModel):
 
     # --- находки ---
     finds_channel_id: int = Field(0, ge=0)
+    # каналы активности по ID (0 = легаси-имя из .env → фолбэк на system_channel)
+    main_channel_id: int = Field(0, ge=0)
+    welcome_channel_id: int = Field(0, ge=0)
+    album_channel_id: int = Field(0, ge=0)
     finds_min_interval_hours: int = Field(12, ge=1, le=336)
     finds_max_interval_hours: int = Field(48, ge=1, le=720)
     finds_fail_penalty: int = Field(5, ge=0, le=500)

@@ -53,6 +53,7 @@ def make_settings(**over):
         ai_event_comment_chance=0.5,
         ai_event_comment_cooldown=900,
         main_channel="общий",
+        main_channel_id=0,
         ai_passive_enabled=False,
         ai_passive_only_main_channel=True,
         ai_passive_min_users=2,

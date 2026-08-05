@@ -23,9 +23,12 @@ def make_settings(**over):
     base = dict(
         holidays={"11-07": "Праздник"},
         welcome_channel="bots",
+        welcome_channel_id=0,
         main_channel="основной",
+        main_channel_id=0,
         auto_role="",
         album_channel="альбом",
+        album_channel_id=0,
         album_reaction_emoji="",
         album_reaction_threshold=5,
         holiday_points_multiplier=2,
@@ -1076,6 +1079,7 @@ async def test_calendar_tick_birthday_remind_feature_off_and_no_channel():
     guild20 = MagicMock()
     guild20.id = 20
     guild20.text_channels = []  # нет главного канала
+    guild20.system_channel = None  # и нет system-канала для фолбэка
     cog.bot.guilds = []
     cog.bot.get_guild.side_effect = lambda gid: {10: guild10, 20: guild20}.get(gid)
     await cog._calendar_tick()  # обе ветки-continue отработали, без падений
@@ -1098,6 +1102,7 @@ async def test_calendar_tick_birthday_congratulate_feature_off_and_no_channel():
     guild20 = MagicMock()
     guild20.id = 20
     guild20.text_channels = []  # нет главного канала
+    guild20.system_channel = None  # и нет system-канала для фолбэка
     cog.bot.guilds = []
     cog.bot.get_guild.side_effect = lambda gid: {10: guild10, 20: guild20}.get(gid)
     await cog._calendar_tick()  # обе ветки-continue отработали

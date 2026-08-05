@@ -44,6 +44,7 @@ def make_settings(**over):
         finds_channel="",
         finds_channel_id=0,
         main_channel="основной",
+        main_channel_id=0,
         holidays={"01-01": "НГ"},
         finds_min_interval_hours=12,
         finds_max_interval_hours=48,

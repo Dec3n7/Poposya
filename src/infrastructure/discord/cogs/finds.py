@@ -16,6 +16,7 @@ from src.config import Settings
 from src.domain.finds.catalog import RARITY_EMOJI, RARITY_LABELS, season_for_month
 from src.domain.finds.entities import NightFind, Rarity
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.channels import is_designated_main, resolve_channel
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
@@ -109,14 +110,14 @@ class FindsCog(commands.Cog):
     # --- каналы и активность ---
 
     def _announce_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        # приоритет — канал, заданный на сервере через /config finds_channel_id
-        cid = self._cfg(guild.id, "finds_channel_id")
-        if cid:
-            channel = guild.get_channel(cid)
-            if isinstance(channel, discord.TextChannel):
-                return channel
-        name = self.settings.finds_channel or self.settings.main_channel
-        return discord.utils.get(guild.text_channels, name=name)
+        # /config finds_channel_id → легаси-имя (finds/main). Находки — opt-in:
+        # без явного канала в авто-подобранный не сыплем (fallback=False).
+        return resolve_channel(
+            guild,
+            self._cfg(guild.id, "finds_channel_id"),
+            self.settings.finds_channel or self.settings.main_channel,
+            fallback=False,
+        )
 
     def _holiday_key(self, now: datetime) -> str | None:
         """ "ДД-ММ", если сегодня праздник из настроек, иначе None."""
@@ -127,7 +128,11 @@ class FindsCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
             return
-        if getattr(message.channel, "name", None) == self.settings.main_channel:
+        if is_designated_main(
+            message.channel,
+            self._cfg(message.guild.id, "main_channel_id"),
+            self.settings.main_channel,
+        ):
             self._main_last_activity[message.guild.id] = time.monotonic()
 
     # --- фоновый цикл спавна ---

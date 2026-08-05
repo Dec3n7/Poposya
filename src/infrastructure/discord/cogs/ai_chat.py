@@ -15,6 +15,7 @@ from src.config import Settings
 from src.domain.ai_chat.exceptions import AIProviderError
 from src.domain.events.bus import IEventBus
 from src.domain.music.events import TrackStarted
+from src.infrastructure.discord.channels import is_designated_main
 from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.discord.scheduler import DeferredScheduler
@@ -233,7 +234,11 @@ class AIChatCog(commands.Cog):
         if not self._cfg(guild.id, "ai_passive_enabled"):
             return
         if self._cfg(guild.id, "ai_passive_only_main_channel"):
-            if getattr(message.channel, "name", None) != self.settings.main_channel:
+            if not is_designated_main(
+                message.channel,
+                self._cfg(guild.id, "main_channel_id"),
+                self.settings.main_channel,
+            ):
                 return
         channel_id = message.channel.id
         # в кулдауне — таймер не взводим (всё равно бы промолчала)
