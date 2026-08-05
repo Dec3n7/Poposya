@@ -335,9 +335,14 @@ class Settings(BaseSettings):
     github_poll_interval_minutes: int = 120  # как часто опрашивать релизы
     # форум-канал для тредов релизов (дефолт-зеркало guild-настройки; 0 = выкл)
     git_forum_channel: int = 0
+    # роль-менеджер /git (ID или имя): её носители могут add/remove без прав
+    # админа. Пусто = только «Управление сервером»/админ
+    git_manager_role: str = ""
 
     # --- Steam-игры (/steam) ---
     steam_poll_interval_minutes: int = 120  # как часто опрашивать новости игр
+    # роль-менеджер /steam (ID или имя); пусто = только менеджеры сервера
+    steam_manager_role: str = ""
     # форум-канал для тредов игр (дефолт-зеркало guild-настройки; 0 = выкл)
     steam_forum_channel: int = 0
     digest_channel: int = 0  # канал недельного дайджеста (0 = не постить)

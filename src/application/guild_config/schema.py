@@ -151,9 +151,12 @@ class GuildSettings(BaseModel):
 
     # --- GitHub-репозитории (/git) ---
     git_forum_channel: int = Field(0, ge=0)  # форум-канал для тредов релизов (0=выкл)
+    # роль-менеджер /git (ID или имя роли; пусто = только менеджеры сервера)
+    git_manager_role: str = Field(default="", max_length=100)
 
     # --- Steam-игры (/steam) ---
     steam_forum_channel: int = Field(0, ge=0)  # форум-канал для тредов игр (0=выкл)
+    steam_manager_role: str = Field(default="", max_length=100)  # роль-менеджер /steam
     digest_channel: int = Field(0, ge=0)  # канал недельного дайджеста (0 = не постить)
     appeals_channel: int = Field(0, ge=0)  # канал очереди апелляций (0 = выключено)
 

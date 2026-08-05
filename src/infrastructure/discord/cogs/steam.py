@@ -20,8 +20,9 @@ from src.config import Settings
 from src.domain.steam.entities import TrackedGame
 from src.domain.steam.refs import header_url, parse_app_ref, store_url
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.access import can_manage_feature
 from src.infrastructure.discord.feature_flags import block_if_module_off
-from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.persona_service import RegistryPersona
 from src.infrastructure.steam.bbcode import render_news
 
@@ -165,12 +166,28 @@ class SteamCog(commands.Cog):
 
     # --- команды /steam ---
 
+    # administrator-дефолт снят: доступ к add/remove решает бот — менеджер сервера
+    # ИЛИ роль steam_manager_role (иначе роль-менеджер не увидела бы команду).
     steam_group = app_commands.Group(
         name="steam",
-        description="Steam-игры: новости и обновления в форуме (админ)",
-        default_permissions=discord.Permissions(administrator=True),
+        description="Steam-игры: новости и обновления в форуме (менеджеры)",
         guild_only=True,
     )
+
+    async def _deny_if_not_manager(
+        self, interaction: discord.Interaction, guild: discord.Guild
+    ) -> bool:
+        """True (и уже ответил), если у вызвавшего нет прав управлять /steam."""
+        if can_manage_feature(
+            member_of(interaction), str(self._cfg(guild.id, "steam_manager_role"))
+        ):
+            return False
+        await interaction.followup.send(
+            "Нет доступа. Нужна роль-менеджер `/steam` (настройка `steam_manager_role`) "
+            "или право «Управление сервером».",
+            ephemeral=True,
+        )
+        return True
 
     @steam_group.command(name="add", description="Отслеживать новости игры Steam")
     @app_commands.describe(game="AppID (напр. 730) или ссылка на страницу игры в Steam")
@@ -183,6 +200,8 @@ class SteamCog(commands.Cog):
             logger.warning("Не успел подтвердить /steam add вовремя (interaction истёк)")
             return
         guild = guild_of(interaction)
+        if await self._deny_if_not_manager(interaction, guild):
+            return
         appid = parse_app_ref(game)
         if appid is None:
             await interaction.followup.send(
@@ -288,6 +307,8 @@ class SteamCog(commands.Cog):
     async def steam_remove(self, interaction: discord.Interaction, game: str) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = guild_of(interaction)
+        if await self._deny_if_not_manager(interaction, guild):
+            return
         appid = parse_app_ref(game)
         if appid is None:
             await interaction.followup.send(

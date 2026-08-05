@@ -110,8 +110,10 @@ _LABELS: dict[str, tuple[str, str]] = {
     "cinema_forum_channel": ("Форум «золотой фонд» (0=выкл)", ""),
     # GitHub-репозитории
     "git_forum_channel": ("Форум релизов GitHub (0=выкл)", ""),
+    "git_manager_role": ("Роль-менеджер /git (ID/имя; пусто = только админ)", ""),
     # Steam-игры
     "steam_forum_channel": ("Форум новостей Steam (0=выкл)", ""),
+    "steam_manager_role": ("Роль-менеджер /steam (ID/имя; пусто = только админ)", ""),
     # дайджест
     "digest_channel": ("Канал недельного дайджеста (0=выкл)", ""),
     # апелляции

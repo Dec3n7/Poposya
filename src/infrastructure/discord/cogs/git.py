@@ -20,8 +20,9 @@ from src.config import Settings
 from src.domain.repos.entities import TrackedRepo
 from src.domain.repos.refs import parse_repo_ref
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.access import can_manage_feature
 from src.infrastructure.discord.feature_flags import block_if_module_off
-from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -192,18 +193,35 @@ class GitCog(commands.Cog):
 
     # --- команды /git ---
 
+    # administrator-дефолт снят намеренно: доступ к add/remove решает бот —
+    # менеджер сервера ИЛИ роль git_manager_role (см. _deny_if_not_manager).
+    # Иначе роль-менеджер вообще не увидела бы команду (Discord скрыл бы её).
     git_group = app_commands.Group(
         name="git",
-        description="GitHub-репозитории: релизы в форуме (админ)",
-        default_permissions=discord.Permissions(administrator=True),
+        description="GitHub-репозитории: релизы в форуме (менеджеры)",
         guild_only=True,
     )
+
+    async def _deny_if_not_manager(
+        self, interaction: discord.Interaction, guild: discord.Guild
+    ) -> bool:
+        """True (и уже ответил), если у вызвавшего нет прав управлять /git."""
+        if can_manage_feature(member_of(interaction), str(self._cfg(guild.id, "git_manager_role"))):
+            return False
+        await interaction.followup.send(
+            "Нет доступа. Нужна роль-менеджер `/git` (настройка `git_manager_role`) "
+            "или право «Управление сервером».",
+            ephemeral=True,
+        )
+        return True
 
     @git_group.command(name="add", description="Отслеживать релизы репозитория GitHub")
     @app_commands.describe(repo="owner/name или ссылка на репозиторий GitHub")
     async def git_add(self, interaction: discord.Interaction, repo: str) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = guild_of(interaction)
+        if await self._deny_if_not_manager(interaction, guild):
+            return
         parsed = parse_repo_ref(repo)
         if parsed is None:
             await interaction.followup.send(
@@ -323,6 +341,8 @@ class GitCog(commands.Cog):
     async def git_remove(self, interaction: discord.Interaction, repo: str) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = guild_of(interaction)
+        if await self._deny_if_not_manager(interaction, guild):
+            return
         parsed = parse_repo_ref(repo)
         if parsed is None:
             await interaction.followup.send("Формат: `owner/name`.", ephemeral=True)
