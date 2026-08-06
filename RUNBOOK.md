@@ -35,7 +35,7 @@ docker compose run --rm --user root --entrypoint sh bot -c "chown -R 10001:10001
 админ, инцидент) — это **бамп версии**:
 
 1. В `.env`: увеличьте `WEB_SESSION_VERSION` на 1 (было `1` → станет `2`).
-2. `docker compose --profile postgres up -d api web` (перезапуск api достаточно).
+2. `docker compose up -d api web` (перезапуск api достаточно).
 
 Все ранее выданные токены мгновенно недействительны — сверка claim `sv` в
 `decode_session` (`src/api/security.py`). Ротация секрета подписи при этом не

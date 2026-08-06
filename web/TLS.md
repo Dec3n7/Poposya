@@ -30,7 +30,7 @@ listen 443 ssl }` в `web/nginx.conf`.
    `web_oauth_redirect=https://ВАШ_ДОМЕН/api/auth/callback`. Тот же
    `https://…/api/auth/callback` добавьте в Discord Developer Portal → OAuth2 →
    Redirects.
-5. `docker compose --profile postgres up -d --build`.
+5. `docker compose up -d --build`.
 
 ## Вариант B — TLS терминирует прокси впереди (Caddy / Traefik / Cloudflare)
 
