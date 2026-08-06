@@ -17,6 +17,7 @@ from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.scheduler import DeferredScheduler
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -40,7 +41,7 @@ from .views import (
 logger = logging.getLogger(__name__)
 
 
-class CinemaCog(commands.Cog):
+class CinemaCog(PersonaPhraseMixin, commands.Cog):
     """Киноклуб: общий вотчлист с голосованием, киновечера и оценки.
     Попося — полноправный участник: комментирует победителя и ставит
     свой вердикт после просмотра."""
@@ -85,10 +86,6 @@ class CinemaCog(commands.Cog):
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "cinema_enabled")

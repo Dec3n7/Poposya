@@ -18,6 +18,7 @@ from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 _REMINDER_CHECK_INTERVAL = 30
 
 
-class FunCog(commands.Cog):
+class FunCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -57,10 +58,6 @@ class FunCog(commands.Cog):
         return await block_if_module_off(interaction, self.settings, self.gs, "fun_enabled")
 
     # --- каталог фраз персоны сервера ---
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def _pick(self, guild_id: int, key: str, **vars: object) -> str:
         """Случайный элемент фразы-списка (через render_block: режим/random)."""

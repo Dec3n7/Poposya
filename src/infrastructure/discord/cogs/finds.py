@@ -19,6 +19,7 @@ from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.channels import is_designated_main, resolve_channel
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class FindClaimView(discord.ui.View):
         await self.cog.handle_claim(interaction)
 
 
-class FindsCog(commands.Cog):
+class FindsCog(PersonaPhraseMixin, commands.Cog):
     """«Ночные находки Попоси»: она гуляет по Токио, находит предметы,
     пользователи ходят их забирать. Очки — те же очки отношений."""
 
@@ -80,10 +81,6 @@ class FindsCog(commands.Cog):
     def _cfg(self, guild_id: int, key: str):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def _pick(self, guild_id: int, key: str, **vars: object) -> str:
         """Случайный элемент фразы-списка (через render_block: режим/random)."""

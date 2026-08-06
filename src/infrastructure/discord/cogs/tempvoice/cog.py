@@ -24,7 +24,9 @@ from discord.ext import commands
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.tempvoice.entities import TempChannel
+from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 from .views import (
@@ -91,7 +93,7 @@ async def _delete_quiet(channel: discord.abc.GuildChannel, reason: str) -> None:
         )
 
 
-class TempVoiceCog(commands.Cog):
+class TempVoiceCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -125,22 +127,12 @@ class TempVoiceCog(commands.Cog):
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
-
     def _feature(self, guild_id: int, sub: str | None = None) -> bool:
         """Модуль «Каморки» (мастер) и подфункция (вкладка «Модули»). Флаг,
         отсутствующий в настройках (тест-заглушки), считаем включённым."""
-
-        def on(key: str) -> bool:
-            default = getattr(self.settings, key, True)
-            value = self.gs.get(guild_id, key, default) if self.gs is not None else default
-            return bool(value)
-
-        if not on("tempvoice_enabled"):
+        if not flag_on(self.settings, self.gs, guild_id, "tempvoice_enabled"):
             return False
-        return on(sub) if sub is not None else True
+        return flag_on(self.settings, self.gs, guild_id, sub) if sub is not None else True
 
     # --- старт: подмести осиротевшие, вернуть панель в хаб ---
 

@@ -11,6 +11,7 @@ from src.config import Settings
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -232,7 +233,7 @@ class SurveyView(discord.ui.View):
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
-class IntroduceCog(commands.Cog):
+class IntroduceCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -258,9 +259,6 @@ class IntroduceCog(commands.Cog):
         self.bot.add_view(
             SurveyView(self.container, self.settings, self.persona, guild_settings=self.gs)
         )
-
-    def _p(self, guild_id: int | None, key: str, **vars: object) -> str:
-        return str(self.persona.phrase(guild_id or 0, key, **vars))
 
     def _intro_embed(self, guild_id: int | None) -> discord.Embed:
         embed = discord.Embed(

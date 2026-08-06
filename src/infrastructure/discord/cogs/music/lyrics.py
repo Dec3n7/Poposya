@@ -22,6 +22,7 @@ from src.infrastructure.discord.cogs.music.session import (
     delete_message_quiet,
 )
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ _ANSI_DIM = "[0;30m"  # приглушённый серый — остальн�
 Blocks = list[tuple[float, list[str]]]
 
 
-class LyricsService:
+class LyricsService(PersonaPhraseMixin):
     """Кэширует тексты (video_id -> (synced, plain)) и ведёт караоке-сессии.
 
     Караоке-задача и её сообщение хранятся в GuildMusicSession — cleanup
@@ -57,13 +58,9 @@ class LyricsService:
         self._spawn = spawn
         self._gs = guild_settings
         # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
-        self._persona = persona if persona is not None else RegistryPersona()
+        self.persona = persona if persona is not None else RegistryPersona()
         self._cache: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
         self._pending: set[str] = set()
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self._persona.phrase(guild_id, key, **vars))
 
     def _ansi_enabled(self, guild_id: int) -> bool:
         """Цветное караоке включено на сервере? (тумблер /config music_karaoke_ansi)"""

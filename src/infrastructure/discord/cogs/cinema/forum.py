@@ -11,6 +11,7 @@ import discord
 from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 from .formatting import _title_of, _trim
@@ -18,7 +19,7 @@ from .formatting import _title_of, _trim
 logger = logging.getLogger(__name__)
 
 
-class CinemaForum:
+class CinemaForum(PersonaPhraseMixin):
     """Отдельный пост по фильму со сводкой и рецензиями. cfg(guild_id, key)
     резолвит настройку (форум-канал) пер-сервер."""
 
@@ -33,11 +34,7 @@ class CinemaForum:
         self._cinema = cinema
         self._cfg = cfg
         # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
-        self._persona = persona if persona is not None else RegistryPersona()
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self._persona.phrase(guild_id, key, **vars))
+        self.persona = persona if persona is not None else RegistryPersona()
 
     def summary_embed(self, final: MovieEntry, avg: float | None, count: int) -> discord.Embed:
         """Красивая сводка по фильму: оценка сервера + вердикт Попоси."""

@@ -18,6 +18,7 @@ from src.application.ai_chat.service import ChatService
 from src.application.cinema.di import CinemaContainer
 from src.domain.cinema.entities import MovieEntry, MovieNight
 from src.infrastructure.discord.accent import accent
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.scheduler import DeferredScheduler
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 ViewFactory = Callable[[], discord.ui.View]
 
 
-class CinemaService:
+class CinemaService(PersonaPhraseMixin):
     def __init__(
         self,
         cinema: CinemaContainer,
@@ -51,11 +52,7 @@ class CinemaService:
         self._watched_view = watched_view
         self._rating_view = rating_view
         # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
-        self._persona = persona if persona is not None else RegistryPersona()
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self._persona.phrase(guild_id, key, **vars))
+        self.persona = persona if persona is not None else RegistryPersona()
 
     async def disable_message(self, channel_id: int, message_id: int) -> None:
         if not channel_id or not message_id:

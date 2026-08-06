@@ -16,6 +16,7 @@ from src.infrastructure.discord.cogs.music.formatting import (
     trim,
 )
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class SearchSelect(discord.ui.Select):
         self._enqueue = enqueue
         self.tracks = tracks
         self.to_front = to_front
-        self._persona = persona if persona is not None else RegistryPersona()
+        self.persona = persona if persona is not None else RegistryPersona()
         options = [
             discord.SelectOption(
                 label=trim(track.title, 95),
@@ -51,7 +52,7 @@ class SearchSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         track = self.tracks[int(self.values[0])]
         key = "music.add_front_prefix" if self.to_front else "music.add_prefix"
-        prefix = str(self._persona.phrase(guild_of(interaction).id, key))
+        prefix = str(self.persona.phrase(guild_of(interaction).id, key))
         await interaction.response.edit_message(content=f"{prefix}: **{track.title}**", view=None)
         await self._enqueue(interaction, [track], self.to_front)
 
@@ -70,7 +71,7 @@ class HistorySelect(discord.ui.Select):
     def __init__(self, enqueue: EnqueueFn, tracks: list[Track], persona=None):
         self._enqueue = enqueue
         self.tracks = tracks
-        self._persona = persona if persona is not None else RegistryPersona()
+        self.persona = persona if persona is not None else RegistryPersona()
         options = [
             discord.SelectOption(
                 label=trim(track.title, 95),
@@ -89,7 +90,7 @@ class HistorySelect(discord.ui.Select):
 
         track = replace(self.tracks[int(self.values[0])], requested_by=interaction.user.id)
         content = str(
-            self._persona.phrase(
+            self.persona.phrase(
                 guild_of(interaction).id, "music.added_again", title=trim(track.title, 100)
             )
         )
@@ -112,7 +113,7 @@ class QueueView(discord.ui.View):
     def __init__(self, player, persona=None):
         super().__init__(timeout=120)
         self.player = player
-        self._persona = persona if persona is not None else RegistryPersona()
+        self.persona = persona if persona is not None else RegistryPersona()
         self.page = 0
         self._sync()
 
@@ -138,16 +139,16 @@ class QueueView(discord.ui.View):
                 f"{fmt_duration(track.duration)} · <@{track.requested_by}>"
             )
         if not queue:
-            lines.append(str(self._persona.phrase(gid, "music.queue_only_current")))
+            lines.append(str(self.persona.phrase(gid, "music.queue_only_current")))
         total = sum(t.duration or 0 for t in queue)
         embed = discord.Embed(
-            title=str(self._persona.phrase(gid, "music.queue_title", count=len(queue))),
+            title=str(self.persona.phrase(gid, "music.queue_title", count=len(queue))),
             description="\n".join(lines)[:4000],
             color=EMBED_COLOR,
         )
         embed.set_footer(
             text=str(
-                self._persona.phrase(
+                self.persona.phrase(
                     gid,
                     "music.queue_footer",
                     page=self.page + 1,
@@ -201,7 +202,7 @@ class LikedListView(discord.ui.View):
         self.owner = owner
         self.tracks = tracks
         self._guild_id = guild_id
-        self._persona = persona if persona is not None else RegistryPersona()
+        self.persona = persona if persona is not None else RegistryPersona()
         self.page = 0
         self._rebuild()
 
@@ -221,13 +222,13 @@ class LikedListView(discord.ui.View):
         ]
         title = (
             str(
-                self._persona.phrase(
+                self.persona.phrase(
                     self._guild_id, "music.liked_title_self", count=len(self.tracks)
                 )
             )
             if self.owner.id == viewer_id
             else str(
-                self._persona.phrase(
+                self.persona.phrase(
                     self._guild_id,
                     "music.liked_title_other",
                     name=self.owner.display_name,
@@ -242,7 +243,7 @@ class LikedListView(discord.ui.View):
         )
         embed.set_footer(
             text=str(
-                self._persona.phrase(
+                self.persona.phrase(
                     self._guild_id,
                     "music.liked_footer",
                     page=self.page + 1,
@@ -289,7 +290,7 @@ class LikedListView(discord.ui.View):
         gid = guild_of(interaction).id
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
-                str(self._persona.phrase(gid, "music.join_voice_first")), ephemeral=True
+                str(self.persona.phrase(gid, "music.join_voice_first")), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
@@ -300,13 +301,13 @@ class LikedListView(discord.ui.View):
         )
         if resolved is None:
             await interaction.followup.send(
-                str(self._persona.phrase(gid, "music.liked_play_dead_view")), ephemeral=True
+                str(self.persona.phrase(gid, "music.liked_play_dead_view")), ephemeral=True
             )
             return
         if await self._enqueue(interaction, [resolved], False):
             await interaction.followup.send(
                 str(
-                    self._persona.phrase(
+                    self.persona.phrase(
                         gid, "music.liked_view_added", title=trim(resolved.title, 100)
                     )
                 ),
@@ -314,7 +315,7 @@ class LikedListView(discord.ui.View):
             )
 
 
-class PlayerView(discord.ui.View):
+class PlayerView(PersonaPhraseMixin, discord.ui.View):
     """Кнопки сообщения-плеера. Персистентный view: у всех кнопок custom_id,
     guild_id берётся из интеракции — экземпляр без состояния гильдии."""
 
@@ -331,10 +332,7 @@ class PlayerView(discord.ui.View):
         self._lyrics = lyrics
         self._on_like = on_like
         self._on_save = on_save
-        self._persona = persona if persona is not None else RegistryPersona()
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        return str(self._persona.phrase(guild_id, key, **vars))
+        self.persona = persona if persona is not None else RegistryPersona()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         player = self._service.get_player(guild_of(interaction).id)

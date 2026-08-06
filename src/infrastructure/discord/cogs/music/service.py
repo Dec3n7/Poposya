@@ -35,6 +35,7 @@ from src.infrastructure.discord.cogs.music.session import (
     delete_message_quiet,
 )
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.voice import DiscordVoiceConnection
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -50,7 +51,7 @@ _EMPTY_GRACE_SECONDS = 120
 _FAIL_NOTIFY_COOLDOWN = 15
 
 
-class MusicPlayerService:
+class MusicPlayerService(PersonaPhraseMixin):
     def __init__(self, bot: commands.Bot, container: MusicContainer, presence=None, persona=None):
         self.bot = bot
         self.settings = container.settings
@@ -70,10 +71,6 @@ class MusicPlayerService:
         self.radio: RadioService | None = None
         self.prefetch_lyrics: Callable[[Track], None] | None = None
         self.view_factory: Callable[[], discord.ui.View] | None = None
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     # --- инфраструктура ---
 

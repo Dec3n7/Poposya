@@ -33,6 +33,7 @@ from src.infrastructure.discord.cogs.music.views import (
 )
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.presence import PresenceService
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -58,7 +59,7 @@ class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь 
 logger = logging.getLogger(__name__)
 
 
-class MusicCog(commands.Cog):
+class MusicCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -100,10 +101,6 @@ class MusicCog(commands.Cog):
             self.save_queue_current,
             persona=self.persona,
         )
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def cog_load(self) -> None:
         # персистентный view: кнопки плеера работают и после рестарта бота

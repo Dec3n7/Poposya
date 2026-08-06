@@ -29,6 +29,7 @@ from src.domain.moderation.entities import (
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-class ModerationCog(commands.Cog):
+class ModerationCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -88,10 +89,6 @@ class ModerationCog(commands.Cog):
         """Значение настройки сервера или глобальный дефолт из .env."""
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     def _feature(self, guild_id: int, sub: str | None = None) -> bool:
         """Модуль «Модерация» (мастер) и подфункция (вкладка «Модули»). Флаг,

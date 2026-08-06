@@ -17,6 +17,7 @@ from src.domain.events.bus import IEventBus
 from src.domain.music.events import TrackStarted
 from src.infrastructure.discord.channels import is_designated_main
 from src.infrastructure.discord.feature_flags import flag_on
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.discord.scheduler import DeferredScheduler
 from src.infrastructure.persona_service import RegistryPersona
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 _SWEEP_INTERVAL_SECONDS = 600
 
 
-class AIChatCog(commands.Cog):
+class AIChatCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -61,10 +62,6 @@ class AIChatCog(commands.Cog):
         """Пер-серверное значение AI-настройки (override /config или глобальный дефолт)."""
         default = getattr(self.settings, key)
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def _pick(self, guild_id: int, key: str) -> str:
         """Случайный элемент фразы-списка (через render_block: режим/random)."""

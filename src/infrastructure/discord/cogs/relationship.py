@@ -13,6 +13,7 @@ from src.domain.relationship.events import ExclusiveTransferred, RelationshipRol
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.feature_flags import block_if_module_off
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
 from src.infrastructure.rank_card import RankCard, render_rank_card
@@ -20,7 +21,7 @@ from src.infrastructure.rank_card import RankCard, render_rank_card
 logger = logging.getLogger(__name__)
 
 
-class RelationshipCog(commands.Cog):
+class RelationshipCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -41,10 +42,6 @@ class RelationshipCog(commands.Cog):
         # конкретного события — диспетч по типу гарантирует правильный аргумент
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
         event_bus.subscribe(ExclusiveTransferred, self._on_exclusive_transferred)  # type: ignore[arg-type]
-
-    def _p(self, guild_id: int, key: str, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Команды /rank, /leaderboard и админ-группа /relationship гаснут разом,

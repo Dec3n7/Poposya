@@ -16,6 +16,7 @@ from discord.ext import commands
 
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.interaction_ctx import guild_of
+from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.guild_settings import (
     FEATURE_FLAG_KEYS,
     SETTING_SPECS,
@@ -104,16 +105,11 @@ class _LimitsModal(discord.ui.Modal):
         await self._cog._apply_limits(interaction, self.limits.value)
 
 
-class ConfigCog(commands.Cog):
+class ConfigCog(PersonaPhraseMixin, commands.Cog):
     def __init__(self, bot: commands.Bot, guild_settings: GuildSettingsService, persona=None):
         self.bot = bot
         self.settings = guild_settings
         self.persona = persona if persona is not None else RegistryPersona()
-
-    def _p(self, guild_id: int, key: str, /, **vars: object) -> str:
-        """Строковая фраза каталога персоны сервера. guild_id/key —
-        позиционные (positional-only): у настроек есть плейсхолдер {key}."""
-        return str(self.persona.phrase(guild_id, key, **vars))
 
     config_group = app_commands.Group(
         name="config",

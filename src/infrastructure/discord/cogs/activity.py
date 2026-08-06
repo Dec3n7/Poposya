@@ -16,6 +16,7 @@ from src.config import Settings
 from src.domain.shared.holidays import HolidayCalendar
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.channels import is_designated_main, resolve_channel
+from src.infrastructure.discord.feature_flags import flag_on
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -74,13 +75,9 @@ class ActivityCog(commands.Cog):
         """Подфункция «Активности» активна: мастер модуля И сам подтумблер
         (наследование). Выкл на сервере через вкладку «Модули» панели. Флаг,
         отсутствующий в настройках (тест-заглушки), считаем включённым."""
-
-        def on(key: str) -> bool:
-            default = getattr(self.settings, key, True)
-            value = self.gs.get(guild_id, key, default) if self.gs is not None else default
-            return bool(value)
-
-        return on("activity_enabled") and on(sub)
+        return flag_on(self.settings, self.gs, guild_id, "activity_enabled") and flag_on(
+            self.settings, self.gs, guild_id, sub
+        )
 
     async def cog_unload(self) -> None:
         # доливаем накопленные буферы ДО отмены циклов — иначе при hot-reload/
