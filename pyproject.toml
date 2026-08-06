@@ -20,6 +20,10 @@ pytest-asyncio = "^0.24"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# свежий event loop на каждый тест: async-задачи (планировщики, фоновые _spawn)
+# не протекают между тестами; заодно фиксирует поведение между версиями
+# pytest-asyncio и убирает предупреждение о неявном scope
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
 [tool.ruff]

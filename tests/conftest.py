@@ -12,6 +12,7 @@ SQLite то, что работает на Postgres — значит провер
 """
 
 import os
+import random
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -19,6 +20,18 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.infrastructure.db.models.base import Base
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_random():
+    """Глобальный `random` сеется фиксированно перед каждым тестом.
+
+    Без этого порядок сбора тестов (на CI — ext4 readdir, у нас на NTFS —
+    алфавит) менял число розыгрышей до конкретного теста, и немоканый
+    random-гейт (например, выбор AI/статики в `render_block` у реплик
+    активности/чат-когов) срабатывал по-разному → флаки-падения только на CI.
+    Фиксированный сид делает набор порядок-независимым и воспроизводимым."""
+    random.seed(0)
 
 
 def database_url(tmp_path) -> str:
