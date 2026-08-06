@@ -155,10 +155,52 @@ async def test_export_import_roundtrip(client):
     dump = (await client.get(f"/api/personas/{src['id']}/export")).json()
     assert dump["prompt"] == "ПЕРЕНОСИМЫЙ"
 
-    imported = (await client.post("/api/personas/import", json=dump)).json()
+    result = (await client.post("/api/personas/import", json=dump)).json()
+    imported = result["persona"]
     assert imported["id"] != src["id"]
     assert imported["prompt"] == "ПЕРЕНОСИМЫЙ"
     assert not imported["is_default"]
+    assert result["report"]["phrases_accepted"] == 0
+    assert result["report"]["phrases_ignored"] == []
+
+
+async def test_template_download_and_import(client):
+    tpl = (await client.get("/api/personas/template")).json()
+    # заготовка: пустое ядро + аннотированный каталог фраз с value=null
+    assert tpl["name"] == ""
+    assert isinstance(tpl["phrases"], list) and tpl["phrases"]
+    first = tpl["phrases"][0]
+    assert first["value"] is None
+    assert "_label" in first and "_default" in first
+
+    # заполняем ядро и ровно одну фразу; подсказки и незаполненные строки не трогаем
+    tpl["name"] = "Из шаблона"
+    tpl["prompt"] = "мой промпт"
+    tpl["phrases"][0]["value"] = first["_default"]  # валидное значение = дефолт ключа
+
+    result = (await client.post("/api/personas/import", json=tpl)).json()
+    assert result["persona"]["name"] == "Из шаблона"
+    assert result["persona"]["prompt"] == "мой промпт"
+    # принята одна фраза, остальные (value=null) пропущены без записи override
+    assert result["report"]["phrases_accepted"] == 1
+    assert result["report"]["phrases_ignored"] == []
+    phrases = (await client.get(f"/api/personas/{result['persona']['id']}/phrases")).json()
+    assert any(p["key"] == first["key"] and p["is_override"] for p in phrases)
+
+
+async def test_import_report_lists_ignored(client):
+    payload = {
+        "name": "С мусором",
+        "phrases": [
+            {"key": "нет.такого.ключа", "value": "x"},
+            {"key": None, "value": "y"},
+        ],
+    }
+    result = (await client.post("/api/personas/import", json=payload)).json()
+    assert result["report"]["phrases_accepted"] == 0
+    ignored = result["report"]["phrases_ignored"]
+    assert len(ignored) == 2
+    assert any(i["key"] == "нет.такого.ключа" for i in ignored)
 
 
 async def test_get_guild_persona_defaults_to_default(client, container):

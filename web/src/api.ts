@@ -24,6 +24,7 @@ import type {
   PermCatalog,
   PersonaDetail,
   PersonaIdentity,
+  PersonaImportResult,
   PersonaPhrase,
   PersonaSummary,
   PhraseChange,
@@ -367,6 +368,7 @@ export const api = {
       body: JSON.stringify({ prompt }),
     }),
   exportPersona: (id: number): Promise<unknown> => req<unknown>(`/api/personas/${id}/export`),
+  personaTemplate: (): Promise<unknown> => req<unknown>("/api/personas/template"),
   personaPhrases: (id: number): Promise<PersonaPhrase[]> =>
     req<PersonaPhrase[]>(`/api/personas/${id}/phrases`),
   setPersonaPhrase: (
@@ -403,8 +405,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  importPersona: (data: unknown): Promise<PersonaDetail> =>
-    req<PersonaDetail>("/api/personas/import", {
+  importPersona: (data: unknown): Promise<PersonaImportResult> =>
+    req<PersonaImportResult>("/api/personas/import", {
       method: "POST",
       body: JSON.stringify(data),
     }),

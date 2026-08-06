@@ -14,6 +14,7 @@ import random
 import string
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TypedDict
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -37,6 +38,15 @@ logger = logging.getLogger(__name__)
 # бот перечитывает персоны целиком (PersonaChangeListener). Payload не нужен —
 # reload перечитывает всё.
 PERSONAS_NOTIFY_CHANNEL = "poposya_personas"
+
+
+class ImportReport(TypedDict):
+    """Итог импорта персоны: сколько override-фраз принято и что отброшено (с
+    причиной) — как по фразам, так и по атрибутам личности."""
+
+    phrases_accepted: int
+    phrases_ignored: list[dict[str, object]]
+    attributes_ignored: list[dict[str, object]]
 
 
 def _template_placeholders(text: str) -> set[str]:
@@ -189,6 +199,27 @@ def _clean_identity_value(key: str, value: object) -> object:
         if any(len(line) > PRESENCE_LINE_MAX for line in lines):
             raise ValueError(f"presence: строка не длиннее {PRESENCE_LINE_MAX} символов")
         return lines
+    return value
+
+
+def _accent_to_hex(value: object) -> str:
+    """int-цвет -> '#RRGGBB' для человекочитаемой заготовки."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return f"#{value & 0xFFFFFF:06X}"
+    return "#000000"
+
+
+def _coerce_accent(value: object) -> object:
+    """hex-строка '#RRGGBB' / 'RRGGBB' -> int (заготовку заполняют руками, hex
+    привычнее числа). Не-hex возвращаем как есть — валидацию делает
+    _clean_identity_value (и отчёт импорта назовёт причину)."""
+    if isinstance(value, str):
+        s = value.strip().lstrip("#")
+        if len(s) == 6:
+            try:
+                return int(s, 16)
+            except ValueError:
+                return value
     return value
 
 
@@ -519,12 +550,89 @@ class PersonaService(PhraseResolver):
             "phrases": [{"key": p.key, "value": p.value, "mode": p.mode} for p in phrases.values()],
         }
 
-    async def import_persona(self, data: dict) -> Persona:
-        """Создать НОВУЮ персону из JSON-выгрузки (never is_default). Незнакомые
-        ключи фраз и недопустимые режимы отбрасываются — импорт устойчив к дрейфу
-        реестра между версиями."""
+    def build_template(self) -> dict:
+        """Пустая заготовка персоны для ручного заполнения (панель отдаёт файлом
+        persona-template.json). Ядро сверху пустое, ниже — ВЕСЬ каталог фраз с
+        подсказками (_label/_category/_default/_placeholders) и value=null («не
+        трогать»). Поля с префиксом _ — только подсказки: import_persona их
+        игнорирует (берёт key/value/mode). Дефолты в _default/attributes — из
+        того же реестра, что и рантайм, поэтому заготовка не устаревает."""
+        attrs = dict(DEFAULT_ATTRIBUTES)
+        presence = attrs.get("presence")
+        return {
+            "_readme": [
+                "Заготовка персонажа для бота Попося.",
+                "Заполните name и, по желанию, промпты и «Личность». Пустые поля = голос Попоси по умолчанию.",
+                "Блок phrases НЕОБЯЗАТЕЛЕН: у каждой строки value=null. Впишите value только тем фразам,"
+                " которые хотите переопределить; остальные оставьте null.",
+                "Поля с _ в начале (_label, _default, _placeholders …) — подсказки. При импорте они"
+                " игнорируются, менять их не нужно.",
+                "В шаблонных строках допустимы только вставки из _placeholders (вида {user}); чужие"
+                " будут отклонены при импорте с указанием причины.",
+                "Готовый файл отдайте оператору — он загрузит его в панели: Персона → Импорт.",
+            ],
+            "name": "",
+            "prompt": "",
+            "_prompt": "Системный промпт: кто она, характер, как говорит. Пусто = встроенный характер Попоси.",
+            "chime_prompt": "",
+            "_chime_prompt": "Когда сама решает вступить в чужой разговор. Пусто = встроенное поведение.",
+            "attributes": {
+                "display_name": attrs.get("display_name", ""),
+                "signature": attrs.get("signature", ""),
+                "accent_color": _accent_to_hex(attrs.get("accent_color")),
+                "presence": list(presence) if isinstance(presence, list) else [],
+            },
+            "_attributes": {
+                "display_name": "Имя бота в тексте реплик.",
+                "signature": "Подпись-эмодзи.",
+                "accent_color": "Цвет эмбедов в формате #RRGGBB.",
+                "presence": "Строки Discord-статуса (массив); пусто = встроенные занятия Попоси.",
+            },
+            "phrases": [
+                {
+                    "key": spec.key,
+                    "_label": spec.label,
+                    "_category": spec.category,
+                    "_kind": spec.kind,
+                    "_placeholders": sorted(spec.placeholders),
+                    "_modes": list(spec.allowed_modes),
+                    "_default": spec.default,
+                    "value": None,
+                    "mode": spec.allowed_modes[0],
+                }
+                for spec in PHRASE_SPECS.values()
+            ],
+        }
+
+    async def import_persona(self, data: dict) -> tuple[Persona, ImportReport]:
+        """Создать НОВУЮ персону из JSON (выгрузка или заполненная заготовка;
+        never is_default). Возвращает (персона, отчёт): заготовку заполняют
+        руками, поэтому молчаливая потеря строки сбивает с толку — отчёт называет,
+        что принято и что отброшено с причиной. Поля-подсказки с префиксом _
+        игнорируются; фразы с value=null (незаполненные в шаблоне) пропускаются
+        без записи override; неизвестные ключи и кривые значения не роняют импорт,
+        а попадают в отчёт (устойчивость к дрейфу реестра между версиями)."""
+        phrases_ignored: list[dict[str, object]] = []
+        attrs_ignored: list[dict[str, object]] = []
+        accepted = 0
+
         name = str(data.get("name") or "Импортированная персона")
-        attributes = data.get("attributes") or {}
+        raw_attrs = data.get("attributes")
+        attributes: dict[str, object] = {}
+        if isinstance(raw_attrs, dict):
+            for k, v in raw_attrs.items():
+                if k not in DEFAULT_ATTRIBUTES:
+                    attrs_ignored.append({"key": str(k), "reason": "неизвестный атрибут"})
+                    continue
+                value = _coerce_accent(v) if k == "accent_color" else v
+                try:
+                    cleaned = _clean_identity_value(k, value)
+                except ValueError as exc:
+                    attrs_ignored.append({"key": str(k), "reason": str(exc)})
+                    continue
+                if cleaned != DEFAULT_ATTRIBUTES[k]:  # в БД только отличия от дефолта
+                    attributes[k] = cleaned
+
         async with self._session_factory() as session:
             repo = SqlAlchemyPersonaRepository(session)
             created = await repo.create(
@@ -534,22 +642,42 @@ class PersonaService(PhraseResolver):
                     is_default=False,
                     prompt=str(data.get("prompt") or ""),
                     chime_prompt=str(data.get("chime_prompt") or ""),
-                    attributes=dict(attributes) if isinstance(attributes, dict) else {},
+                    attributes=attributes,
                 )
             )
-            for raw in data.get("phrases") or []:
+            raw_phrases = data.get("phrases")
+            for raw in raw_phrases if isinstance(raw_phrases, list) else []:
+                if not isinstance(raw, dict):
+                    phrases_ignored.append({"key": None, "reason": "строка не объект"})
+                    continue
+                if raw.get("value") is None:  # незаполненная строка шаблона — норма
+                    continue
                 key = raw.get("key")
-                spec = PHRASE_SPECS.get(key)
+                spec = PHRASE_SPECS.get(key) if isinstance(key, str) else None
                 if spec is None:
+                    phrases_ignored.append(
+                        {"key": key if isinstance(key, str) else None, "reason": "неизвестный ключ"}
+                    )
+                    continue
+                value = raw.get("value")
+                try:
+                    _validate_phrase_value(spec, value)
+                except ValueError as exc:
+                    phrases_ignored.append({"key": spec.key, "reason": str(exc)})
                     continue
                 mode = raw.get("mode", spec.allowed_modes[0])
                 if mode not in spec.allowed_modes:
                     mode = spec.allowed_modes[0]
-                await repo.set_phrase(PersonaPhrase(created.id, key, raw.get("value"), mode))
+                await repo.set_phrase(PersonaPhrase(created.id, spec.key, value, mode))
+                accepted += 1
             await self._notify(session)
             await session.commit()
         await self.reload()
-        return created
+        return created, {
+            "phrases_accepted": accepted,
+            "phrases_ignored": phrases_ignored,
+            "attributes_ignored": attrs_ignored,
+        }
 
     # --- внутреннее ---
 

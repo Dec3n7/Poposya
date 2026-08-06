@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import { pl } from "../plural";
-import type { Guild, PersonaDetail, PersonaIdentity, PersonaSummary } from "../types";
+import type {
+  Guild,
+  PersonaDetail,
+  PersonaIdentity,
+  PersonaImportReport,
+  PersonaSummary,
+} from "../types";
 import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 import { PersonaPhrases } from "./PersonaPhrases";
@@ -11,6 +17,17 @@ import { SkeletonRows } from "./Skeleton";
 // int-цвет ↔ hex для <input type="color">
 const toHex = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
 const fromHex = (hex: string) => parseInt(hex.replace("#", ""), 16) || 0;
+
+// выгрузка JSON файлом (шаблон/экспорт персоны)
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Вкладка «Персона» (только оператор бота): назначение персоны этому серверу +
 // глобальная библиотека (создать/дублировать/импорт/экспорт) и редактор промптов.
@@ -28,6 +45,8 @@ export function Persona({ guild }: { guild: Guild }) {
   const [busy, setBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
+  // отчёт последнего импорта (что отброшено) — показываем, если было отброшено
+  const [importReport, setImportReport] = useState<PersonaImportReport | null>(null);
   // мягкая личность выбранной персоны (имя/подпись/цвет/presence)
   const [identity, setIdentity] = useState<PersonaIdentity | null>(null);
   const [idName, setIdName] = useState("");
@@ -161,27 +180,32 @@ export function Persona({ guild }: { guild: Guild }) {
       setSelectedId(d.id);
     });
 
+  const downloadTemplate = () =>
+    run(async () => {
+      downloadJson(await api.personaTemplate(), "persona-template.json");
+    }, "Шаблон скачан — отдайте его тому, кто будет заполнять персонажа");
+
   const doImport = () =>
     run(async () => {
       const data = JSON.parse(importText);
-      const d = await api.importPersona(data);
+      const { persona, report } = await api.importPersona(data);
       setImportText("");
       setImportOpen(false);
       await loadList();
-      setSelectedId(d.id);
-    }, "Импортировано");
+      setSelectedId(persona.id);
+      const ignored = report.phrases_ignored.length + report.attributes_ignored.length;
+      setImportReport(ignored > 0 ? report : null);
+      setNote(
+        `Импортирована «${persona.name}». Принято фраз: ${report.phrases_accepted}` +
+          (ignored > 0 ? `, отброшено: ${ignored} — подробности ниже.` : "."),
+      );
+    });
 
   const doExport = () =>
     run(async () => {
       if (selectedId == null) return;
       const data = await api.exportPersona(selectedId);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `persona-${detail?.name ?? selectedId}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadJson(data, `persona-${detail?.name ?? selectedId}.json`);
     });
 
   const remove = () =>
@@ -220,6 +244,28 @@ export function Persona({ guild }: { guild: Guild }) {
 
       {error && <div className="error-banner">{error}</div>}
       {note && <div className="ok-banner">{note}</div>}
+
+      {importReport && (
+        <div className="card persona-import-report">
+          <div className="row-between">
+            <strong className="small">Импорт: часть строк не принята</strong>
+            <button className="btn ghost small" onClick={() => setImportReport(null)}>
+              Скрыть
+            </button>
+          </div>
+          <p className="muted small" style={{ margin: "6px 0" }}>
+            Принято фраз: {importReport.phrases_accepted}. Остальные строки заполнены с ошибкой и
+            пропущены — исправьте в файле и импортируйте заново.
+          </p>
+          <ul className="muted small persona-import-issues">
+            {[...importReport.attributes_ignored, ...importReport.phrases_ignored].map((iss, i) => (
+              <li key={`${iss.key ?? "?"}-${i}`}>
+                <code>{iss.key ?? "—"}</code>: {iss.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* шапка контекста — всегда видна */}
       <div className="card persona-context">
@@ -278,10 +324,17 @@ export function Persona({ guild }: { guild: Guild }) {
             <button className="btn ghost small" disabled={busy} onClick={create}>
               + Создать
             </button>
+            <button className="btn ghost small" disabled={busy} onClick={downloadTemplate}>
+              Скачать шаблон
+            </button>
             <button className="btn ghost small" disabled={busy} onClick={() => setImportOpen((o) => !o)}>
               Импорт
             </button>
           </div>
+          <p className="muted small" style={{ margin: "8px 0 0" }}>
+            «Скачать шаблон» даёт пустую заготовку персонажа (JSON). Отдайте её тому, кто придумывает
+            персону; заполненный файл загрузите обратно кнопкой «Импорт».
+          </p>
           <div className="persona-list">
             {list.map((p) => (
               <button
@@ -300,10 +353,30 @@ export function Persona({ guild }: { guild: Guild }) {
           </div>
           {importOpen && (
             <div style={{ marginTop: 12 }}>
+              <div className="btn-row" style={{ marginBottom: 8 }}>
+                <label className="btn ghost small" style={{ cursor: "pointer" }}>
+                  Выбрать файл…
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.currentTarget.value = ""; // разрешить повторный выбор того же файла
+                      if (file)
+                        file
+                          .text()
+                          .then(setImportText)
+                          .catch(() => setError("Не удалось прочитать файл"));
+                    }}
+                  />
+                </label>
+                <span className="muted small">или вставьте JSON вручную ниже</span>
+              </div>
               <textarea
                 className="input mono"
                 rows={5}
-                placeholder="Вставьте JSON выгрузки персоны…"
+                placeholder="Содержимое файла персоны (JSON)…"
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
               />

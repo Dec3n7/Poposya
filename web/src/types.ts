@@ -47,6 +47,22 @@ export interface GuildPersona {
   persona_id: number; // что реально применяется (назначенная или дефолт)
 }
 
+export interface PersonaImportIssue {
+  key: string | null; // ключ фразы/атрибута; null если строка вообще не объект
+  reason: string;
+}
+
+export interface PersonaImportReport {
+  phrases_accepted: number;
+  phrases_ignored: PersonaImportIssue[];
+  attributes_ignored: PersonaImportIssue[];
+}
+
+export interface PersonaImportResult {
+  persona: PersonaDetail;
+  report: PersonaImportReport;
+}
+
 export interface PersonaPhrase {
   key: string;
   label: string;

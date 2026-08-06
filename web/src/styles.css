@@ -294,6 +294,21 @@ a {
   border-radius: var(--radius-sm);
   margin-bottom: var(--sp-4);
 }
+/* отчёт импорта персоны: что отброшено (амбер — не ошибка, но требует внимания) */
+.persona-import-report {
+  border: 1px solid rgba(217, 164, 65, 0.45);
+  background: rgba(217, 164, 65, 0.1);
+  margin-bottom: var(--sp-4);
+}
+.persona-import-issues {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.persona-import-issues li {
+  margin: 2px 0;
+}
 /* нейтральный информационный баннер (напр. «только просмотр» без права) */
 .notice {
   background: rgba(148, 163, 184, 0.12);

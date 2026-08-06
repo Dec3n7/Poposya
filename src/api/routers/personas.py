@@ -16,6 +16,8 @@ from src.api.schemas import (
     PersonaDetailDTO,
     PersonaIdentityDTO,
     PersonaIdentityUpdate,
+    PersonaImportReportDTO,
+    PersonaImportResultDTO,
     PersonaPhraseDTO,
     PersonaRename,
     PersonaSummaryDTO,
@@ -122,25 +124,44 @@ async def duplicate_persona(
     return _detail(service, _require(service, created.id))
 
 
+@router.get("/personas/template")
+async def persona_template(
+    _op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> dict:
+    """Пустая заготовка персоны (JSON): человек заполняет её офлайн и возвращает
+    оператору, тот загружает через /personas/import. Маршрут ОБЯЗАН стоять выше
+    /personas/{persona_id}, иначе «template» уедет в парсинг persona_id."""
+    service: PersonaService = container.persona
+    return service.build_template()
+
+
 @router.post(
-    "/personas/import", response_model=PersonaDetailDTO, status_code=status.HTTP_201_CREATED
+    "/personas/import", response_model=PersonaImportResultDTO, status_code=status.HTTP_201_CREATED
 )
 async def import_persona(
     body: dict,
     op: Session = Depends(require_operator),
     container=Depends(get_container),
-) -> PersonaDetailDTO:
+) -> PersonaImportResultDTO:
     service: PersonaService = container.persona
-    created = await service.import_persona(body)
+    created, report = await service.import_persona(body)
     await record_audit(
         container,
         _GLOBAL,
         op.user_id,
         "persona.import",
         target=created.id,
-        details={"name": created.name},
+        details={
+            "name": created.name,
+            "phrases": report["phrases_accepted"],
+            "ignored": len(report["phrases_ignored"]) + len(report["attributes_ignored"]),
+        },
     )
-    return _detail(service, _require(service, created.id))
+    return PersonaImportResultDTO(
+        persona=_detail(service, _require(service, created.id)),
+        report=PersonaImportReportDTO.model_validate(report),
+    )
 
 
 @router.get("/personas/{persona_id}", response_model=PersonaDetailDTO)

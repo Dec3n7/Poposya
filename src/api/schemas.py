@@ -85,6 +85,27 @@ class PersonaDetailDTO(BaseModel):
     assigned_count: int
 
 
+class PersonaImportIssueDTO(BaseModel):
+    """Одна отброшенная при импорте строка: что и почему (заготовку правят
+    руками — оператор должен видеть, что не приняли)."""
+
+    key: str | None  # ключ фразы/атрибута; None если строка вообще не объект
+    reason: str
+
+
+class PersonaImportReportDTO(BaseModel):
+    phrases_accepted: int
+    phrases_ignored: list[PersonaImportIssueDTO]
+    attributes_ignored: list[PersonaImportIssueDTO]
+
+
+class PersonaImportResultDTO(BaseModel):
+    """Ответ импорта: созданная персона + отчёт о принятом/отброшенном."""
+
+    persona: PersonaDetailDTO
+    report: PersonaImportReportDTO
+
+
 class PersonaCreate(BaseModel):
     name: str
     duplicate_of: int | None = None  # если задано — копия этой персоны
