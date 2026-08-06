@@ -150,6 +150,7 @@ class RelationshipCog(PersonaPhraseMixin, commands.Cog):
             return None
 
     @app_commands.command(name="rank", description="Твои очки и статус у Попоси")
+    @app_commands.checks.cooldown(1, 20)  # рендер PNG-карточки на каждый вызов
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction) -> None:
         # defer сразу: чтение БД на холодном старте может превысить 3 секунды.
@@ -194,6 +195,7 @@ class RelationshipCog(PersonaPhraseMixin, commands.Cog):
     @app_commands.command(
         name="leaderboard", description="Топ очков сервера: кто ближе всех к Попосе"
     )
+    @app_commands.checks.cooldown(1, 20)
     @app_commands.guild_only()
     async def leaderboard(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()

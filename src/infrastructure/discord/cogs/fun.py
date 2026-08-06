@@ -98,6 +98,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
     _DICE_MAX_PLAYERS = 20  # больше не влезает в сообщение по-человечески
 
     @app_commands.command(name="dice", description="Бросить кубик — или вызвать других на дуэль")
+    @app_commands.checks.cooldown(1, 5)
     @app_commands.describe(
         sides="Число граней (по умолчанию 6)",
         users="Соперники: просто отметь @участников через пробел",
@@ -170,11 +171,13 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
         )
 
     @app_commands.command(name="coinflip", description="Подбросить монетку")
+    @app_commands.checks.cooldown(1, 5)
     async def coinflip(self, interaction: discord.Interaction) -> None:
         side = await self._pick(cast(int, interaction.guild_id), "fun.coin_sides")
         await interaction.response.send_message(f"**{side}**")
 
     @app_commands.command(name="topic", description="Случайная тема для разговора")
+    @app_commands.checks.cooldown(1, 5)
     async def topic(self, interaction: discord.Interaction) -> None:
         topic = await self._pick(cast(int, interaction.guild_id), "fun.topics")
         await interaction.response.send_message(f"💬 {topic}")
@@ -261,6 +264,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
         return lines
 
     @app_commands.command(name="profile", description="Профиль пользователя глазами Попоси")
+    @app_commands.checks.cooldown(1, 15)
     @app_commands.describe(user="Чей профиль (по умолчанию — твой)")
     @app_commands.guild_only()
     async def profile(
@@ -400,6 +404,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="serverstats", description="Статистика сервера")
+    @app_commands.checks.cooldown(1, 30)
     @app_commands.guild_only()
     async def serverstats(self, interaction: discord.Interaction) -> None:
         guild = guild_of(interaction)
@@ -440,6 +445,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="send", description="Передать сообщение через Попосю в ЛС")
+    @app_commands.checks.cooldown(1, 60)  # релей в чужие ЛС — тормозим спам/харассмент
     @app_commands.describe(
         user="Кому доставить",
         text="Текст сообщения",
@@ -505,6 +511,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
                     logger.warning("Не удалось записать /send в лог-канал", exc_info=True)
 
     @app_commands.command(name="remind", description="Напомню в ЛС через N минут")
+    @app_commands.checks.cooldown(1, 15)
     @app_commands.describe(minutes="Через сколько минут (1–10080)", text="О чём напомнить")
     @app_commands.guild_only()
     async def remind(
