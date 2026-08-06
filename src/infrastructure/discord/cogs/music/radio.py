@@ -49,7 +49,9 @@ class RadioService:
         return enabled
 
     def recently_filled(self, guild_id: int) -> bool:
-        return time.monotonic() - self._last_fill.get(guild_id, 0.0) <= _REFILL_GUARD_SECONDS
+        return (
+            time.monotonic() - self._last_fill.get(guild_id, float("-inf")) <= _REFILL_GUARD_SECONDS
+        )
 
     async def fill(self, guild_id: int) -> bool:
         """Добрать в очередь пачку треков: лайки сидящих в войсе, иначе

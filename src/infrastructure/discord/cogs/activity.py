@@ -197,14 +197,14 @@ class ActivityCog(commands.Cog):
             now_mono_main = time.monotonic()
             self._main_last_activity[message.guild.id] = now_mono_main
             self._lonely_notified.discard(message.guild.id)
-            if now_mono_main - self._mood_bump_throttle.get(message.guild.id, 0.0) > 60:
+            if now_mono_main - self._mood_bump_throttle.get(message.guild.id, float("-inf")) > 60:
                 self._mood_bump_throttle[message.guild.id] = now_mono_main
                 self.mood.bump(message.guild.id, +2)
 
         # возвращение участника после долгого отсутствия
         key = (message.guild.id, message.author.id)
         now_mono = time.monotonic()
-        if now_mono - self._touch_throttle.get(key, 0.0) < _TOUCH_THROTTLE_SECONDS:
+        if now_mono - self._touch_throttle.get(key, float("-inf")) < _TOUCH_THROTTLE_SECONDS:
             return
         self._touch_throttle[key] = now_mono
 

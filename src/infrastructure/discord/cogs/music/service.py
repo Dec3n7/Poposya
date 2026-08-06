@@ -305,7 +305,7 @@ class MusicPlayerService:
         """Трек не удалось включить — сказать об этом в чат вместо молчания.
         С кулдауном: битый плейлист не должен породить залп реплик."""
         now = time.monotonic()
-        if now - self._last_fail_notify.get(guild_id, 0.0) < _FAIL_NOTIFY_COOLDOWN:
+        if now - self._last_fail_notify.get(guild_id, float("-inf")) < _FAIL_NOTIFY_COOLDOWN:
             return
         self._last_fail_notify[guild_id] = now
         player = self.get_player(guild_id)

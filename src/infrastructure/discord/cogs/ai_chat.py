@@ -243,7 +243,7 @@ class AIChatCog(commands.Cog):
         channel_id = message.channel.id
         # в кулдауне — таймер не взводим (всё равно бы промолчала)
         cooldown = self._cfg(guild.id, "ai_passive_cooldown_minutes") * 60
-        if time.monotonic() - self._chime_cooldowns.get(channel_id, 0.0) < cooldown:
+        if time.monotonic() - self._chime_cooldowns.get(channel_id, float("-inf")) < cooldown:
             return
         when = datetime.now(UTC) + timedelta(seconds=self.settings.ai_passive_debounce_seconds)
         self._chime_scheduler.schedule(
@@ -262,7 +262,7 @@ class AIChatCog(commands.Cog):
             return
         # повторная проверка кулдауна: пока ждали паузу, она могла заговорить
         cooldown = self._cfg(guild_id, "ai_passive_cooldown_minutes") * 60
-        if time.monotonic() - self._chime_cooldowns.get(channel_id, 0.0) < cooldown:
+        if time.monotonic() - self._chime_cooldowns.get(channel_id, float("-inf")) < cooldown:
             return
         text = await self.service.maybe_chime(
             guild_id,
@@ -314,7 +314,9 @@ class AIChatCog(commands.Cog):
             chance *= 2
         if random.random() > chance:
             return
-        last = self._event_cooldowns.get(event.channel_id, 0.0)
+        # дефолт «-inf» = «ещё не комментировали»: иначе на свежем старте (малый
+        # monotonic) кулдаун ложно активен ~15 мин и бот молчит после рестарта
+        last = self._event_cooldowns.get(event.channel_id, float("-inf"))
         if time.monotonic() - last < self._cfg(event.guild_id, "ai_event_comment_cooldown"):
             return
         self._event_cooldowns[event.channel_id] = time.monotonic()

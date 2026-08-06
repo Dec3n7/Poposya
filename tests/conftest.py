@@ -13,7 +13,6 @@ SQLite то, что работает на Postgres — значит провер
 
 import os
 import random
-import time
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -22,29 +21,14 @@ from src.infrastructure.db.models.base import Base
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 
-_REAL_MONOTONIC = time.monotonic
-
-
-@pytest.fixture(autouse=True)
-def _monotonic_offset(monkeypatch):
-    """Сдвигает базу `time.monotonic()` далеко вверх на время каждого теста.
-
-    Часть когов гейтит действие кулдауном `time.monotonic() - last < N`, где для
-    «ещё не было» берётся `last=0.0`. На свежезагруженной машине `monotonic()`
-    мал (аптайм меньше кулдаунов 720–900 с), поэтому `monotonic() - 0.0 < N`
-    ложно истинно → действие пропускается. Из-за этого 4 теста (реплики
-    активности/чата) падали ТОЛЬКО на CI-раннере с малым аптаймом, а на машинах
-    с большим аптаймом проходили. Сдвиг сохраняет ход часов (дельты не меняются),
-    но делает базу всегда большой → тесты аптайм-независимы. Тесты, которые сами
-    мокают `time.monotonic`, переопределяют это (стек monkeypatch)."""
-    monkeypatch.setattr(time, "monotonic", lambda: _REAL_MONOTONIC() + 10**9)
-
 
 @pytest.fixture(autouse=True)
 def _deterministic_random():
     """Профилактика: глобальный `random` сеется фиксированно перед каждым тестом,
     чтобы немоканые random-гейты не зависели от порядка сбора/энтропии между
-    прогонами. (Конкретную CI-флаки чинит `_monotonic_offset` выше.)"""
+    прогонами. Уптайм-независимость кулдаунов держит уже сам прод (`.get(k,
+    float("-inf"))` вместо 0.0), так что monotonic здесь НЕ подменяем — иначе
+    тесты перестали бы ловить регресс этого класса на свежем CI-раннере."""
     random.seed(0)
 
 
