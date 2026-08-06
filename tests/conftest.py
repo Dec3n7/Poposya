@@ -13,6 +13,7 @@ SQLite то, что работает на Postgres — значит провер
 
 import os
 import random
+import time
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -21,16 +22,29 @@ from src.infrastructure.db.models.base import Base
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 
+_REAL_MONOTONIC = time.monotonic
+
+
+@pytest.fixture(autouse=True)
+def _monotonic_offset(monkeypatch):
+    """Сдвигает базу `time.monotonic()` далеко вверх на время каждого теста.
+
+    Часть когов гейтит действие кулдауном `time.monotonic() - last < N`, где для
+    «ещё не было» берётся `last=0.0`. На свежезагруженной машине `monotonic()`
+    мал (аптайм меньше кулдаунов 720–900 с), поэтому `monotonic() - 0.0 < N`
+    ложно истинно → действие пропускается. Из-за этого 4 теста (реплики
+    активности/чата) падали ТОЛЬКО на CI-раннере с малым аптаймом, а на машинах
+    с большим аптаймом проходили. Сдвиг сохраняет ход часов (дельты не меняются),
+    но делает базу всегда большой → тесты аптайм-независимы. Тесты, которые сами
+    мокают `time.monotonic`, переопределяют это (стек monkeypatch)."""
+    monkeypatch.setattr(time, "monotonic", lambda: _REAL_MONOTONIC() + 10**9)
+
 
 @pytest.fixture(autouse=True)
 def _deterministic_random():
-    """Глобальный `random` сеется фиксированно перед каждым тестом.
-
-    Без этого порядок сбора тестов (на CI — ext4 readdir, у нас на NTFS —
-    алфавит) менял число розыгрышей до конкретного теста, и немоканый
-    random-гейт (например, выбор AI/статики в `render_block` у реплик
-    активности/чат-когов) срабатывал по-разному → флаки-падения только на CI.
-    Фиксированный сид делает набор порядок-независимым и воспроизводимым."""
+    """Профилактика: глобальный `random` сеется фиксированно перед каждым тестом,
+    чтобы немоканые random-гейты не зависели от порядка сбора/энтропии между
+    прогонами. (Конкретную CI-флаки чинит `_monotonic_offset` выше.)"""
     random.seed(0)
 
 
