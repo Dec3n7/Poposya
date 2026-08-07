@@ -35,7 +35,13 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null); // контейнер триггера
   const menuRef = useRef<HTMLUListElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = useState<{
+    left: number;
+    width: number;
+    maxHeight: number;
+    top?: number; // открытие вниз
+    bottom?: number; // открытие вверх (fixed: от низа вьюпорта)
+  } | null>(null);
   const [active, setActive] = useState(0); // индекс подсвеченной опции (клавиатура)
   const uid = useId(); // стабильный префикс id опций для aria-activedescendant
   const typeahead = useRef<{ buf: string; t: number }>({ buf: "", t: 0 });
@@ -57,7 +63,30 @@ export function Dropdown({
       const el = ref.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setPos({ top: r.bottom + 6, left: r.left, width: r.width });
+      const gap = 6;
+      const margin = 8; // отступ от края экрана
+      const vh = window.innerHeight;
+      const below = vh - r.bottom - gap - margin;
+      const above = r.top - gap - margin;
+      // если снизу мало места (триггер у низа страницы), а сверху больше —
+      // раскрываем вверх; иначе вниз. Высоту всегда режем по доступному
+      // пространству, чтобы меню влезло во вьюпорт и скроллилось внутри.
+      const openUp = below < 240 && above > below;
+      setPos(
+        openUp
+          ? {
+              left: r.left,
+              width: r.width,
+              bottom: Math.round(vh - r.top + gap),
+              maxHeight: Math.max(140, Math.min(320, Math.floor(above))),
+            }
+          : {
+              left: r.left,
+              width: r.width,
+              top: Math.round(r.bottom + gap),
+              maxHeight: Math.max(140, Math.min(320, Math.floor(below))),
+            },
+      );
     }
     place();
     window.addEventListener("scroll", place, true);
@@ -166,7 +195,13 @@ export function Dropdown({
             ref={menuRef}
             className="dd-menu"
             role="listbox"
-            style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width }}
+            style={{
+              position: "fixed",
+              left: pos.left,
+              minWidth: pos.width,
+              maxHeight: pos.maxHeight,
+              ...(pos.top !== undefined ? { top: pos.top } : { bottom: pos.bottom }),
+            }}
             onScroll={updateFade}
           >
             {options.map((o, i) => {
