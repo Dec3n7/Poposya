@@ -217,7 +217,9 @@ async def test_rules():
     interaction = make_interaction()
     await type(cog).rules.callback(cog, interaction)
     embed = interaction.response.send_message.await_args.kwargs["embed"]
-    assert "Правила" in embed.title
+    # заголовок вынесен в описание (## ...), т.к. кастом-эмодзи в title не рендерятся
+    assert embed.title is None
+    assert "Правила" in embed.description
 
 
 async def test_serverstats():

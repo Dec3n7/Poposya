@@ -397,7 +397,7 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
     async def rules(self, interaction: discord.Interaction) -> None:
         gid = cast(int, interaction.guild_id)  # без guild_only: в ЛС None
         embed = discord.Embed(
-            title=self._p(gid, "fun.rules_title"),
+            title=self._p(gid, "fun.rules_title") or None,  # пусто → заголовок внутри описания (## ...)
             description=self._p(gid, "fun.rules_text"),
             color=accent(gid),
         )
