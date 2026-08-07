@@ -392,16 +392,42 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
 
     # --- утилиты ---
 
-    @app_commands.command(name="rules", description="Опубликовать правила сервера (разово)")
-    @app_commands.default_permissions(administrator=True)
-    async def rules(self, interaction: discord.Interaction) -> None:
-        gid = cast(int, interaction.guild_id)  # без guild_only: в ЛС None
-        embed = discord.Embed(
-            title=self._p(gid, "fun.rules_title") or None,  # пусто → заголовок внутри описания (## ...)
+    def _build_rules_embed(self, gid: int | None) -> discord.Embed:
+        """Embed правил сервера. Заголовок вынесен в описание (## ...), т.к.
+        кастом-эмодзи Discord в embed.title не рендерит."""
+        return discord.Embed(
+            title=self._p(gid, "fun.rules_title") or None,
             description=self._p(gid, "fun.rules_text"),
             color=accent(gid),
         )
-        await interaction.response.send_message(embed=embed)
+
+    async def publish_rules(self, channel: discord.abc.Messageable, guild_id: int) -> None:
+        """Публикация правил в канал из веб-панели (мост). Тот же embed, что у /rules."""
+        await channel.send(embed=self._build_rules_embed(guild_id))
+
+    @app_commands.command(name="rules", description="Опубликовать правила сервера (разово)")
+    @app_commands.describe(channel="Канал для публикации (по умолчанию — текущий)")
+    @app_commands.default_permissions(administrator=True)
+    async def rules(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        gid = cast(int, interaction.guild_id)  # без guild_only: в ЛС None
+        embed = self._build_rules_embed(gid)
+        # постим правила обычным сообщением от лица бота — без «использовал /rules»;
+        # автору отвечаем эфемерно, чтобы атрибуция не светилась в канале
+        target = channel or cast(discord.TextChannel, interaction.channel)
+        try:
+            await target.send(embed=embed)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                self._p(gid, "fun.rules_no_perm", channel=target.mention), ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            self._p(gid, "fun.rules_published", channel=target.mention), ephemeral=True
+        )
 
     @app_commands.command(name="serverstats", description="Статистика сервера")
     @app_commands.checks.cooldown(1, 30)

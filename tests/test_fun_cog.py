@@ -215,11 +215,14 @@ async def test_birthday_invalid():
 async def test_rules():
     cog = make_cog()
     interaction = make_interaction()
-    await type(cog).rules.callback(cog, interaction)
-    embed = interaction.response.send_message.await_args.kwargs["embed"]
+    await type(cog).rules.callback(cog, interaction, None)
+    # правила постятся обычным сообщением в канал — без «использовал /rules»
+    embed = interaction.channel.send.await_args.kwargs["embed"]
     # заголовок вынесен в описание (## ...), т.к. кастом-эмодзи в title не рендерятся
     assert embed.title is None
     assert "Правила" in embed.description
+    # автору — эфемерное подтверждение
+    assert interaction.response.send_message.await_args.kwargs.get("ephemeral") is True
 
 
 async def test_serverstats():

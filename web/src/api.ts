@@ -117,6 +117,11 @@ export const api = {
     }),
   channels: (guildId: string): Promise<Channel[]> =>
     req<Channel[]>(`/api/guilds/${guildId}/channels`),
+  publishRules: (guildId: string, channelId: string): Promise<CommandResult> =>
+    req<CommandResult>(`/api/guilds/${guildId}/rules/publish`, {
+      method: "POST",
+      body: JSON.stringify({ channel_id: channelId }),
+    }),
   botProfile: (guildId: string): Promise<BotProfile> =>
     req<BotProfile>(`/api/guilds/${guildId}/bot-profile`),
   setBotProfile: (

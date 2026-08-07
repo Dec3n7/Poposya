@@ -185,6 +185,32 @@ async def remove_movie(
     return {"status": status_str}
 
 
+class PublishRulesBody(BaseModel):
+    channel_id: str  # снежинка Discord — строкой, чтобы не терять точность в JS
+
+
+@router.post("/rules/publish")
+async def publish_rules(
+    body: PublishRulesBody,
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container=Depends(get_container),
+) -> dict:
+    """Опубликовать правила сервера в канал от лица бота (мост панель→бот)."""
+    cmd = await run_command(
+        container, guild_id, "rules.publish", {"channel_id": body.channel_id}, session.user_id
+    )
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "rules.publish",
+        target=str(body.channel_id),
+        result=cmd.get("status"),
+    )
+    return cmd
+
+
 class BotProfileBody(BaseModel):
     nick: str = ""
     avatar_url: str = ""

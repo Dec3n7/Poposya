@@ -697,6 +697,22 @@ class DiscordCommandExecutor:
         msg = f"Создано ролей: {created}."
         return msg + (f" Пропущено (уже есть): {skipped}." if skipped else "")
 
+    # --- правила ---
+
+    async def _publish_rules(self, guild: discord.Guild, command: Command) -> str:
+        channel_id = int(command.payload["channel_id"])
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel | discord.VoiceChannel):
+            raise CommandError("Текстовый канал не найден.")
+        cog = self._bot.get_cog("FunCog")
+        if cog is None:
+            raise CommandError("Модуль недоступен.")
+        try:
+            await cog.publish_rules(channel, guild.id)  # type: ignore[attr-defined]
+        except discord.Forbidden as exc:
+            raise CommandError(f"Нет прав писать в #{channel.name}.") from exc
+        return f"Правила опубликованы в #{channel.name}."
+
 
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
@@ -718,6 +734,7 @@ _HANDLERS = {
     "music.seek": DiscordCommandExecutor._seek,
     "music.remove": DiscordCommandExecutor._remove,
     "profile.apply": DiscordCommandExecutor._profile_apply,
+    "rules.publish": DiscordCommandExecutor._publish_rules,
     "role.assign": DiscordCommandExecutor._role_assign,
     "role.unassign": DiscordCommandExecutor._role_unassign,
     "role.create": DiscordCommandExecutor._role_create,

@@ -12,6 +12,7 @@ import type {
 import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 import { PersonaPhrases } from "./PersonaPhrases";
+import { RulesPublish } from "./RulesPublish";
 import { SkeletonRows } from "./Skeleton";
 
 // int-цвет ↔ hex для <input type="color">
@@ -622,6 +623,9 @@ export function Persona({ guild }: { guild: Guild }) {
 
           {/* Фразы бота (сам оборачивается в сворачиваемый блок) */}
           <PersonaPhrases personaId={detail.id} />
+
+          {/* Публикация правил в канал (мост панель→бот) */}
+          <RulesPublish guild={guild} />
 
           {/* Управление персоной */}
           <Collapsible
