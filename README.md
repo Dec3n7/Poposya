@@ -1,7 +1,7 @@
 # Poposya Bot
 
 Discord-бот с модульной гексагональной архитектурой (домен → приложение →
-инфраструктура → представление; см. [ARCHITECTURE.md](ARCHITECTURE.md) и
+инфраструктура → представление; см. [ARCHITECTURE.md](docs/ARCHITECTURE.md) и
 [ТЗ](docs/plans/TZ.md)) плюс **веб-панель** для настройки серверов.
 
 Основные фичи: живая персона Попоси (её голос настраивается пер-сервер) и
@@ -565,4 +565,4 @@ docs/plans/            # ТЗ, планы и архитектурные спек
 Новая фича добавляется по алгоритму раздела 14 [ТЗ](docs/plans/TZ.md): своя
 подпапка в `domain/`, `application/`, свой ког — существующие фичи не правятся,
 связь только через события `IEventBus`. Правила и запреты слоёв — в
-[ARCHITECTURE.md](ARCHITECTURE.md) и [AI_RULES.md](AI_RULES.md).
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) и [AI_RULES.md](docs/AI_RULES.md).

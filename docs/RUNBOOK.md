@@ -1,7 +1,7 @@
 # RUNBOOK — эксплуатация Poposya
 
-Короткие процедуры для прода. Первичная настройка — в [README.md](README.md);
-включение HTTPS — в [web/TLS.md](web/TLS.md); чек-лист запуска — заметка
+Короткие процедуры для прода. Первичная настройка — в [README.md](../README.md);
+включение HTTPS — в [web/TLS.md](../web/TLS.md); чек-лист запуска — заметка
 `public-launch-checklist`.
 
 ---
