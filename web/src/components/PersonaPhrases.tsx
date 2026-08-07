@@ -141,6 +141,7 @@ export function PersonaPhrases({ personaId }: { personaId: number }) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [preview, setPreview] = useState<PhraseChange[] | null>(null);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -191,6 +192,14 @@ export function PersonaPhrases({ personaId }: { personaId: number }) {
   const categories = phrases ? [...new Set(phrases.map((p) => p.category))] : [];
   const totalOverrides = phrases ? phrases.filter((p) => p.is_override).length : 0;
 
+  // локальный фильтр по фразам (по метке, ключу, тексту, названию категории)
+  const fq = filter.trim().toLowerCase();
+  const matches = (p: PersonaPhrase) =>
+    !fq ||
+    `${p.label} ${p.key} ${toText(p, p.value ?? p.default)} ${CATEGORY_LABELS[p.category] ?? p.category}`
+      .toLowerCase()
+      .includes(fq);
+
   return (
     <Collapsible
       outerClass="card acc"
@@ -236,6 +245,15 @@ export function PersonaPhrases({ personaId }: { personaId: number }) {
 
         {phrases && (
           <>
+            {/* локальный фильтр отображения фраз */}
+            <input
+              className="input phrase-filter"
+              placeholder="Фильтр фраз по названию или тексту…"
+              value={filter}
+              disabled={busy}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+
             {/* find-and-replace по всем фразам */}
             <div className="phrase-replace">
               <input
@@ -279,8 +297,27 @@ export function PersonaPhrases({ personaId }: { personaId: number }) {
               </div>
             )}
 
-            {/* категории — под-блоки */}
-            {categories.map((cat) => {
+            {/* при активном фильтре — плоский список совпадений */}
+            {fq && (
+              <div className="subpad">
+                {phrases.filter(matches).map((p) => (
+                  <PhraseRow
+                    key={p.key}
+                    phrase={p}
+                    busy={busy}
+                    onSave={(value, mode) => save(p, value, mode)}
+                    onReset={() => reset(p)}
+                  />
+                ))}
+                {phrases.filter(matches).length === 0 && (
+                  <span className="muted small">Ничего не найдено.</span>
+                )}
+              </div>
+            )}
+
+            {/* категории — под-блоки (когда фильтр пуст) */}
+            {!fq &&
+              categories.map((cat) => {
               const items = phrases.filter((p) => p.category === cat);
               const overrides = items.filter((p) => p.is_override).length;
               return (

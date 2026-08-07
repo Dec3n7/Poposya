@@ -48,6 +48,37 @@ export default function App() {
       });
   }, []);
 
+  // авто-высота: любой textarea в панели растёт под свой текст (без внутреннего скролла).
+  // Глобально, через делегирование + наблюдатель — не нужно трогать каждый компонент.
+  useEffect(() => {
+    const fit = (el: HTMLTextAreaElement) => {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    const fitAll = () =>
+      document.querySelectorAll("textarea").forEach((el) => fit(el as HTMLTextAreaElement));
+    const onInput = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.tagName === "TEXTAREA") fit(t as HTMLTextAreaElement);
+    };
+    let raf = 0;
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(fitAll);
+    };
+    document.addEventListener("input", onInput, true);
+    const mo = new MutationObserver(schedule);
+    mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      document.removeEventListener("input", onInput, true);
+      mo.disconnect();
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", schedule);
+    };
+  }, []);
+
   async function logout() {
     try {
       await api.logout();

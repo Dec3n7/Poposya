@@ -53,6 +53,7 @@ export function GuildSettings({ guild }: { guild: Guild }) {
   const [fields, setFields] = useState<Field[] | null>(null);
   const [channels, setChannels] = useState<Channel[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     setFields(null);
@@ -79,6 +80,13 @@ export function GuildSettings({ guild }: { guild: Guild }) {
     setFields((fs) => fs?.map((f) => (f.key === updated.key ? updated : f)) ?? fs);
   }
 
+  const q = filter.trim().toLowerCase();
+  const shown = fields
+    ? q
+      ? fields.filter((f) => `${f.key} ${f.label}`.toLowerCase().includes(q))
+      : fields
+    : null;
+
   return (
     <div>
       <p className="sub">
@@ -88,6 +96,15 @@ export function GuildSettings({ guild }: { guild: Guild }) {
       {error && <div className="error-banner">{error}</div>}
 
       {!error && <BotProfileCard guildId={guild.id} />}
+
+      {fields && (
+        <input
+          className="input settings-filter"
+          placeholder="Фильтр настроек по названию…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      )}
 
       {!error && !fields &&
         [0, 1].map((s) => (
@@ -103,8 +120,8 @@ export function GuildSettings({ guild }: { guild: Guild }) {
           </section>
         ))}
 
-      {fields &&
-        group(fields).map((section) => (
+      {shown &&
+        group(shown).map((section) => (
           <section key={section.title}>
             <h2 className="section-title">{section.title}</h2>
             <div className="card fields-card">
@@ -121,7 +138,13 @@ export function GuildSettings({ guild }: { guild: Guild }) {
           </section>
         ))}
 
-      {fields && <ComplexSettings guildId={guild.id} />}
+      {shown && shown.length === 0 && (
+        <p className="muted" style={{ padding: "8px 2px" }}>
+          Ничего не найдено по «{filter}».
+        </p>
+      )}
+
+      {fields && !q && <ComplexSettings guildId={guild.id} />}
     </div>
   );
 }

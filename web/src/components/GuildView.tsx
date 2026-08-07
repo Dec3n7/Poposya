@@ -5,6 +5,7 @@ import type { Guild, GuildSummary, Me } from "../types";
 import { Appeals } from "./Appeals";
 import { Audit } from "./Audit";
 import { Cinema } from "./Cinema";
+import { CommandPalette, type PaletteEntry } from "./CommandPalette";
 import { Dashboard } from "./Dashboard";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Finds } from "./Finds";
@@ -135,6 +136,23 @@ const OPERATOR_TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   },
 ];
 
+// ключевые слова для палитры Ctrl+K: имена команд/тем ведут к нужной вкладке
+const TAB_KEYWORDS: Record<Tab, string> = {
+  overview: "обзор дашборд сводка статистика графики",
+  people: "люди участники очки заметки профиль лидерборд",
+  roles: "роли права цвета иерархия шаблоны",
+  cinema: "киноклуб фильмы movie вотчлист оценки",
+  music: "музыка плеер треки play очередь лайки радио караоке lyrics",
+  finds: "находки коллекция прогулка подарок",
+  moderation: "модерация бан мут варн кик warn tempban checkuser баны",
+  appeals: "апелляции обжаловать наказания",
+  audit: "журнал аудит история действия",
+  modules: "модули тумблеры включить выключить",
+  settings: "настройки конфиг каналы пороги дайджест github steam",
+  persona: "персона фразы голос текст правила rules приветствие",
+  warden: "warden сторож инциденты рестарт мониторинг",
+};
+
 // бейдж-счётчик на пункте рельса для вкладки (null = без бейджа)
 function tabBadge(id: Tab, s: GuildSummary | null): number | null {
   if (!s) return null;
@@ -182,6 +200,15 @@ export function GuildView({
     onTab(id);
     setNavOpen(false);
   }
+
+  // записи для палитры Ctrl+K: переход по разделам панели
+  const paletteEntries: PaletteEntry[] = tabs.map((t) => ({
+    id: t.id,
+    label: t.label,
+    hint: "Открыть раздел",
+    keywords: TAB_KEYWORDS[t.id],
+    run: () => go(t.id),
+  }));
 
   // пока шторка открыта: фокус внутрь, ловушка Tab, Esc закрывает, блок скролла фона
   useEffect(() => {
@@ -238,6 +265,7 @@ export function GuildView({
 
   return (
     <div className={`shell${navOpen ? " nav-open" : ""}`}>
+      <CommandPalette entries={paletteEntries} />
       <header className="m-topbar">
         <button
           className="m-burger"
