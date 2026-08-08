@@ -45,6 +45,8 @@ def make_settings():
         music_idle_warn_seconds=120,
         music_lyrics_offset=1.0,
         presence_rotate_minutes=30,
+        spotify_client_id="",
+        spotify_client_secret="",
     )
 
 
@@ -269,11 +271,40 @@ async def test_play_url_resolve_error():
     assert "Не смогла открыть" in interaction.followup.send.await_args.args[0]
 
 
-async def test_play_spotify_non_track():
-    cog = make_cog()
+async def test_play_spotify_playlist_needs_api_without_keys():
+    """Без SPOTIFY_CLIENT_ID/SECRET плейлист недоступен — честно об этом говорим."""
+    cog = make_cog()  # ключей в make_settings нет
     interaction = make_interaction()
     await type(cog).play.callback(cog, interaction, "https://open.spotify.com/album/x")
-    assert "Плейлисты и альбомы" in interaction.followup.send.await_args.args[0]
+    assert "нужен их API" in interaction.followup.send.await_args.args[0]
+
+
+async def test_play_spotify_playlist_enqueues_youtube_matches():
+    container = make_container()
+    container.settings.spotify_client_id = "id"
+    container.settings.spotify_client_secret = "sec"
+    container.audio_source.search.side_effect = lambda q, requested_by, limit: [make_track(q[:1])]
+    cog = make_cog(container)
+    cog.spotify.track_queries_for = AsyncMock(return_value=["Artist A", "Band B"])
+    interaction = make_interaction()
+
+    await type(cog).play.callback(cog, interaction, "https://open.spotify.com/playlist/abc")
+
+    cog.service.enqueue_tracks.assert_awaited_once()
+    tracks = cog.service.enqueue_tracks.await_args.args[1]
+    assert len(tracks) == 2
+    assert "**2** из 2" in interaction.followup.send.await_args.args[0]
+
+
+async def test_play_spotify_playlist_failed_when_api_empty():
+    container = make_container()
+    container.settings.spotify_client_id = "id"
+    container.settings.spotify_client_secret = "sec"
+    cog = make_cog(container)
+    cog.spotify.track_queries_for = AsyncMock(return_value=[])  # битая ссылка / сбой API
+    interaction = make_interaction()
+    await type(cog).play.callback(cog, interaction, "https://open.spotify.com/playlist/abc")
+    assert "плейлист Spotify" in interaction.followup.send.await_args.args[0]
 
 
 # --- taste ------------------------------------------------------------------

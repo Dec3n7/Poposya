@@ -1236,12 +1236,30 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             allowed_modes=STATIC_MODES,
         ),
         _spec(
-            "music.spotify_playlist_unsupported",
+            "music.spotify_playlist_needs_api",
             "music",
             "str",
-            "Плейлисты и альбомы Spotify пока не поддерживаются — для них нужен "
-            "их API (SPOTIFY_CLIENT_ID/SECRET в .env). Кидай ссылку на трек.",
-            label="Spotify: плейлисты/альбомы не поддерживаются",
+            "Для плейлистов и альбомов Spotify нужен их API — задай "
+            "SPOTIFY_CLIENT_ID и SPOTIFY_CLIENT_SECRET в .env. Пока могу только "
+            "треки по ссылке.",
+            label="Spotify: для плейлистов нужен API-ключ",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "music.spotify_playlist_failed",
+            "music",
+            "str",
+            "Не получилось разобрать плейлист Spotify — попробуй ещё раз или кинь ссылку на трек.",
+            label="Spotify: плейлист не разобрался",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
+            "music.spotify_playlist_added",
+            "music",
+            "template",
+            "{prefix} плейлист Spotify → YouTube: **{found}** из {total} треков.",
+            label="Spotify: добавлен плейлист (найдено из всего)",
+            placeholders=("prefix", "found", "total"),
             allowed_modes=STATIC_MODES,
         ),
         _spec(

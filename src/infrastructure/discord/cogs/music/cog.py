@@ -3,6 +3,7 @@
 Логика живёт в service/lyrics/radio/views; здесь — только разбор
 аргументов команд и ответы пользователю."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import cast
@@ -12,6 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.application.music.di import MusicContainer
+from src.domain.music.entities import Track
 from src.domain.music.exceptions import TrackResolveError
 from src.infrastructure.audio.lyrics import LrclibLyricsClient
 from src.infrastructure.audio.spotify import SpotifyLinkResolver
@@ -58,6 +60,11 @@ class SaveQueueModal(discord.ui.Modal, title="Сохранить очередь 
 
 logger = logging.getLogger(__name__)
 
+# Параллельность YouTube-поиска при разборе Spotify-плейлиста: полсотни
+# последовательных extract'ов не уложились бы в таймаут, а без предела мы
+# завалили бы и тредпул yt-dlp, и сам YouTube. Шесть — компромисс.
+_SPOTIFY_SEARCH_CONCURRENCY = 6
+
 
 class MusicCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
@@ -74,7 +81,9 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
         # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
         self.persona = persona if persona is not None else RegistryPersona()
         self.audio = container.audio_source
-        self.spotify = SpotifyLinkResolver()
+        self.spotify = SpotifyLinkResolver(
+            self.settings.spotify_client_id, self.settings.spotify_client_secret
+        )
         # композиция музыкального модуля: сервисы и их взаимные связи.
         # PresenceService — единый владелец статуса: музыка отдаёт ему играющий
         # трек, а без музыки он крутит занятия из жизни Попоси
@@ -129,13 +138,13 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
     @app_commands.command(
         name="play", description="Включить трек: YouTube/Spotify-ссылка или поиск"
     )
-    @app_commands.describe(query="Ссылка (YouTube, Spotify-трек) или название трека")
+    @app_commands.describe(query="Ссылка (YouTube, Spotify-трек/плейлист) или название трека")
     @app_commands.guild_only()
     async def play(self, interaction: discord.Interaction, query: str) -> None:
         await self._play_request(interaction, query, to_front=False)
 
     @app_commands.command(name="playnext", description="Поставить трек первым в очереди")
-    @app_commands.describe(query="Ссылка (YouTube, Spotify-трек) или название трека")
+    @app_commands.describe(query="Ссылка (YouTube, Spotify-трек/плейлист) или название трека")
     @app_commands.guild_only()
     async def playnext(self, interaction: discord.Interaction, query: str) -> None:
         await self._play_request(interaction, query, to_front=True)
@@ -153,13 +162,48 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
         await interaction.response.defer(ephemeral=True)
         added = self._p(gid, "music.add_front_prefix" if to_front else "music.add_prefix")
 
-        # Spotify: одиночный трек через oEmbed -> поиск на YouTube
-        if self.spotify.is_spotify_link(query):
-            if "/track/" not in query:
+        # Spotify: прямого стриминга нет — узнаём названия и ищем на YouTube.
+        # Плейлист/альбом (нужен API), затем одиночный трек (через oEmbed).
+        if self.spotify.is_spotify_link(query) and not self.spotify.is_track_link(query):
+            if not self.spotify.is_collection_link(query):
                 await interaction.followup.send(
-                    self._p(gid, "music.spotify_playlist_unsupported"), ephemeral=True
+                    self._p(gid, "music.spotify_no_title"), ephemeral=True
                 )
                 return
+            if not self.spotify.has_api_credentials:
+                await interaction.followup.send(
+                    self._p(gid, "music.spotify_playlist_needs_api"), ephemeral=True
+                )
+                return
+            queries = await self.spotify.track_queries_for(
+                query, limit=self.settings.music_playlist_limit
+            )
+            if not queries:
+                await interaction.followup.send(
+                    self._p(gid, "music.spotify_playlist_failed"), ephemeral=True
+                )
+                return
+            tracks = await self._spotify_youtube_tracks(queries, member.id)
+            if not tracks:
+                await interaction.followup.send(
+                    self._p(gid, "music.spotify_playlist_failed"), ephemeral=True
+                )
+                return
+            if await self.service.enqueue_tracks(interaction, tracks, to_front=to_front):
+                await interaction.followup.send(
+                    self._p(
+                        gid,
+                        "music.spotify_playlist_added",
+                        prefix=added,
+                        found=len(tracks),
+                        total=len(queries),
+                    ),
+                    ephemeral=True,
+                )
+            return
+
+        # Spotify: одиночный трек через oEmbed -> поиск на YouTube
+        if self.spotify.is_spotify_link(query):
             search_query = await self.spotify.search_query_for(query)
             if not search_query:
                 await interaction.followup.send(
@@ -216,6 +260,26 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
             ),
             ephemeral=True,
         )
+
+    async def _spotify_youtube_tracks(self, queries: list[str], requested_by: int) -> list[Track]:
+        """Ищет каждый трек плейлиста на YouTube (по одному результату), сохраняя
+        порядок и пропуская ненайденное. Параллельность ограничена семафором —
+        см. _SPOTIFY_SEARCH_CONCURRENCY."""
+        semaphore = asyncio.Semaphore(_SPOTIFY_SEARCH_CONCURRENCY)
+
+        async def one(query: str) -> Track | None:
+            async with semaphore:
+                try:
+                    results = await self.audio.search(query, requested_by=requested_by, limit=1)
+                except Exception:
+                    logger.warning(
+                        "YouTube-поиск трека Spotify не удался: %s", query, exc_info=True
+                    )
+                    return None
+                return results[0] if results else None
+
+        found = await asyncio.gather(*(one(query) for query in queries))
+        return [track for track in found if track is not None]
 
     @app_commands.command(name="queue", description="Показать очередь треков")
     @app_commands.guild_only()

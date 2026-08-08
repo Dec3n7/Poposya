@@ -44,8 +44,8 @@ class FakeSession:
             raise self._exc
         return self._response
 
-    def post(self, url, json=None, headers=None):
-        self.capture.update(method="POST", url=url, json=json, headers=headers)
+    def post(self, url, json=None, data=None, headers=None):
+        self.capture.update(method="POST", url=url, json=json, data=data, headers=headers)
         if self._exc:
             raise self._exc
         return self._response

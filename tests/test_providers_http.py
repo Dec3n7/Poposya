@@ -123,6 +123,104 @@ async def test_spotify_oembed_network_error(monkeypatch):
     assert await SpotifyLinkResolver().search_query_for("url") is None
 
 
+def test_spotify_collection_detection():
+    r = SpotifyLinkResolver
+    assert r.is_collection_link("https://open.spotify.com/playlist/37i9dQ")
+    assert r.is_collection_link("https://open.spotify.com/album/1DFixLW?si=x")
+    assert r.is_collection_link("https://open.spotify.com/intl-de/playlist/abc")
+    assert not r.is_collection_link("https://open.spotify.com/track/xyz")
+    assert not r.is_collection_link("https://youtube.com/watch?v=1")
+
+
+def test_spotify_credentials_flag():
+    assert not SpotifyLinkResolver().has_api_credentials
+    assert not SpotifyLinkResolver("id", "").has_api_credentials
+    assert SpotifyLinkResolver("id", "secret").has_api_credentials
+
+
+async def test_spotify_playlist_needs_credentials(monkeypatch):
+    """Без ключей — пустой список и НИ ОДНОГО обращения к сети."""
+    session = patch_session(monkeypatch, "src.infrastructure.audio.spotify")
+    result = await SpotifyLinkResolver().track_queries_for("https://open.spotify.com/playlist/abc")
+    assert result == []
+    assert session.capture == {}  # сеть не трогали
+
+
+async def test_spotify_playlist_builds_queries(monkeypatch):
+    # один FakeResponse обслуживает и POST /token, и GET /tracks: token читает
+    # access_token, треки — items; next=None останавливает пагинацию
+    resp = FakeResponse(
+        200,
+        json_data={
+            "access_token": "tok",
+            "expires_in": 3600,
+            "items": [
+                {"track": {"name": "16 Lines", "artists": [{"name": "Lil Peep"}]}},
+                {"track": {"name": "Save That", "artists": [{"name": "A"}, {"name": "B"}]}},
+                {"track": None},  # недоступный в регионе — пропускаем
+            ],
+            "next": None,
+        },
+    )
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", response=resp)
+    queries = await SpotifyLinkResolver("id", "sec").track_queries_for(
+        "https://open.spotify.com/playlist/abc"
+    )
+    assert queries == ["Lil Peep 16 Lines", "A B Save That"]
+
+
+async def test_spotify_album_builds_queries(monkeypatch):
+    resp = FakeResponse(
+        200,
+        json_data={
+            "access_token": "tok",
+            "expires_in": 3600,
+            "items": [
+                {"name": "Track 1", "artists": [{"name": "X"}]}
+            ],  # альбом: без вложенного track
+            "next": None,
+        },
+    )
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", response=resp)
+    queries = await SpotifyLinkResolver("id", "sec").track_queries_for(
+        "https://open.spotify.com/album/xyz"
+    )
+    assert queries == ["X Track 1"]
+
+
+async def test_spotify_playlist_respects_limit(monkeypatch):
+    resp = FakeResponse(
+        200,
+        json_data={
+            "access_token": "tok",
+            "expires_in": 3600,
+            "items": [{"track": {"name": f"S{i}", "artists": [{"name": "A"}]}} for i in range(10)],
+            "next": None,
+        },
+    )
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", response=resp)
+    queries = await SpotifyLinkResolver("id", "sec").track_queries_for(
+        "https://open.spotify.com/playlist/abc", limit=3
+    )
+    assert queries == ["A S0", "A S1", "A S2"]
+
+
+async def test_spotify_playlist_token_failure(monkeypatch):
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", response=FakeResponse(401))
+    result = await SpotifyLinkResolver("id", "sec").track_queries_for(
+        "https://open.spotify.com/playlist/abc"
+    )
+    assert result == []
+
+
+async def test_spotify_playlist_network_error(monkeypatch):
+    patch_session(monkeypatch, "src.infrastructure.audio.spotify", exc=aiohttp.ClientError("down"))
+    result = await SpotifyLinkResolver("id", "sec").track_queries_for(
+        "https://open.spotify.com/playlist/abc"
+    )
+    assert result == []
+
+
 # --- LRCLIB -----------------------------------------------------------------
 
 
