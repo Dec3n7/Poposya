@@ -262,6 +262,9 @@ async def run() -> None:
             await cast(IAIProvider, container.ai_provider).close()
         if container.chime_provider is not None:
             await cast(IAIProvider, container.chime_provider).close()
+        from src.infrastructure.render.browser import CardRenderer
+
+        await cast(CardRenderer, container.card_renderer).close()
         await engine.dispose()
 
 

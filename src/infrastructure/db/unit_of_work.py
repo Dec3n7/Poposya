@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.application.interfaces.unit_of_work import IUnitOfWork
 from src.domain.events.base import CriticalDomainEvent, DomainEvent
 from src.domain.events.bus import IEventBus
+from src.infrastructure.db.repositories.achievements import SqlAlchemyAchievementRepository
 from src.infrastructure.db.repositories.activity import (
     SqlAlchemyAlbumRepository,
     SqlAlchemyMemberActivityRepository,
@@ -102,6 +103,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.tracked_repos = SqlAlchemyTrackedRepoRepository(self._session)
         self.tracked_games = SqlAlchemyTrackedGameRepository(self._session)
         self.server_bans = SqlAlchemyServerBanRepository(self._session)
+        self.achievements = SqlAlchemyAchievementRepository(self._session)
         self._events = []
         self._committed = False
         return self

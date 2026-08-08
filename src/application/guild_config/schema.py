@@ -197,6 +197,7 @@ class GuildSettings(BaseModel):
     banwatch_enabled: bool = True
     digest_enabled: bool = True
     appeals_enabled: bool = True
+    achievements_enabled: bool = True
 
     # --- тумблеры модуля «Модерация» (мастер гасит все админ-команды;
     # авторазбан работает всегда, чтобы tempban'ы снимались) ---

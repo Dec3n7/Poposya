@@ -254,6 +254,7 @@ class Settings(BaseSettings):
     digest_enabled: bool = True
     # апелляции наказаний: кнопка «Обжаловать» в ЛС наказанному → очередь модерации
     appeals_enabled: bool = True
+    achievements_enabled: bool = True
     # тумблеры модуля «Модерация» (мастер + автоантиспам)
     moderation_enabled: bool = True
     moderation_antispam: bool = True

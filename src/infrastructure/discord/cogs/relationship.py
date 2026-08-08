@@ -1,4 +1,3 @@
-import asyncio
 import io
 import logging
 
@@ -16,7 +15,8 @@ from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.role_sync import RoleSyncService
 from src.infrastructure.persona_service import RegistryPersona
-from src.infrastructure.rank_card import RankCard, render_rank_card
+from src.infrastructure.render.browser import CardRenderer
+from src.infrastructure.render.cards import RankCard, rank_card_html
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,14 @@ class RelationshipCog(PersonaPhraseMixin, commands.Cog):
         settings: Settings | None = None,
         guild_settings=None,
         persona=None,  # PersonaService — голос кога (каталог фраз)
+        card_renderer: CardRenderer | None = None,
     ):
         self.bot = bot
         self.container = container
         self.role_sync = role_sync
         self.settings = settings
         self.gs = guild_settings
+        self.renderer = card_renderer  # None (тесты/нет браузера) → эмбед-фолбэк
         self.persona = persona if persona is not None else RegistryPersona()
         # subscribe ждёт Callable[[DomainEvent], ...]; хендлеры сужены до
         # конкретного события — диспетч по типу гарантирует правильный аргумент
@@ -110,8 +112,11 @@ class RelationshipCog(PersonaPhraseMixin, commands.Cog):
         self, interaction: discord.Interaction, info, role_name: str, guild_id: int
     ) -> bytes | None:
         """Карточка ранга картинкой → PNG-байты, иначе None (тогда ког отдаёт
-        эмбед-фолбэк). Всё под общим try: сбой аватара/шрифта/рендера не должен
-        оставлять участника без ответа. Рендер (блокирующий Pillow) — в executor."""
+        эмбед-фолбэк). Всё под общим try: сбой аватара/рендера не должен
+        оставлять участника без ответа. Рендер — HTML→PNG через Chromium; без
+        рендерера (тесты/браузер не поднялся) сразу уходим в эмбед."""
+        if self.renderer is None:
+            return None
         try:
             thresholds = self._thresholds(guild_id)
             floor = max([0, *[t for t in thresholds if t <= info.points]])
@@ -143,8 +148,8 @@ class RelationshipCog(PersonaPhraseMixin, commands.Cog):
                 deep_dialogs=info.deep_dialogs,
                 avatar=avatar_bytes,
             )
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, render_rank_card, card)
+            html, w, h = rank_card_html(card)
+            return await self.renderer.render(html, w, h)
         except Exception:
             logger.warning("Карточка ранга не отрисована — фолбэк на эмбед", exc_info=True)
             return None

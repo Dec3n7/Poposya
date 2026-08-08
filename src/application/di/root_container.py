@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.application.achievements.di import AchievementsContainer
 from src.application.activity.di import ActivityContainer
 from src.application.ai_chat.di import AIChatContainer
 from src.application.appeals.di import AppealsContainer
@@ -45,6 +46,7 @@ class RootContainer:
     steam: SteamContainer
     banwatch: BanwatchContainer
     appeals: AppealsContainer
+    achievements: AchievementsContainer
     build_weekly_digest: object  # BuildWeeklyDigestUseCase; ког дайджеста
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     persona: object  # PersonaService; main вызывает load_all
@@ -56,6 +58,7 @@ class RootContainer:
     outbox_dispatcher: object  # OutboxDispatcher; цикл запускает main
     settings_listener: object | None  # SettingsChangeListener (Postgres); цикл запускает main
     persona_listener: object | None  # PersonaChangeListener (Postgres); цикл запускает main
+    card_renderer: object  # CardRenderer; start()/close() в setup_hook/main
 
 
 def build_root_container(settings: Settings) -> RootContainer:
@@ -594,6 +597,20 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
     build_weekly_digest = BuildWeeklyDigestUseCase(uow_factory)
 
+    from src.application.achievements.use_cases import (
+        EvaluateAchievementsUseCase,
+        GetAchievementsUseCase,
+    )
+
+    achievements = AchievementsContainer(
+        evaluate=EvaluateAchievementsUseCase(uow_factory, policy, settings_provider=guild_settings),
+        get=GetAchievementsUseCase(uow_factory, policy, settings_provider=guild_settings),
+    )
+
+    from src.infrastructure.render.browser import CardRenderer
+
+    card_renderer = CardRenderer()
+
     return RootContainer(
         settings=settings,
         event_bus=event_bus,
@@ -611,6 +628,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         steam=steam,
         banwatch=banwatch,
         appeals=appeals,
+        achievements=achievements,
         build_weekly_digest=build_weekly_digest,
         guild_settings=guild_settings,
         persona=persona,
@@ -622,4 +640,5 @@ def build_root_container(settings: Settings) -> RootContainer:
         outbox_dispatcher=outbox_dispatcher,
         settings_listener=settings_listener,
         persona_listener=persona_listener,
+        card_renderer=card_renderer,
     )

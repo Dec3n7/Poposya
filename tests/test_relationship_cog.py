@@ -33,28 +33,25 @@ def make_container():
     return c
 
 
-def make_cog(container=None, role_sync=None):
+def make_cog(container=None, role_sync=None, renderer=None):
     bot = MagicMock()
     return RelationshipCog(
         bot,
         container or make_container(),
         role_sync or MagicMock(sync_member=AsyncMock(), ensure_roles=AsyncMock()),
         InMemoryEventBus(),
+        card_renderer=renderer,
     )
 
 
-def _force_embed(monkeypatch):
-    """Заставить /rank упасть на текстовый эмбед-фолбэк: рендер картинки кидает
-    исключение (проверяем именно ветку фолбэка и её содержимое)."""
-
-    def boom(_card):
-        raise RuntimeError("нет шрифта")
-
-    monkeypatch.setattr("src.infrastructure.discord.cogs.relationship.render_rank_card", boom)
+def _ok_renderer():
+    """Фейк-рендерер: отдаёт валидные PNG-байты (карточка отрисовалась)."""
+    return MagicMock(render=AsyncMock(return_value=b"\x89PNG\r\n\x1a\n"))
 
 
-async def test_rank_shows_points_and_status(monkeypatch):
-    _force_embed(monkeypatch)
+# Без рендерера (renderer=None) /rank сразу уходит в текстовый эмбед-фолбэк —
+# на нём и проверяем содержимое; отдельный сбой рендера мокать больше не нужно.
+async def test_rank_shows_points_and_status():
     cog = make_cog()
     interaction = make_interaction()
     await type(cog).rank.callback(cog, interaction)
@@ -64,8 +61,7 @@ async def test_rank_shows_points_and_status(monkeypatch):
     assert "R0" in embed.description
 
 
-async def test_rank_no_role(monkeypatch):
-    _force_embed(monkeypatch)
+async def test_rank_no_role():
     container = make_container()
     container.get_rank.execute.return_value = make_rank(
         role_index=None, points=10, next_threshold=100
@@ -77,8 +73,7 @@ async def test_rank_no_role(monkeypatch):
     assert "без статуса" in embed.description
 
 
-async def test_rank_frozen_note(monkeypatch):
-    _force_embed(monkeypatch)
+async def test_rank_frozen_note():
     container = make_container()
     container.get_rank.execute.return_value = make_rank(frozen=True)
     cog = make_cog(container)
@@ -88,13 +83,9 @@ async def test_rank_frozen_note(monkeypatch):
     assert "заморожено" in embed.description
 
 
-async def test_rank_sends_card_image(monkeypatch):
+async def test_rank_sends_card_image():
     """Успешный рендер -> карточка уходит картинкой (rank.png), без эмбеда."""
-    monkeypatch.setattr(
-        "src.infrastructure.discord.cogs.relationship.render_rank_card",
-        lambda _card: b"\x89PNG\r\n\x1a\n",
-    )
-    cog = make_cog()
+    cog = make_cog(renderer=_ok_renderer())
     interaction = make_interaction()
     await type(cog).rank.callback(cog, interaction)
     file = interaction.followup.send.await_args.kwargs["file"]

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from src.domain.achievements.repository import IAchievementRepository
 from src.domain.activity.repository import (
     IAlbumRepository,
     IMemberActivityRepository,
@@ -78,6 +79,7 @@ class IUnitOfWork(ABC):
     tracked_repos: ITrackedRepoRepository
     tracked_games: ITrackedGameRepository
     server_bans: IServerBanRepository
+    achievements: IAchievementRepository
 
     @abstractmethod
     async def __aenter__(self) -> "IUnitOfWork": ...

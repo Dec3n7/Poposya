@@ -76,6 +76,16 @@ class PoposyaBot(commands.Bot):
         # единая сеть безопасности для необработанных ошибок слеш-команд
         setup_error_handler(self, self.container.persona)
 
+        # рендер карточек (ачивки, /rank) через Chromium. Поднимаем один раз;
+        # если браузер не стартовал (нет в окружении) — не валим бота, карточки
+        # уйдут в текстовый фолбэк, а ошибка осядет в лог
+        from src.infrastructure.render.browser import CardRenderer
+
+        try:
+            await cast(CardRenderer, self.container.card_renderer).start()
+        except Exception:
+            logger.exception("CardRenderer не поднялся — карточки уйдут в фолбэк")
+
         # accent-цвет эмбедов — из персоны сервера (мягкая личность, P3)
         accent.set_persona_service(self.container.persona)
 
@@ -134,6 +144,7 @@ class PoposyaBot(commands.Bot):
                 self.container.settings,
                 gs,
                 persona=persona,
+                card_renderer=cast(CardRenderer, self.container.card_renderer),
             )
         )
         await self.add_cog(
@@ -158,6 +169,7 @@ class PoposyaBot(commands.Bot):
                 persona=persona,
             )
         )
+        from src.infrastructure.discord.cogs.achievements import AchievementsCog
         from src.infrastructure.discord.cogs.appeals import AppealsCog
         from src.infrastructure.discord.cogs.autorole import AutoRoleCog
         from src.infrastructure.discord.cogs.banwatch import BanwatchCog
@@ -198,6 +210,17 @@ class PoposyaBot(commands.Bot):
         )
         await self.add_cog(
             AppealsCog(self, self.container.appeals, self.container.settings, gs, persona=persona)
+        )
+        await self.add_cog(
+            AchievementsCog(
+                self,
+                self.container.achievements,
+                self.container.settings,
+                self.container.event_bus,
+                cast(CardRenderer, self.container.card_renderer),
+                gs,
+                persona=persona,
+            )
         )
         await self.add_cog(
             DigestCog(
