@@ -533,8 +533,22 @@ docker compose up -d --build
 защита от тихого старта на пустом SQLite (раньше забытый флаг уводил бота на
 пустую базу и стоил данных).
 
-**Данные сами не переедут** — новая база будет пустой. Перенос содержимого
-SQLite в PostgreSQL это отдельная задача (`pgloader` или ручной дамп).
+**Данные сами не переедут** — новая база будет пустой. Для переноса из
+локальной SQLite в PostgreSQL есть встроенный скрипт: сначала поднимите схему в
+Postgres (старт бота с `AUTO_MIGRATE` или `alembic upgrade head`), остановите
+бота, затем
+
+```powershell
+python -m src.infrastructure.db.migrate_sqlite_to_pg `
+    --source ./poposya.db `
+    --dest "postgresql+asyncpg://poposya:ПАРОЛЬ@localhost:5432/poposya"
+```
+
+Он копирует все таблицы в порядке зависимостей, конвертирует типы (boolean,
+даты) по описанию моделей и подтягивает sequence'ы, чтобы следующая запись бота
+не столкнулась с занятым id. Схему не создаёт (это делает Alembic) и по
+умолчанию требует пустую целевую базу — защита от вставки в живые данные
+(`--force` чтобы дописать поверх).
 
 **Бэкапы работают и на PostgreSQL**: при старте и раз в `BACKUP_INTERVAL_HOURS`
 (24) бот делает `pg_dump -Fc` и хранит `BACKUP_KEEP` (7) последних. Дампы лежат
@@ -596,7 +610,8 @@ src/
 │   │   └── cogs/music/  # тонкий ког + сервисы: session, service (плеер/idle),
 │   │                    # lyrics (караоке), radio, views, formatting
 │   ├── commands/      # командный мост панель→бот (LISTEN/NOTIFY + слушатель)
-│   ├── db/            # SQLAlchemy: models, repositories, migrations, backup
+│   ├── db/            # SQLAlchemy: models, repositories, migrations, backup,
+│   │                  # migrate_sqlite_to_pg (перенос данных SQLite→Postgres)
 │   ├── events/        # InMemoryEventBus (изоляция ошибок подписчиков)
 │   └── logging/       # JSON-логи, correlation_id (contextvars)
 ├── api/               # FastAPI веб-панель: routers/*, OAuth, сессии, аудит
