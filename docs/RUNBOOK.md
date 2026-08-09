@@ -96,7 +96,42 @@ pip-compile --generate-hashes --output-file=requirements.lock requirements.txt
 
 ---
 
-## 5. Дальнейший хардненинг (опционально)
+## 5. Включение токена `/health/full` (порядок важен)
+
+`/health/full` светит внутренности (cogs, БД, outbox, ошибки). Его можно закрыть
+токеном (`HEALTH_FULL_TOKEN` у бота, `WARDEN_HEALTH_TOKEN` у сторожа — одно
+значение). `/health` и `/ready` остаются открытыми (docker healthcheck).
+
+**Опасность неверного порядка:** если бот начнёт ТРЕБОВАТЬ токен раньше, чем
+WARDEN начнёт его СЛАТЬ, зонд получит 401 → score 0 → ложный CRITICAL и, в
+armed-режиме, рестарт бота. Поэтому строго:
+
+```bash
+# 0. (опц.) пауза сторожа, чтобы точно не было рестарт-войны
+#    из панели/Discord: /warden pause 15
+
+# 1. WARDEN получает секрет ПЕРВЫМ и начинает его слать (бот пока открыт — ок)
+#    в WARDEN/.env: WARDEN_HEALTH_TOKEN=<секрет>
+cd WARDEN && docker compose up -d warden
+
+# 2. Тем же значением закрываем бота
+#    в Poposya P/.env: HEALTH_FULL_TOKEN=<тот же секрет>
+cd "../Poposya P" && docker compose up -d bot
+
+# 3. Проверка
+curl -H "X-Health-Token: <секрет>" http://127.0.0.1:8080/health/full   # 200
+curl http://127.0.0.1:8080/health/full                                  # 401
+curl http://127.0.0.1:8080/health                                       # 200
+
+# 4. (опц.) снять паузу: /warden resume
+```
+
+Откат: очистить `HEALTH_FULL_TOKEN` у бота и перезапустить `bot` — эндпоинт снова
+открыт; лишний заголовок от WARDEN безвреден.
+
+---
+
+## 6. Дальнейший хардненинг (опционально)
 
 - **nginx полностью rootless.** Сейчас мастер nginx стартует под root (штатно),
   воркеры — под `nginx`; включён `no-new-privileges`. Для полного rootless —

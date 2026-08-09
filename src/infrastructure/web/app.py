@@ -17,6 +17,9 @@ MetricProvider = Callable[[], Awaitable[dict[str, Any]]]
 # на сколько усыпляем луп, замеряя его загруженность
 _LAG_PROBE_SECONDS = 0.05
 
+# заголовок доступа к /health/full, когда включён токен
+_HEALTH_FULL_HEADER = "X-Health-Token"
+
 
 class HealthChecker:
     """Реестр проверок здоровья (ТЗ 9.3). Упавшая проверка — это False,
@@ -83,7 +86,7 @@ async def measure_event_loop_lag() -> float:
     return round(max(overshoot, 0.0), 2)
 
 
-def create_web_app(health_checker: HealthChecker) -> web.Application:
+def create_web_app(health_checker: HealthChecker, full_token: str = "") -> web.Application:
     app = web.Application()
 
     async def health_handler(request: web.Request) -> web.Response:
@@ -98,7 +101,14 @@ def create_web_app(health_checker: HealthChecker) -> web.Application:
         Всегда 200, даже когда ворота закрыты. Это не liveness-проба, а источник
         данных: на 503 промежуточные прокси и клиенты склонны выбрасывать тело —
         ровно то, ради чего эндпоинт и существует. Диагноз ставит WARDEN.
+
+        Эндпоинт светит много внутренностей (cogs, БД, outbox, ошибки), поэтому
+        при заданном токене доступ только по заголовку X-Health-Token. Пустой
+        токен = открыт (совместимость; сеть всё же loopback/внутренняя). /health
+        и /ready остаются открытыми — на них завязан docker healthcheck.
         """
+        if full_token and request.headers.get(_HEALTH_FULL_HEADER) != full_token:
+            return web.json_response({"error": "unauthorized"}, status=401)
         started = time.perf_counter()
         checks = await health_checker.check()
         metrics = await health_checker.collect()
@@ -119,10 +129,12 @@ def create_web_app(health_checker: HealthChecker) -> web.Application:
     return app
 
 
-async def start_health_server(health_checker: HealthChecker, port: int) -> web.AppRunner:
+async def start_health_server(
+    health_checker: HealthChecker, port: int, full_token: str = ""
+) -> web.AppRunner:
     """Запускается фоновой задачей в том же event loop, что и discord-клиент
     (ТЗ: отдельный таск внутри процесса бота, не отдельный сервис)."""
-    runner = web.AppRunner(create_web_app(health_checker))
+    runner = web.AppRunner(create_web_app(health_checker, full_token=full_token))
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()

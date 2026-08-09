@@ -8,9 +8,11 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.container import ApiContainer
@@ -37,6 +39,17 @@ logger = logging.getLogger(__name__)
 # самой рабочей загрузкой — не завязываясь на имя таблицы alembic.
 _SCHEMA_WAIT_ATTEMPTS = 45
 _SCHEMA_WAIT_DELAY = 2.0
+
+# CSRF: методы без побочных эффектов не проверяем
+_CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
+
+def _origin_of(url: str) -> str | None:
+    """scheme://host[:port] из Origin/Referer; None — если не разобрать."""
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 async def _load_state_when_ready(container: ApiContainer) -> None:
@@ -106,6 +119,26 @@ def create_app(container: ApiContainer) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def csrf_origin_guard(request: Request, call_next):
+        """CSRF-защита state-changing запросов проверкой Origin/Referer.
+
+        Кука сессии уже SameSite=Lax — это основная граница. Здесь второй рубеж:
+        браузер при mutating-fetch всегда шлёт Origin; если он присутствует и не
+        равен разрешённому фронту — это классический cross-site POST, режем 403.
+        Origin ОТСУТСТВУЕТ (сервер-сервер, curl, старый клиент) — пропускаем: это
+        не браузерный CSRF-вектор, а кука и так Lax. Defense-in-depth, не единственная защита."""
+        if request.method not in _CSRF_SAFE_METHODS and request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin")
+            if origin is None:
+                referer = request.headers.get("referer")
+                origin = _origin_of(referer) if referer else None
+            if origin is not None and origin != container.settings.web_allowed_origin:
+                return JSONResponse(
+                    {"detail": "перекрёстный запрос отклонён (CSRF)"}, status_code=403
+                )
+        return await call_next(request)
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:

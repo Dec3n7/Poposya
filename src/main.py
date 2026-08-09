@@ -203,7 +203,9 @@ async def run() -> None:
     health.register_metric("listeners", _listeners_metrics(listeners))
     health.register_metric("errors", lambda: _as_async(error_counter.snapshot()))
     health.register_metric("runtime", _runtime_metrics)
-    health_runner = await start_health_server(health, settings.health_port)
+    health_runner = await start_health_server(
+        health, settings.health_port, settings.health_full_token
+    )
     backup = make_backup_service(
         settings.database_url,
         settings.backup_dir,

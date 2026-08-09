@@ -29,6 +29,12 @@ class Settings(BaseSettings):
 
     # --- health-эндпоинт (aiohttp, /health и /ready) ---
     health_port: int = 8080
+    # токен доступа к /health/full (он светит внутренности: cogs, БД, outbox,
+    # ошибки). Пусто = открыт (совместимость). Если задан — WARDEN обязан слать
+    # его заголовком X-Health-Token (WARDEN_HEALTH_TOKEN в warden.toml/env).
+    # /health и /ready остаются открытыми (docker healthcheck). Порядок включения
+    # см. docs/RUNBOOK.md: сперва секрет у WARDEN, потом у бота.
+    health_full_token: str = ""
 
     # --- веб-панель (отдельный FastAPI-процесс; секреты ТОЛЬКО в .env) ---
     # discord_client_id/secret — из Discord Developer Portal (OAuth2).

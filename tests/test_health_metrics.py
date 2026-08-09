@@ -16,8 +16,8 @@ from src.infrastructure.logging.error_counter import ErrorRateCounter
 from src.infrastructure.web.app import HealthChecker, create_web_app, measure_event_loop_lag
 
 
-async def _client(checker: HealthChecker) -> TestClient:
-    client = TestClient(TestServer(create_web_app(checker)))
+async def _client(checker: HealthChecker, full_token: str = "") -> TestClient:
+    client = TestClient(TestServer(create_web_app(checker, full_token=full_token)))
     await client.start_server()
     return client
 
@@ -69,6 +69,49 @@ async def test_health_contract_unchanged_by_metrics():
         resp = await client.get("/health")
         assert resp.status == 200
         assert await resp.json() == {"status": "healthy", "checks": {"database": True}}
+    finally:
+        await client.close()
+
+
+async def test_health_full_open_without_token():
+    """Пустой токен = совместимость: /health/full открыт (как раньше)."""
+    checker = HealthChecker()
+    checker.register("database", _ok)
+    client = await _client(checker)  # full_token=""
+    try:
+        assert (await client.get("/health/full")).status == 200
+    finally:
+        await client.close()
+
+
+async def test_health_full_requires_token_when_set():
+    checker = HealthChecker()
+    checker.register("database", _ok)
+    checker.register_metric("outbox", lambda: _value({"pending": 0}))
+    client = await _client(checker, full_token="секрет-здоровья")
+    try:
+        # без заголовка — 401
+        assert (await client.get("/health/full")).status == 401
+        # с неверным — 401
+        assert (
+            await client.get("/health/full", headers={"X-Health-Token": "нет"})
+        ).status == 401
+        # с верным — 200 и полное тело
+        resp = await client.get("/health/full", headers={"X-Health-Token": "секрет-здоровья"})
+        assert resp.status == 200
+        assert (await resp.json())["metrics"]["outbox"] == {"pending": 0}
+    finally:
+        await client.close()
+
+
+async def test_health_and_ready_stay_open_with_token():
+    """/health и /ready не под токеном — на них docker healthcheck."""
+    checker = HealthChecker()
+    checker.register("database", _ok)
+    client = await _client(checker, full_token="секрет-здоровья")
+    try:
+        assert (await client.get("/health")).status == 200
+        assert (await client.get("/ready")).status == 200
     finally:
         await client.close()
 

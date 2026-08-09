@@ -412,6 +412,43 @@ async def test_operator_revoke_kills_user_sessions(tmp_path, mock_discord):
         await c.engine.dispose()
 
 
+# --- CSRF: Origin/Referer guard на state-changing запросах -------------------
+
+
+async def test_csrf_blocks_cross_site_origin(client, mock_discord):
+    await _login(client)
+    resp = await client.post("/api/auth/logout", headers={"origin": "http://evil.example"})
+    assert resp.status_code == 403
+
+
+async def test_csrf_blocks_cross_site_referer(client, mock_discord):
+    await _login(client)
+    resp = await client.post(
+        "/api/auth/logout", headers={"referer": "http://evil.example/attack"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_csrf_allows_matching_origin(client, mock_discord):
+    await _login(client)
+    resp = await client.post("/api/auth/logout", headers={"origin": "http://localhost:5173"})
+    assert resp.status_code == 204
+
+
+async def test_csrf_allows_absent_origin(client, mock_discord):
+    # сервер-сервер / curl / тест без Origin — не браузерный CSRF-вектор, кука Lax
+    await _login(client)
+    resp = await client.post("/api/auth/logout")
+    assert resp.status_code == 204
+
+
+async def test_csrf_ignores_safe_methods(client, mock_discord):
+    # GET с чужим Origin не режем — он без побочных эффектов
+    await _login(client)
+    resp = await client.get("/api/auth/me", headers={"origin": "http://evil.example"})
+    assert resp.status_code == 200
+
+
 # --- интерактивная схема FastAPI выключена по умолчанию (web_docs_enabled) ----
 
 

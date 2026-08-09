@@ -321,6 +321,63 @@ def test_postgres_backup_once_writes_restorable_dump(tmp_path):
 
 @pytest.mark.skipif(
     shutil.which("pg_dump") is None
+    or shutil.which("pg_restore") is None
+    or shutil.which("createdb") is None
+    or shutil.which("dropdb") is None
+    or not os.environ.get("TEST_DATABASE_URL", "").startswith("postgresql"),
+    reason="нужны pg_dump/pg_restore/createdb/dropdb в PATH и TEST_DATABASE_URL на Postgres",
+)
+def test_postgres_backup_restores_into_temp_db(tmp_path):
+    """Настоящая проверка стратегии бэкапа: дамп реально ВОССТАНАВЛИВАЕТСЯ.
+    Проверка сигнатуры PGDMP выше говорит лишь «файл похож на дамп»; здесь дамп
+    заливается в throwaway-БД через pg_restore, и мы убеждаемся, что схема жива.
+    Бэкап без проверки восстановления — ещё не backup strategy."""
+    import subprocess
+    import uuid
+
+    url = os.environ["TEST_DATABASE_URL"]
+    params = postgres_params_from_url(url)
+    assert params is not None
+    env = {**os.environ, "PGPASSWORD": params["password"]}
+    conn = ["-h", params["host"], "-p", params["port"], "-U", params["user"]]
+
+    service = PostgresBackupService(url, str(tmp_path / "backups"), interval_hours=24, keep=7)
+    dump = service.backup_once()
+    assert dump is not None and dump.exists()
+
+    tmp_db = f"poposya_restore_{uuid.uuid4().hex}"
+    try:
+        # throwaway-БД из template0 — чистая, без объектов исходной
+        created = subprocess.run(
+            ["createdb", *conn, "-T", "template0", tmp_db],
+            env=env, capture_output=True, text=True, timeout=120,
+        )
+        assert created.returncode == 0, created.stderr
+        # восстановление; --no-owner/--no-acl — не тащим владельца/гранты
+        restored = subprocess.run(
+            ["pg_restore", *conn, "--no-owner", "--no-acl", "-d", tmp_db, str(dump)],
+            env=env, capture_output=True, text=True, timeout=300,
+        )
+        # pg_restore может вернуть !=0 на безобидных warning'ах — проверяем факт
+        # живой схемы отдельным запросом, а не только кодом возврата
+        count = subprocess.run(
+            ["psql", *conn, "-d", tmp_db, "-tAc",
+             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"],
+            env=env, capture_output=True, text=True, timeout=120,
+        )
+        assert count.returncode == 0, count.stderr
+        assert int(count.stdout.strip()) > 0, (
+            f"восстановленная БД пуста; pg_restore stderr: {restored.stderr[:300]}"
+        )
+    finally:
+        subprocess.run(
+            ["dropdb", *conn, "--if-exists", tmp_db],
+            env=env, capture_output=True, text=True, timeout=120,
+        )
+
+
+@pytest.mark.skipif(
+    shutil.which("pg_dump") is None
     or not os.environ.get("TEST_DATABASE_URL", "").startswith("postgresql"),
     reason="нужен pg_dump в PATH и TEST_DATABASE_URL на Postgres",
 )
