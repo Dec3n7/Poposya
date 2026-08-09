@@ -13,10 +13,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.application.interfaces.entitlements import PlanTier
 from src.domain.relationship.policies import PointsToLevelPolicy
 
 # ключи-каналы (ID; 0 = выключено) — /config покажет их пикером канала.
@@ -215,6 +218,12 @@ class GuildSettings(BaseModel):
     # --- музыка ---
     music_karaoke_ansi: bool = False
 
+    # --- утилиты (модуль «Развлечения») ---
+    # лимит /send на человека в час. Раньше был только глобальным (config.py);
+    # перенесён в пер-серверную схему, чтобы стал настраиваемым и тарифицируемым
+    # (кламп идёт через общий шов, т.к. fun-ког читает его через провайдер).
+    send_per_hour: int = Field(5, ge=1, le=1000)
+
     # --- кросс-полевые инварианты ---
 
     @model_validator(mode="after")
@@ -273,3 +282,74 @@ def _kind(key: str) -> Literal["bool", "channel", "float", "list", "dict", "text
 
 # ключ -> категория значения (bool/channel/float/list/dict/int)
 KEY_KINDS: dict[str, str] = {k: _kind(k) for k in SETTING_KEYS}
+
+
+# --- реестр тарифицируемых лимитов (подготовка к монетизации) ---------------
+# ВНИМАНИЕ: это ТОЛЬКО данные. Enforcement (кламп по тарифу) здесь не живёт и
+# нигде пока не подключён — см. docs/plans/monetization-prep.md, Prep 1/2.
+# Значения free-потолков предварительные (не привязаны к коду, легко менять).
+
+
+class ClampDir(Enum):
+    """Как free-тариф зажимает настроенное админом значение."""
+
+    MAX = "max"  # эффективное = min(configured, free_limit)  — «не выше потолка»
+    MIN = "min"  # эффективное = max(configured, free_limit)  — «не ниже пола»
+
+
+@dataclass(frozen=True)
+class TierCap:
+    """Описание одного тарифицируемого лимита.
+
+    free_limit — потолок (MAX) или пол (MIN) для free-тарифа.
+    special — непустое => лимит нескалярный и требует кастомного кламп-кода
+    (dict/list): простой min/max к нему неприменим."""
+
+    free_limit: int
+    direction: ClampDir
+    special: str = ""  # "" | "dict_per_level" | "list_length"
+    note: str = ""
+
+
+# ключ настройки -> как его зажимает free-тариф. Premium/Pro = без клампа.
+TIERABLE: dict[str, TierCap] = {
+    # скалярные потолки (free = не выше)
+    "tempvoice_max_per_guild": TierCap(5, ClampDir.MAX, note="каморки: free 3–5"),
+    "cinema_watchlist_max": TierCap(15, ClampDir.MAX, note="вотчлист короче"),
+    "relationship_notes_max_chars": TierCap(300, ClampDir.MAX, note="заметки Попоси урезаны"),
+    "ai_context_messages": TierCap(10, ClampDir.MAX, note="глубина памяти AI"),
+    "ai_dialog_summary_keep": TierCap(1, ClampDir.MAX, note="AI-память: free 0–1 резюме"),
+    "send_per_hour": TierCap(2, ClampDir.MAX, note="/send: free ~2/час"),
+    # скалярные полы (free = не ниже => реже/дольше)
+    "finds_min_interval_hours": TierCap(24, ClampDir.MIN, note="находки реже"),
+    "finds_claim_cooldown_hours": TierCap(24, ClampDir.MIN, note="длиннее кулдаун похода"),
+    # нескалярные — кламп кастомным кодом (не простым min/max)
+    "ai_rate_limits_by_level": TierCap(
+        0, ClampDir.MAX, special="dict_per_level", note="ГЛАВНЫЙ AI-paywall; кламп по уровням"
+    ),
+    "autorole_ids": TierCap(1, ClampDir.MAX, special="list_length", note="free: 1 автороль"),
+}
+
+# ключи, которые тарифом НЕ трогаются никогда (для тест-инварианта против
+# случайного дубля ключа и в TIERABLE, и в списке «неприкосновенных»).
+TIER_NEVER: frozenset[str] = frozenset(
+    {
+        "relationship_daily_point_cap",  # баланс, не paywall
+        "warn_threshold",
+        "spam_limit",
+    }
+)
+
+# мастер-тумблер модуля -> минимальный тариф, на котором модуль доступен.
+# Отсутствие ключа = free (доступен всем). Только ДАННЫЕ; enforcement — будущий
+# require_tier (сегодня no-op, т.к. заглушка тарифов выдаёт PRO). Подфункция
+# activity_album здесь — Premium-«вау» внутри free-модуля «Активность».
+MODULE_MIN_TIER: dict[str, PlanTier] = {
+    "git_enabled": PlanTier.PREMIUM,
+    "steam_enabled": PlanTier.PREMIUM,
+    "digest_enabled": PlanTier.PREMIUM,
+    "achievements_enabled": PlanTier.PREMIUM,
+    "secret_room_enabled": PlanTier.PREMIUM,
+    "activity_album": PlanTier.PREMIUM,
+    "staykick_enabled": PlanTier.PRO,
+}

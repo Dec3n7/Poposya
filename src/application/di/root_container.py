@@ -49,6 +49,8 @@ class RootContainer:
     achievements: AchievementsContainer
     build_weekly_digest: object  # BuildWeeklyDigestUseCase; ког дайджеста
     guild_settings: object  # GuildSettingsService; main вызывает load_all
+    entitlements: object  # EntitlementService; main вызывает load_all
+    entitlements_listener: object | None  # EntitlementChangeListener (Postgres); цикл в main
     persona: object  # PersonaService; main вызывает load_all
     privacy: object  # PrivacyService; удаление данных (on_guild_remove/forgetme)
     engine: object  # AsyncEngine; закрывается в main при завершении
@@ -142,8 +144,23 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     guild_settings = GuildSettingsService(settings, session_factory)
     # межпроцессная инвалидация кэша (веб-панель ∥ бот): Postgres LISTEN/NOTIFY.
-    # На SQLite вернёт None — там второго писателя нет.
+    # На SQLite вернёт None — там второго писателя нет. Listener работает с сырым
+    # сервисом: инвалидация кэша — внутренний механизм, не читающий тариф.
     settings_listener = make_settings_listener(settings.database_url, guild_settings)
+
+    # Тарифы серверов (монетизация): БД-backed сервис с кэшем + NOTIFY, как у
+    # настроек. Серверы без явной подписки получают ENTITLEMENTS_DEFAULT_TIER
+    # (по умолчанию PRO -> enforcement фактически выключен, поведение не меняется;
+    # переключается на "free" в .env, когда включают платность). Подписки
+    # выдаёт оператор через панель. Через тот же шов TierClampSettingsProvider
+    # тариф автоматически клампит лимиты. См. docs/plans/monetization-prep.md.
+    from src.infrastructure.entitlements import EntitlementService
+    from src.infrastructure.entitlements_listener import make_entitlements_listener
+    from src.infrastructure.tier_clamp import TierClampSettingsProvider
+
+    entitlements = EntitlementService(settings, session_factory)
+    entitlements_listener = make_entitlements_listener(settings.database_url, entitlements)
+    settings_reader = TierClampSettingsProvider(guild_settings, entitlements)
 
     # персоны (библиотеки текста/личности бота): тот же паттерн, что и настройки —
     # кэш в памяти + Postgres NOTIFY для инвалидации при правках из панели
@@ -173,17 +190,17 @@ def build_root_container(settings: Settings) -> RootContainer:
         absence_days=settings.relationship_absence_days,
         calendar=calendar,
         holiday_multiplier=settings.holiday_points_multiplier,
-        settings_provider=guild_settings,
+        settings_provider=settings_reader,
     )
-    get_rank = GetRankUseCase(uow_factory, policy, settings_provider=guild_settings)
+    get_rank = GetRankUseCase(uow_factory, policy, settings_provider=settings_reader)
     update_notes = UpdateUserNotesUseCase(
-        uow_factory, settings.relationship_notes_max_chars, settings_provider=guild_settings
+        uow_factory, settings.relationship_notes_max_chars, settings_provider=settings_reader
     )
     relationship = RelationshipContainer(
         policy=policy,
         award_point=award_point,
         get_rank=get_rank,
-        set_points=SetPointsUseCase(uow_factory, policy, settings_provider=guild_settings),
+        set_points=SetPointsUseCase(uow_factory, policy, settings_provider=settings_reader),
         toggle_freeze=ToggleFreezeUseCase(uow_factory),
         update_notes=update_notes,
         set_survey_choice=SetSurveyChoiceUseCase(uow_factory),
@@ -192,18 +209,18 @@ def build_root_container(settings: Settings) -> RootContainer:
             uow_factory,
             policy,
             bonus=settings.survey_bonus_points,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         set_birthday=SetBirthdayUseCase(uow_factory),
         birthday_tick=BirthdayTickUseCase(uow_factory, remind_days=settings.birthday_remind_days),
-        leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=guild_settings),
+        leaderboard=GetLeaderboardUseCase(uow_factory, policy, settings_provider=settings_reader),
         decay_points=DecayPointsUseCase(
             uow_factory,
             policy,
             after_days=settings.relationship_decay_after_days,
             every_days=settings.relationship_decay_every_days,
             amount=settings.relationship_decay_points,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         record_deep_dialog=RecordDeepDialogUseCase(uow_factory),
         add_dialog_summary=AddDialogSummaryUseCase(
@@ -212,7 +229,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         issue_secret_code=IssueSecretCodeUseCase(uow_factory),
         validate_secret_code=ValidateSecretCodeUseCase(uow_factory),
         register_secret_room=RegisterSecretRoomUseCase(
-            uow_factory, hours=settings.secret_room_hours, settings_provider=guild_settings
+            uow_factory, hours=settings.secret_room_hours, settings_provider=settings_reader
         ),
         get_secret_code=GetSecretCodeUseCase(uow_factory),
         pop_expired_secret_rooms=PopExpiredSecretRoomsUseCase(uow_factory),
@@ -290,7 +307,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             dialog_gap_minutes=settings.ai_dialog_gap_minutes,
             dialog_min_exchanges=settings.ai_dialog_min_exchanges,
             deep_dialog_exchanges=settings.ai_deep_dialog_exchanges,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
             chime_template=chime_template,
             chime_provider=chime_provider,
             persona=persona,
@@ -349,7 +366,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             ban_minutes=settings.warn_ban_minutes,
             expire_days=settings.warn_expire_days,
             escalation=settings.warn_escalation,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         get_warns=GetWarnsUseCase(uow_factory),
         clear_warns=ClearWarnsUseCase(uow_factory),
@@ -364,7 +381,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         touch_activity=TouchMemberActivityUseCase(
             uow_factory,
             absent_days_threshold=settings.absent_days_threshold,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         add_reminder=AddReminderUseCase(uow_factory),
         pop_due_reminders=PopDueRemindersUseCase(uow_factory),
@@ -397,7 +414,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             cooldown_hours=settings.finds_claim_cooldown_hours,
             fail_penalty=settings.finds_fail_penalty,
             notes_max_chars=settings.relationship_notes_max_chars,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         gift_item=GiftItemUseCase(
             uow_factory, policy, notes_max_chars=settings.relationship_notes_max_chars
@@ -439,7 +456,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         add_movie=AddMovieUseCase(
             uow_factory,
             watchlist_max=settings.cinema_watchlist_max,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         register_message=RegisterMovieMessageUseCase(uow_factory),
         vote_movie=VoteMovieUseCase(uow_factory),
@@ -454,7 +471,7 @@ def build_root_container(settings: Settings) -> RootContainer:
             uow_factory,
             rating_hours=settings.cinema_rating_hours,
             rating_minutes=settings.cinema_rating_minutes,
-            settings_provider=guild_settings,
+            settings_provider=settings_reader,
         ),
         rate_movie=RateMovieUseCase(uow_factory),
         review_movie=ReviewMovieUseCase(uow_factory),
@@ -603,8 +620,8 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
 
     achievements = AchievementsContainer(
-        evaluate=EvaluateAchievementsUseCase(uow_factory, policy, settings_provider=guild_settings),
-        get=GetAchievementsUseCase(uow_factory, policy, settings_provider=guild_settings),
+        evaluate=EvaluateAchievementsUseCase(uow_factory, policy, settings_provider=settings_reader),
+        get=GetAchievementsUseCase(uow_factory, policy, settings_provider=settings_reader),
     )
 
     from src.infrastructure.render.browser import CardRenderer
@@ -630,7 +647,9 @@ def build_root_container(settings: Settings) -> RootContainer:
         appeals=appeals,
         achievements=achievements,
         build_weekly_digest=build_weekly_digest,
-        guild_settings=guild_settings,
+        guild_settings=settings_reader,
+        entitlements=entitlements,
+        entitlements_listener=entitlements_listener,
         persona=persona,
         privacy=privacy,
         engine=engine,

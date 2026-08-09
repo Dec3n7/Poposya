@@ -59,6 +59,11 @@ from src.config import Settings
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.db.session import create_engine, create_session_factory
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from src.infrastructure.entitlements import EntitlementService
+from src.infrastructure.entitlements_listener import (
+    EntitlementChangeListener,
+    make_entitlements_listener,
+)
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.guild_settings import GuildSettingsService
 from src.infrastructure.persona_listener import PersonaChangeListener, make_persona_listener
@@ -73,6 +78,9 @@ class ApiContainer:
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     guild_settings: GuildSettingsService
+    # тарифы серверов (монетизация): свой кэш + NOTIFY, как у настроек — выдача
+    # подписки из панели должна быть видна и здесь, и боту
+    entitlements: EntitlementService
     # персоны (текст/личность бота): API держит свой кэш + слушает NOTIFY, как
     # и с настройками — правки из панели должны быть видны сразу
     persona: PersonaService
@@ -135,6 +143,9 @@ class ApiContainer:
     settings_listener: SettingsChangeListener | None
     # аналогичный слушатель для персон (Postgres NOTIFY; None на SQLite)
     persona_listener: PersonaChangeListener | None
+    # слушатель тарифов (Postgres NOTIFY; None на SQLite): бот изменил/выдал —
+    # API-кэш перечитывает
+    entitlements_listener: EntitlementChangeListener | None
 
 
 def build_api_container(settings: Settings) -> ApiContainer:
@@ -157,6 +168,9 @@ def assemble_container(
     persona = PersonaService(settings, session_factory)
     persona_listener = make_persona_listener(settings.database_url, persona)
 
+    entitlements = EntitlementService(settings, session_factory)
+    entitlements_listener = make_entitlements_listener(settings.database_url, entitlements)
+
     event_bus = InMemoryEventBus()
 
     def uow_factory() -> IUnitOfWork:
@@ -172,6 +186,7 @@ def assemble_container(
         engine=engine,
         session_factory=session_factory,
         guild_settings=guild_settings,
+        entitlements=entitlements,
         persona=persona,
         bot_guilds=BotGuildsCache(settings.discord_token),
         session_epochs=SessionEpochService(session_factory),
@@ -214,4 +229,5 @@ def assemble_container(
         delete_role_template=DeleteRoleTemplateUseCase(uow_factory),
         settings_listener=settings_listener,
         persona_listener=persona_listener,
+        entitlements_listener=entitlements_listener,
     )

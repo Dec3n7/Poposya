@@ -17,6 +17,8 @@ from src.config import Settings
 from src.infrastructure.db.backup import make_backup_service
 from src.infrastructure.diagnostics import log_boot_summary, probe_dependencies
 from src.infrastructure.discord.client import PoposyaBot
+from src.infrastructure.entitlements import EntitlementService
+from src.infrastructure.entitlements_listener import EntitlementChangeListener
 from src.infrastructure.events.outbox import OutboxDispatcher
 from src.infrastructure.guild_settings import GuildSettingsService
 from src.infrastructure.listener_health import ListenerHealth
@@ -166,6 +168,9 @@ async def run() -> None:
     # персоны (текст/личность бота) — поднять в память (в проде сид «Попоси» уже
     # в БД из миграции 0031; иначе load_all создаст дефолт-строку идемпотентно)
     await persona.load_all()
+    # тарифы серверов (монетизация) — поднять подписки в память
+    entitlements = cast(EntitlementService, container.entitlements)
+    await entitlements.load_all()
     bot = PoposyaBot(container)
 
     # командный мост панель→бот: панель кладёт команду в bot_commands + NOTIFY,
@@ -216,6 +221,13 @@ async def run() -> None:
         settings_listener = cast(SettingsChangeListener, container.settings_listener)
         background["settings-listener"] = asyncio.create_task(settings_listener.run_forever())
         listeners["settings"] = settings_listener
+    # межпроцессная инвалидация кэша тарифов (панель выдала/сняла подписку → бот перечитал)
+    if container.entitlements_listener is not None:
+        entitlements_listener = cast(EntitlementChangeListener, container.entitlements_listener)
+        background["entitlements-listener"] = asyncio.create_task(
+            entitlements_listener.run_forever()
+        )
+        listeners["entitlements"] = entitlements_listener
     # межпроцессная инвалидация кэша персон (панель изменила персону → бот перечитал)
     if container.persona_listener is not None:
         persona_listener = cast(PersonaChangeListener, container.persona_listener)

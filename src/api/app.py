@@ -17,6 +17,7 @@ from src.api.container import ApiContainer
 from src.api.routers import (
     appeals,
     auth,
+    entitlements,
     finds,
     guilds,
     moderation,
@@ -44,6 +45,7 @@ async def _load_state_when_ready(container: ApiContainer) -> None:
             await container.guild_settings.load_all()
             await container.persona.load_all()
             await container.session_epochs.load_all()
+            await container.entitlements.load_all()
             return
         except SQLAlchemyError as exc:
             if attempt == _SCHEMA_WAIT_ATTEMPTS:
@@ -73,6 +75,11 @@ def create_app(container: ApiContainer) -> FastAPI:
         if container.persona_listener is not None:
             listener_tasks.append(asyncio.create_task(container.persona_listener.run_forever()))
             logger.info("API: слушатель персон запущен")
+        if container.entitlements_listener is not None:
+            listener_tasks.append(
+                asyncio.create_task(container.entitlements_listener.run_forever())
+            )
+            logger.info("API: слушатель тарифов запущен")
         try:
             yield
         finally:
@@ -114,5 +121,6 @@ def create_app(container: ApiContainer) -> FastAPI:
     app.include_router(music.router)
     app.include_router(finds.router)
     app.include_router(personas.router)
+    app.include_router(entitlements.router)
     app.include_router(warden.router)
     return app
