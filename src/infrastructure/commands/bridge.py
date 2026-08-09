@@ -231,9 +231,7 @@ class CommandProcessor:
                     res = await session.execute(
                         update(BotCommandModel)
                         .where(BotCommandModel.id == cmd_id, BotCommandModel.status == RUNNING)
-                        .values(
-                            status=PENDING, claimed_at=None, worker_id=None, updated_at=_now()
-                        )
+                        .values(status=PENDING, claimed_at=None, worker_id=None, updated_at=_now())
                     )
                     await session.commit()
                     if rows_affected(res):

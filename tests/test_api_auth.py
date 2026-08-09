@@ -314,9 +314,15 @@ def test_absolute_cap_clamps_sliding_exp():
 def test_expired_idle_token_is_rejected():
     # токен с истёкшим exp (простой дольше idle) -> сервер отвергает
     payload = {
-        "sub": "1", "username": "u", "avatar": None, "guilds": [],
-        "sv": 2, "ep": 0, "iat0": int(_time.time()) - 3600,
-        "iat": int(_time.time()) - 3600, "exp": int(_time.time()) - 10,
+        "sub": "1",
+        "username": "u",
+        "avatar": None,
+        "guilds": [],
+        "sv": 2,
+        "ep": 0,
+        "iat0": int(_time.time()) - 3600,
+        "iat": int(_time.time()) - 3600,
+        "exp": int(_time.time()) - 10,
     }
     expired = jwt.encode(payload, _SECRET, algorithm="HS256")
     assert decode_session(_SECRET, expired, version=2) is None
@@ -423,9 +429,7 @@ async def test_csrf_blocks_cross_site_origin(client, mock_discord):
 
 async def test_csrf_blocks_cross_site_referer(client, mock_discord):
     await _login(client)
-    resp = await client.post(
-        "/api/auth/logout", headers={"referer": "http://evil.example/attack"}
-    )
+    resp = await client.post("/api/auth/logout", headers={"referer": "http://evil.example/attack"})
     assert resp.status_code == 403
 
 

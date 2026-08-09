@@ -93,9 +93,7 @@ async def test_health_full_requires_token_when_set():
         # без заголовка — 401
         assert (await client.get("/health/full")).status == 401
         # с неверным — 401
-        assert (
-            await client.get("/health/full", headers={"X-Health-Token": "нет"})
-        ).status == 401
+        assert (await client.get("/health/full", headers={"X-Health-Token": "нет"})).status == 401
         # с верным — 200 и полное тело
         resp = await client.get("/health/full", headers={"X-Health-Token": "секрет-здоровья"})
         assert resp.status == 200

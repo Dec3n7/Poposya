@@ -350,20 +350,35 @@ def test_postgres_backup_restores_into_temp_db(tmp_path):
         # throwaway-БД из template0 — чистая, без объектов исходной
         created = subprocess.run(
             ["createdb", *conn, "-T", "template0", tmp_db],
-            env=env, capture_output=True, text=True, timeout=120,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         assert created.returncode == 0, created.stderr
         # восстановление; --no-owner/--no-acl — не тащим владельца/гранты
         restored = subprocess.run(
             ["pg_restore", *conn, "--no-owner", "--no-acl", "-d", tmp_db, str(dump)],
-            env=env, capture_output=True, text=True, timeout=300,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
         # pg_restore может вернуть !=0 на безобидных warning'ах — проверяем факт
         # живой схемы отдельным запросом, а не только кодом возврата
         count = subprocess.run(
-            ["psql", *conn, "-d", tmp_db, "-tAc",
-             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"],
-            env=env, capture_output=True, text=True, timeout=120,
+            [
+                "psql",
+                *conn,
+                "-d",
+                tmp_db,
+                "-tAc",
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         assert count.returncode == 0, count.stderr
         assert int(count.stdout.strip()) > 0, (
@@ -372,7 +387,10 @@ def test_postgres_backup_restores_into_temp_db(tmp_path):
     finally:
         subprocess.run(
             ["dropdb", *conn, "--if-exists", tmp_db],
-            env=env, capture_output=True, text=True, timeout=120,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
 
 

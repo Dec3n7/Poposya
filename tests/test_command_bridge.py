@@ -202,9 +202,7 @@ async def test_legacy_running_without_lease_is_recovered(session_factory):
             )
         )
         await session.commit()
-        cmd_id = (
-            await session.execute(select(BotCommandModel.id))
-        ).scalars().first()
+        cmd_id = (await session.execute(select(BotCommandModel.id))).scalars().first()
     proc = CommandProcessor(session_factory, _ok_executor)
     assert await proc.recover_stale() == 1
     status, _ = await get_status(session_factory, cmd_id)
