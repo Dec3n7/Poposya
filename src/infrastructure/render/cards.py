@@ -103,6 +103,114 @@ def achievement_card_html(card: AchievementCard) -> tuple[str, int, int]:
     return html_str, ACH_W, ACH_H
 
 
+# ── Карточка /premium: три колонки тарифов с подсветкой текущего ──────────────
+PREMIUM_W, PREMIUM_H = 1200, 800
+
+# акцент текущего тарифа для верхней плашки (основной, светлый)
+_PREMIUM_ACCENTS: dict[str, tuple[str, str]] = {
+    "free": ("#565a66", "#c9ccd4"),
+    "premium": ("#7c5cff", "#b7a6ff"),
+    "pro": ("#c79a2e", "#ffd98a"),
+}
+_PREMIUM_TITLES = {"free": "Free", "premium": "Premium", "pro": "Pro"}
+
+_PREMIUM_TEMPLATE = Template(
+    """<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:${w}px;height:${h}px}
+  body{font-family:"Segoe UI","Noto Color Emoji",system-ui,sans-serif;background:#0c0b14;
+    display:flex;align-items:center;justify-content:center}
+  .wrap{position:relative;width:${cw}px;height:${ch}px;border-radius:26px;overflow:hidden;
+    padding:40px 40px 34px;background:linear-gradient(135deg,#211f2c,#17151f);
+    border:3px solid ${curaccent}}
+  .waves{position:absolute;inset:0;opacity:.5;pointer-events:none}
+  .head{position:relative;z-index:1;display:flex;align-items:baseline;gap:18px;margin-bottom:26px}
+  .head .h1{font-size:44px;font-weight:800;color:#f2f3fb}
+  .head .now{font-size:22px;font-weight:700;color:#9a9db8}
+  .head .pill{padding:5px 16px;border-radius:999px;font-weight:800;font-size:20px;
+    letter-spacing:.5px;color:#12111a;background:linear-gradient(180deg,${curaccent2},${curaccent})}
+  .cols{position:relative;z-index:1;display:flex;gap:22px;height:560px}
+  .col{flex:1;position:relative;border-radius:20px;padding:24px 22px;
+    background:rgba(255,255,255,.03);border:2px solid rgba(255,255,255,.08)}
+  .col .name{font-size:30px;font-weight:800;color:#eef0fb}
+  .col .tag{font-size:18px;color:#8b8ea8;margin:4px 0 16px}
+  .col ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+  .col li{font-size:20px;color:#c7cad9;line-height:1.25;padding-left:30px;position:relative}
+  .col li::before{content:"✓";position:absolute;left:0;top:0;font-weight:800}
+  .col.free li::before{color:#8a8fa3}
+  .col.premium li::before{color:#b7a6ff}
+  .col.pro li::before{color:#ffd98a}
+  .col.premium{border-color:#7c5cff55}
+  .col.pro{border-color:#c79a2e55}
+  .col.active.free{border-color:#c9ccd4;box-shadow:0 0 0 2px #c9ccd455,0 14px 34px rgba(0,0,0,.45)}
+  .col.active.premium{border-color:#b7a6ff;box-shadow:0 0 0 2px #7c5cff66,0 14px 34px rgba(0,0,0,.5)}
+  .col.active.pro{border-color:#ffd98a;box-shadow:0 0 0 2px #c79a2e66,0 14px 34px rgba(0,0,0,.5)}
+  .cur{position:absolute;top:-13px;right:16px;padding:4px 14px;border-radius:999px;
+    font-size:15px;font-weight:800;letter-spacing:1px;color:#12111a}
+  .col.active.free .cur{background:#c9ccd4}
+  .col.active.premium .cur{background:#b7a6ff}
+  .col.active.pro .cur{background:#ffd98a}
+  .foot{position:relative;z-index:1;margin-top:20px;text-align:center;color:#8b8ea8;font-size:18px}
+</style></head><body>
+  <div class="wrap">
+    <svg class="waves" viewBox="0 0 1160 700" preserveAspectRatio="none">
+      <g fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="14">
+        <path d="M-50 120 Q145 70 340 120 T730 120 T1120 120"/>
+        <path d="M-50 360 Q145 310 340 360 T730 360 T1120 360"/>
+        <path d="M-50 600 Q145 550 340 600 T730 600 T1120 600"/></g></svg>
+    <div class="head">
+      <span class="h1">Что открыто на сервере</span>
+      <span class="now">сейчас:</span><span class="pill">${curlabel}</span>
+    </div>
+    <div class="cols">
+      <div class="col free ${free_active}">${free_cur}
+        <div class="name">☕ Free</div><div class="tag">зашла в гости</div>
+        <ul><li>Модерация и апелляции</li><li>Базовое общение (с лимитом)</li>
+        <li>Музыка</li><li>Часть отношений</li><li>Находки изредка</li>
+        <li>Каморки (немного)</li></ul>
+      </div>
+      <div class="col premium ${premium_active}">${premium_cur}
+        <div class="name">🖤 Premium</div><div class="tag">свой дом</div>
+        <ul><li>Полная персона и память</li><li>Тайная комната, отношения целиком</li>
+        <li>Находки чаще, караоке и радио</li><li>/git и /steam, дайджест, ачивки</li>
+        <li>«Альбом», больше каморок и напоминаний</li>
+        <li>Панель edit, banwatch</li></ul>
+      </div>
+      <div class="col pro ${pro_active}">${pro_cur}
+        <div class="name">✂️👁🖤 Pro</div><div class="tag">сеть домов</div>
+        <ul><li>Всё из Premium</li><li>24/7-присутствие</li>
+        <li>Приоритет</li></ul>
+      </div>
+    </div>
+    <div class="foot">Подписку включает владелец бота в панели · команда /premium</div>
+  </div>
+</body></html>"""
+)
+
+
+def premium_card_html(tier: str) -> tuple[str, int, int]:
+    """Карточка /premium → (html, width, height). Подсвечивает колонку `tier`."""
+    tier = tier if tier in _PREMIUM_TITLES else "free"
+    accent, accent2 = _PREMIUM_ACCENTS[tier]
+    cur = '<div class="cur">ТЕКУЩИЙ</div>'
+    html_str = _PREMIUM_TEMPLATE.substitute(
+        w=PREMIUM_W,
+        h=PREMIUM_H,
+        cw=PREMIUM_W - 40,
+        ch=PREMIUM_H - 40,
+        curaccent=accent,
+        curaccent2=accent2,
+        curlabel=_PREMIUM_TITLES[tier],
+        free_active="active" if tier == "free" else "",
+        premium_active="active" if tier == "premium" else "",
+        pro_active="active" if tier == "pro" else "",
+        free_cur=cur if tier == "free" else "",
+        premium_cur=cur if tier == "premium" else "",
+        pro_cur=cur if tier == "pro" else "",
+    )
+    return html_str, PREMIUM_W, PREMIUM_H
+
+
 # ── Карточка /rank: аватар в гексе + роль + статы + прогресс (игровой язык B1) ──
 _RANK_TEMPLATE = Template(
     """<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>

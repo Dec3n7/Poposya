@@ -1,9 +1,12 @@
 """/premium — что открыто на сервере и что даёт подписка (голос Попоси).
 
 Информационная команда, доступна всем: показывает текущий тариф сервера
-(из EntitlementService) и коротко — что входит во Free / Premium / Pro. Выдаёт
+(из EntitlementService) и что входит во Free / Premium / Pro — картинкой-карточкой
+(HTML→PNG), с фолбэком на текстовый эмбед, если рендерер недоступен. Выдаёт
 подписку не она, а оператор в панели (вкладка «Подписка»)."""
 
+import io
+import logging
 from datetime import UTC
 
 import discord
@@ -11,6 +14,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.application.interfaces.entitlements import PlanTier
+from src.infrastructure.render.cards import premium_card_html
+
+logger = logging.getLogger(__name__)
 
 _TIER_TITLE = {
     PlanTier.FREE: "☕ Free — зашла в гости",
@@ -31,38 +37,58 @@ _PRO = "Всё из Premium + 24/7-присутствие и приоритет.
 
 
 class PremiumCog(commands.Cog):
-    def __init__(self, bot: commands.Bot, settings, entitlements=None):
+    def __init__(self, bot: commands.Bot, settings, entitlements=None, card_renderer=None):
         self.bot = bot
         self.settings = settings
         self.entitlements = entitlements
+        self.renderer = card_renderer  # None (тесты/нет браузера) → эмбед-фолбэк
 
-    @app_commands.command(
-        name="premium", description="Тариф этого сервера и что открыто"
-    )
-    @app_commands.guild_only()
-    async def premium(self, interaction: discord.Interaction) -> None:
-        gid = interaction.guild_id or 0
+    def _tier_of(self, gid: int):
         if self.entitlements is not None:
-            tier, expires_at, active = self.entitlements.current(gid)
-        else:
-            tier, expires_at, active = PlanTier.PRO, None, False
+            return self.entitlements.current(gid)
+        return PlanTier.PRO, None, False
 
-        embed = discord.Embed(
-            title=_TIER_TITLE.get(tier, "Тариф"),
-            colour=0x2B2D31,
-        )
+    @staticmethod
+    def _status(tier: PlanTier, expires_at, active: bool) -> str:
         if active and expires_at is not None:
             when = expires_at.replace(tzinfo=UTC).strftime("%d.%m.%Y")
-            embed.description = f"Сейчас у нас **{tier.name.title()}** — до {when}."
-        elif active:
-            embed.description = f"Сейчас у нас **{tier.name.title()}** — бессрочно."
-        elif tier is PlanTier.FREE:
-            embed.description = "Мы живём на **Free**. Уютно, но дом бывает теплее."
-        else:
-            embed.description = f"Сейчас у нас **{tier.name.title()}** — по умолчанию."
+            return f"Сейчас у нас **{tier.name.title()}** — до {when}."
+        if active:
+            return f"Сейчас у нас **{tier.name.title()}** — бессрочно."
+        if tier is PlanTier.FREE:
+            return "Мы живём на **Free**. Уютно, но дом бывает теплее."
+        return f"Сейчас у нас **{tier.name.title()}** — по умолчанию."
 
+    async def _render(self, tier: PlanTier) -> bytes | None:
+        if self.renderer is None:
+            return None
+        try:
+            html, w, h = premium_card_html(tier.name.lower())
+            return await self.renderer.render(html, w, h)
+        except Exception:
+            logger.warning("Карточка /premium не отрисована — фолбэк на эмбед", exc_info=True)
+            return None
+
+    def _embed(self, tier: PlanTier, expires_at, active: bool) -> discord.Embed:
+        embed = discord.Embed(title=_TIER_TITLE.get(tier, "Тариф"), colour=0x2B2D31)
+        embed.description = self._status(tier, expires_at, active)
         embed.add_field(name="Free", value=_FREE, inline=False)
         embed.add_field(name="Premium", value=_PREMIUM, inline=False)
         embed.add_field(name="Pro", value=_PRO, inline=False)
         embed.set_footer(text="Подписку включает владелец бота в панели, вкладка «Подписка».")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return embed
+
+    @app_commands.command(name="premium", description="Тариф этого сервера и что открыто")
+    @app_commands.guild_only()
+    async def premium(self, interaction: discord.Interaction) -> None:
+        gid = interaction.guild_id or 0
+        tier, expires_at, active = self._tier_of(gid)
+        await interaction.response.defer(ephemeral=True)
+        png = await self._render(tier)
+        if png is not None:
+            await interaction.followup.send(
+                content=self._status(tier, expires_at, active),
+                file=discord.File(io.BytesIO(png), filename="premium.png"),
+            )
+            return
+        await interaction.followup.send(embed=self._embed(tier, expires_at, active))

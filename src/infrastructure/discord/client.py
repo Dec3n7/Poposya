@@ -192,7 +192,14 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.tempvoice import TempVoiceCog
         from src.infrastructure.discord.cogs.warden import WardenCog
 
-        await self.add_cog(PremiumCog(self, self.container.settings, entitlements=entitlements))
+        await self.add_cog(
+            PremiumCog(
+                self,
+                self.container.settings,
+                entitlements=entitlements,
+                card_renderer=cast(CardRenderer, self.container.card_renderer),
+            )
+        )
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
