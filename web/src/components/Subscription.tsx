@@ -33,6 +33,31 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+const TIER_COLORS: Record<string, { bg: string; fg: string }> = {
+  free: { bg: "#3a3d44", fg: "#c9ccd4" },
+  premium: { bg: "#5b3fb0", fg: "#efeaff" },
+  pro: { bg: "#8a6d1f", fg: "#fff4d6" },
+};
+
+function TierBadge({ tier }: { tier: string }) {
+  const c = TIER_COLORS[tier] ?? TIER_COLORS.free;
+  return (
+    <span
+      style={{
+        background: c.bg,
+        color: c.fg,
+        padding: "2px 10px",
+        borderRadius: 999,
+        fontWeight: 700,
+        fontSize: "0.85em",
+        letterSpacing: "0.02em",
+      }}
+    >
+      {(TIER_LABELS[tier] ?? tier).toUpperCase()}
+    </span>
+  );
+}
+
 export function Subscription({ guild }: { guild: Guild }) {
   const [sub, setSub] = useState<Sub | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +112,21 @@ export function Subscription({ guild }: { guild: Guild }) {
     }
   }
 
+  async function trial() {
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      const s = await api.grantEntitlement(guild.id, "premium", 14);
+      setSub(s);
+      setNote(`Триал Premium на 14 дней активирован — до ${fmtDate(s.expires_at)}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось активировать триал.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card acc">
       <div className="rules-publish-head">
@@ -107,10 +147,10 @@ export function Subscription({ guild }: { guild: Guild }) {
         <>
           {sub && (
             <div className="muted small" style={{ marginTop: 4, lineHeight: 1.7 }}>
-              <div>
-                Текущий тариф: <b>{TIER_LABELS[sub.tier] ?? sub.tier}</b>{" "}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                Текущий тариф: <TierBadge tier={sub.tier} />
                 {sub.active ? (
-                  <span>· подписка активна до <b>{fmtDate(sub.expires_at)}</b></span>
+                  <span>· активна до <b>{fmtDate(sub.expires_at)}</b></span>
                 ) : (
                   <span>· явной подписки нет (базовый тариф)</span>
                 )}
@@ -137,6 +177,11 @@ export function Subscription({ guild }: { guild: Guild }) {
             <button className="btn primary small" disabled={busy} onClick={grant}>
               Выдать
             </button>
+            {!sub?.active && (
+              <button className="btn small" disabled={busy} onClick={trial}>
+                🎁 Триал 14 дней
+              </button>
+            )}
             {sub?.active && (
               <button className="btn small" disabled={busy} onClick={revoke}>
                 Снять
