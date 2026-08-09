@@ -52,7 +52,8 @@ async def require_tier(interaction: discord.Interaction, entitlements, master_ke
         return True
     try:
         await interaction.response.send_message(
-            "Эта возможность доступна на платном тарифе. Подробнее — команда «/premium».",
+            "Это — уже про «свой дом», а у нас пока гостевой тариф. "
+            "Что здесь открыто и что даёт подписка — покажу в /premium.",
             ephemeral=True,
         )
     except discord.HTTPException:
