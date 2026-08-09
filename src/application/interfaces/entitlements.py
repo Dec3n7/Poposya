@@ -1,9 +1,8 @@
 """Порт тарифов (entitlement) сервера.
 
-Подготовка к монетизации: слой, отвечающий на вопрос «какой тариф у гильдии».
-Сегодня реализация — заглушка (у всех максимальный тариф), поэтому ни кламп
-лимитов, ни гейт фич по тарифу ничего не меняют. См.
-docs/plans/monetization-prep.md (Prep 4)."""
+Слой, отвечающий на вопрос «какой тариф у гильдии». Рабочая реализация —
+`infrastructure.entitlements.EntitlementService` (БД + кэш): по ней клампятся
+лимиты и гейтятся Premium-модули. См. docs/plans/monetization-prep.md."""
 
 from abc import ABC, abstractmethod
 from enum import IntEnum

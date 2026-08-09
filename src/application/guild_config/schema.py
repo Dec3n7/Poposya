@@ -284,10 +284,10 @@ def _kind(key: str) -> Literal["bool", "channel", "float", "list", "dict", "text
 KEY_KINDS: dict[str, str] = {k: _kind(k) for k in SETTING_KEYS}
 
 
-# --- реестр тарифицируемых лимитов (подготовка к монетизации) ---------------
-# ВНИМАНИЕ: это ТОЛЬКО данные. Enforcement (кламп по тарифу) здесь не живёт и
-# нигде пока не подключён — см. docs/plans/monetization-prep.md, Prep 1/2.
-# Значения free-потолков предварительные (не привязаны к коду, легко менять).
+# --- реестр тарифицируемых лимитов -------------------------------------------
+# ВНИМАНИЕ: это ТОЛЬКО данные. Сам кламп живёт в `infrastructure/tier_clamp.py`
+# (шов над провайдером настроек), который читает эти потолки. Значения free-
+# потолков легко менять — см. docs/plans/monetization-prep.md.
 
 
 class ClampDir(Enum):
@@ -343,9 +343,10 @@ TIER_NEVER: frozenset[str] = frozenset(
 )
 
 # мастер-тумблер модуля -> минимальный тариф, на котором модуль доступен.
-# Отсутствие ключа = free (доступен всем). Только ДАННЫЕ; enforcement — будущий
-# require_tier (сегодня no-op, т.к. заглушка тарифов выдаёт PRO). Подфункция
-# activity_album здесь — Premium-«вау» внутри free-модуля «Активность».
+# Отсутствие ключа = free (доступен всем). Только ДАННЫЕ; enforcement — хелперы
+# `require_tier` (команды) и `tier_allows` (события) в feature_flags.py, навешены
+# на коги. Подфункция activity_album здесь — Premium-«вау» внутри free-модуля
+# «Активность».
 MODULE_MIN_TIER: dict[str, PlanTier] = {
     "git_enabled": PlanTier.PREMIUM,
     "steam_enabled": PlanTier.PREMIUM,

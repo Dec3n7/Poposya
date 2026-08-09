@@ -150,10 +150,10 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     # Тарифы серверов (монетизация): БД-backed сервис с кэшем + NOTIFY, как у
     # настроек. Серверы без явной подписки получают ENTITLEMENTS_DEFAULT_TIER
-    # (по умолчанию PRO -> enforcement фактически выключен, поведение не меняется;
-    # переключается на "free" в .env, когда включают платность). Подписки
-    # выдаёт оператор через панель. Через тот же шов TierClampSettingsProvider
-    # тариф автоматически клампит лимиты. См. docs/plans/monetization-prep.md.
+    # (по умолчанию "free" -> enforcement включён: лимиты клампятся, Premium-
+    # модули гейтятся; "pro" — временный рубильник). Подписки выдаёт оператор
+    # через панель. Через шов TierClampSettingsProvider тариф автоматически
+    # клампит лимиты. См. docs/plans/monetization-prep.md.
     from src.infrastructure.entitlements import EntitlementService
     from src.infrastructure.entitlements_listener import make_entitlements_listener
     from src.infrastructure.tier_clamp import TierClampSettingsProvider
