@@ -3,9 +3,10 @@
 Проверки прав — только тут (бэкенд). Фронт никогда не решает, кто владелец.
 """
 
+import time
 from collections.abc import Awaitable, Callable
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 
 from src.api.container import ApiContainer
 from src.api.discord_oauth import OAuthError
@@ -17,6 +18,7 @@ from src.api.security import (
     SESSION_COOKIE,
     Session,
     decode_session,
+    encode_session,
 )
 
 
@@ -24,8 +26,40 @@ def get_container(request: Request) -> ApiContainer:
     return request.app.state.container
 
 
-def current_session(request: Request) -> Session:
-    """Расшифровать сессию из куки. 401, если её нет или подпись невалидна."""
+def _slide_session(container: ApiContainer, session: Session, response: Response) -> None:
+    """Скользящее продление: на каждом запросе перевыпускаем куку с новым окном
+    бездействия, не сдвигая абсолютный потолок (issued_at). Так простой дольше
+    web_idle_ttl_minutes истекает на сервере (exp в JWT), а не только в браузере.
+    У абсолютного потолка не продлеваем — пусть истечёт естественно."""
+    s = container.settings
+    if s.web_idle_ttl_minutes <= 0:
+        return
+    remaining_absolute = session.issued_at + s.web_session_ttl_hours * 3600 - int(time.time())
+    if remaining_absolute <= 0:
+        return  # достигнут абсолютный потолок — не продлеваем, дадим истечь
+    window = min(s.web_idle_ttl_minutes * 60, remaining_absolute)
+    fresh = encode_session(
+        s.web_session_secret,
+        session,
+        s.web_session_ttl_hours,
+        s.web_session_version,
+        session.epoch,
+        idle_minutes=s.web_idle_ttl_minutes,
+        session_start=session.issued_at,
+    )
+    response.set_cookie(
+        SESSION_COOKIE,
+        fresh,
+        max_age=window,
+        httponly=True,
+        samesite="lax",
+        secure=s.web_oauth_redirect.startswith("https"),
+    )
+
+
+def current_session(request: Request, response: Response) -> Session:
+    """Расшифровать сессию из куки. 401, если её нет или подпись невалидна.
+    Заодно скользяще продлевает окно бездействия (web_idle_ttl_minutes)."""
     container = get_container(request)
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
@@ -38,6 +72,7 @@ def current_session(request: Request) -> Session:
     # серверный отзыв: эпоха в токене устарела (real logout / операторский отзыв)
     if session.epoch != container.session_epochs.epoch_of(session.user_id):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия отозвана")
+    _slide_session(container, session, response)
     return session
 
 

@@ -26,14 +26,20 @@ class PauseBody(BaseModel):
     minutes: int = Field(15, ge=1, le=720)
 
 
-async def _warden_call(container, method: str, path: str, payload: dict | None = None) -> dict:
+async def _warden_call(
+    container, method: str, path: str, payload: dict | None = None, *, control: bool = False
+) -> dict:
     """Единый прокси к HTTP-API сторожа: и чтение, и действия. Недоступность —
-    не ошибка панели, а факт о системе: возвращаем `available: false`, а не 500."""
+    не ошибка панели, а факт о системе: возвращаем `available: false`, а не 500.
+
+    control=True — управляющий вызов (pause/resume): идёт под control-токеном
+    (least privilege), чтения — под read-токеном."""
     settings = container.settings
     if not settings.warden_api_url or not settings.warden_api_token:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "WARDEN не подключён")
     url = settings.warden_api_url.rstrip("/") + path
-    headers = {"X-Warden-Token": settings.warden_api_token}
+    token = settings.warden_control_token_effective if control else settings.warden_api_token
+    headers = {"X-Warden-Token": token}
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.request(method, url, headers=headers, json=payload) as resp:
@@ -67,7 +73,7 @@ async def warden_pause(
 ) -> dict:
     """Приостановить рестарты сторожа на N минут (перед деплоем/обслуживанием).
     Наблюдение и уведомления у сторожа продолжаются — гасятся только рестарты."""
-    return await _warden_call(container, "POST", "/pause", {"minutes": body.minutes})
+    return await _warden_call(container, "POST", "/pause", {"minutes": body.minutes}, control=True)
 
 
 @router.post("/resume")
@@ -76,7 +82,7 @@ async def warden_resume(
     container=Depends(get_container),
 ) -> dict:
     """Снять паузу досрочно — вернуть сторожу право на рестарты."""
-    return await _warden_call(container, "POST", "/resume")
+    return await _warden_call(container, "POST", "/resume", control=True)
 
 
 @router.get("/enabled")

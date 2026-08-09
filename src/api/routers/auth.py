@@ -50,6 +50,14 @@ def _secure_cookies(container: ApiContainer) -> bool:
     return container.settings.web_oauth_redirect.startswith("https")
 
 
+def _cookie_max_age(settings) -> int:
+    """Срок жизни куки сессии в секундах: окно бездействия при включённом idle
+    (кука обновляется на каждом запросе), иначе — абсолютный TTL."""
+    if settings.web_idle_ttl_minutes > 0:
+        return settings.web_idle_ttl_minutes * 60
+    return settings.web_session_ttl_hours * 3600
+
+
 @router.get("/login")
 async def login(container: ApiContainer = Depends(get_container)) -> RedirectResponse:
     s = container.settings
@@ -101,13 +109,16 @@ async def callback(
         s.web_session_ttl_hours,
         s.web_session_version,
         container.session_epochs.epoch_of(session.user_id),
+        idle_minutes=s.web_idle_ttl_minutes,
     )
     resp = RedirectResponse(s.web_allowed_origin)
     resp.delete_cookie(OAUTH_STATE_COOKIE)
     resp.set_cookie(
         SESSION_COOKIE,
         jwt_token,
-        max_age=s.web_session_ttl_hours * 3600,
+        # кука живёт окно бездействия (при включённом idle) — тогда её сбросит и
+        # сам браузер; сервер всё равно держит границу через exp в JWT
+        max_age=_cookie_max_age(s),
         httponly=True,
         samesite="lax",
         secure=_secure_cookies(container),

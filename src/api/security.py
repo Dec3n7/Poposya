@@ -48,26 +48,54 @@ class Session:
     # эпоха сессии пользователя из токена (claim `ep`); сверяется с серверной для
     # отзыва (real logout / операторский отзыв). Легаси-токен без claim = 0.
     epoch: int = 0
+    # момент НАЧАЛА сессии (unix, claim `iat0`) — переносится при скользящем
+    # продлении, чтобы держать абсолютный потолок жизни сессии независимо от
+    # активности. Легаси-токен без claim = 0 (потолок отсчитается заново).
+    issued_at: int = 0
 
     def can_manage(self, guild_id: int) -> bool:
         return any(g.id == guild_id for g in self.guilds)
 
     def has_permission(self, guild_id: int, bit: int) -> bool:
         """Есть ли у пользователя конкретное право Discord на сервере. ADMINISTRATOR
-        покрывает всё. Легаси-токен без записанных битов (permissions=None) —
-        «есть» (старое поведение до перелогина)."""
+        покрывает всё. Токен без записанных битов (permissions=None) трактуется
+        fail-closed — прав НЕТ: свежий токен всегда несёт маску прав, а None
+        бывает лишь у легаси-токенов, которые серверный рубильник версии сессий
+        (web_session_version) и так гасит. Раньше None означал «всё можно» — это
+        была дыра (протухший легаси-токен = полный доступ)."""
         for g in self.guilds:
             if g.id == guild_id:
                 if g.permissions is None:
-                    return True
+                    return False
                 return bool(g.permissions & (PERM_ADMINISTRATOR | bit))
         return False
 
 
 def encode_session(
-    secret: str, session: Session, ttl_hours: int, version: int = 1, epoch: int = 0
+    secret: str,
+    session: Session,
+    ttl_hours: int,
+    version: int = 1,
+    epoch: int = 0,
+    *,
+    idle_minutes: int = 0,
+    session_start: int | None = None,
 ) -> str:
+    """Подписать сессию.
+
+    `ttl_hours` — АБСОЛЮТНЫЙ потолок жизни сессии от её начала (`session_start`,
+    он же claim `iat0`; None = сейчас). `idle_minutes` > 0 включает скользящее
+    окно бездействия: exp = min(now + idle, начало + потолок). При каждом запросе
+    токен перевыпускается (см. current_session) — так простой дольше idle_minutes
+    выкидывает пользователя на стороне СЕРВЕРА (истёкший exp), а не только гасит
+    вкладку в JS. idle_minutes = 0 — прежнее поведение (exp = now + ttl_hours)."""
     now = int(time.time())
+    start = session_start if session_start is not None else now
+    absolute_deadline = start + ttl_hours * 3600
+    if idle_minutes > 0:
+        exp = min(now + idle_minutes * 60, absolute_deadline)
+    else:
+        exp = absolute_deadline
     payload = {
         "sub": str(session.user_id),
         "username": session.username,
@@ -86,8 +114,10 @@ def encode_session(
         "sv": version,
         # ep — эпоха сессий ЭТОГО пользователя (индивидуальный отзыв/real logout)
         "ep": epoch,
+        # iat0 — начало сессии (для абсолютного потолка при скользящем продлении)
+        "iat0": start,
         "iat": now,
-        "exp": now + ttl_hours * 3600,
+        "exp": exp,
     }
     return jwt.encode(payload, secret, algorithm=_ALGO)
 
@@ -123,6 +153,8 @@ def decode_session(secret: str, token: str, version: int = 1) -> Session | None:
             guilds=guilds,
             # нет claim `ep` (легаси-токен) = эпоха 0
             epoch=int(payload.get("ep", 0)),
+            # нет claim `iat0` (легаси-токен) = отсчитываем потолок от iat/now
+            issued_at=int(payload.get("iat0", payload.get("iat", 0))),
         )
     except (KeyError, ValueError, TypeError):
         return None

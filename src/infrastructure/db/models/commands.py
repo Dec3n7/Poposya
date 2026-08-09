@@ -24,6 +24,11 @@ class BotCommandModel(Base):
     requested_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     result: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # lease: когда и каким процессом команда взята в работу (status='running').
+    # Нужно, чтобы после краша бота между claim и finish строка не осталась
+    # 'running' навсегда: sweep возвращает просроченные lease в очередь.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

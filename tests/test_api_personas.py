@@ -46,7 +46,7 @@ def _cookie(settings, user_id: int) -> str:
         avatar=None,
         guilds=[SessionGuild(id=GUILD, name="G", icon=None)],
     )
-    return encode_session(settings.web_session_secret, session, 24)
+    return encode_session(settings.web_session_secret, session, 24, settings.web_session_version)
 
 
 @pytest.fixture

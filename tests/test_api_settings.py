@@ -10,7 +10,13 @@ from httpx import ASGITransport, AsyncClient
 
 from src.api.app import create_app
 from src.api.container import assemble_container
-from src.api.security import SESSION_COOKIE, Session, SessionGuild, encode_session
+from src.api.security import (
+    PERM_ADMINISTRATOR,
+    SESSION_COOKIE,
+    Session,
+    SessionGuild,
+    encode_session,
+)
 from src.config import Settings
 
 GUILD = 10
@@ -37,13 +43,19 @@ def container(session_factory):
 
 
 def _cookie(settings, manage_guild_ids) -> str:
+    # ADMINISTRATOR: дефолтный клиент — полноправный админ сервера (пер-действие
+    # гейты проверяются отдельно явными масками). None означал бы «прав нет»
+    # (fail-closed) и валил бы негейтовые тесты 403-й.
     session = Session(
         user_id=1,
         username="u",
         avatar=None,
-        guilds=[SessionGuild(id=g, name="G", icon=None) for g in manage_guild_ids],
+        guilds=[
+            SessionGuild(id=g, name="G", icon=None, permissions=PERM_ADMINISTRATOR)
+            for g in manage_guild_ids
+        ],
     )
-    return encode_session(settings.web_session_secret, session, 24)
+    return encode_session(settings.web_session_secret, session, 24, settings.web_session_version)
 
 
 @pytest.fixture

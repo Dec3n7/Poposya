@@ -264,15 +264,79 @@ def test_has_permission_administrator_covers_all():
     assert sess.has_permission(10, PERM_MODERATE_MEMBERS) is True
 
 
-def test_has_permission_legacy_none_is_permissive():
-    # легаси-токен без записанных битов -> старое поведение (всё можно до перелогина)
+def test_has_permission_legacy_none_is_fail_closed():
+    # токен без записанных битов (легаси) -> прав НЕТ (fail-closed). Раньше None
+    # означал «всё можно» — это была дыра; такие токены гасит и рубильник версии.
     sess = Session(
         user_id=1,
         username="u",
         avatar=None,
         guilds=[SessionGuild(id=10, name="G", icon=None)],  # permissions=None
     )
-    assert sess.has_permission(10, PERM_BAN_MEMBERS) is True
+    assert sess.has_permission(10, PERM_BAN_MEMBERS) is False
+
+
+# --- скользящий тайм-аут бездействия (idle session) --------------------------
+
+import time as _time  # noqa: E402
+
+
+def _exp_of(token: str) -> int:
+    return int(jwt.decode(token, _SECRET, algorithms=["HS256"])["exp"])
+
+
+def test_idle_window_shortens_exp():
+    # idle=15 мин при потолке 24 ч -> exp ~ окно бездействия, а не сутки
+    sess = Session(user_id=1, username="u", avatar=None, guilds=[])
+    token = encode_session(_SECRET, sess, 24, 2, idle_minutes=15)
+    now = int(_time.time())
+    exp = _exp_of(token)
+    assert 800 <= exp - now <= 15 * 60 + 5  # около 15 минут, не 24 часа
+
+
+def test_idle_disabled_keeps_absolute_ttl():
+    # idle=0 -> прежнее поведение: exp = now + ttl_hours
+    sess = Session(user_id=1, username="u", avatar=None, guilds=[])
+    token = encode_session(_SECRET, sess, 24, 2)  # idle_minutes по умолчанию 0
+    now = int(_time.time())
+    assert (24 * 3600) - 5 <= _exp_of(token) - now <= 24 * 3600 + 5
+
+
+def test_absolute_cap_clamps_sliding_exp():
+    # начало сессии почти сутки назад: продление НЕ уводит exp за потолок 24 ч
+    sess = Session(user_id=1, username="u", avatar=None, guilds=[])
+    start = int(_time.time()) - (24 * 3600 - 60)  # до потолка ~60 сек
+    token = encode_session(_SECRET, sess, 24, 2, idle_minutes=15, session_start=start)
+    now = int(_time.time())
+    assert _exp_of(token) - now <= 65  # зажато потолком, а не 15 минут
+
+
+def test_expired_idle_token_is_rejected():
+    # токен с истёкшим exp (простой дольше idle) -> сервер отвергает
+    payload = {
+        "sub": "1", "username": "u", "avatar": None, "guilds": [],
+        "sv": 2, "ep": 0, "iat0": int(_time.time()) - 3600,
+        "iat": int(_time.time()) - 3600, "exp": int(_time.time()) - 10,
+    }
+    expired = jwt.encode(payload, _SECRET, algorithm="HS256")
+    assert decode_session(_SECRET, expired, version=2) is None
+
+
+def test_issued_at_roundtrips_for_absolute_cap():
+    start = int(_time.time()) - 5000
+    sess = Session(user_id=1, username="u", avatar=None, guilds=[])
+    token = encode_session(_SECRET, sess, 24, 2, idle_minutes=15, session_start=start)
+    decoded = decode_session(_SECRET, token, version=2)
+    assert decoded is not None and decoded.issued_at == start
+
+
+async def test_me_refreshes_session_cookie(client, mock_discord):
+    # каждый авторизованный запрос перевыпускает куку (скользящее продление)
+    state = await _login_get_state(client)
+    await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+    me = await client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert "poposya_session=" in me.headers.get("set-cookie", "")
 
 
 async def test_me_rejected_after_session_version_bump(mock_discord):

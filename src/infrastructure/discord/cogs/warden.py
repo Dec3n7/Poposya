@@ -3,7 +3,8 @@
 WARDEN — отдельный сервис: наблюдает за контейнерами и в вооружённом режиме
 перезапускает зависшие. Перед плановым деплоем/обслуживанием оператор ставит
 паузу, чтобы сторож не принял рукотворную остановку за отказ и не устроил
-рестарт-войну. Команда зовёт HTTP-API сторожа тем же общим токеном, что и панель.
+рестарт-войну. Команда зовёт HTTP-API сторожа: status — под read-токеном,
+pause/resume — под control-токеном (если задан отдельный; иначе оба по read).
 
 Доступ — только операторам бота (`web_operator_ids`): это глобальная
 инфраструктура, а не настройка конкретного сервера. Ког подключается лишь когда
@@ -38,9 +39,18 @@ class WardenCog(commands.Cog):
         self.bot = bot
         self.settings = settings
 
-    async def _call(self, method: str, path: str, payload: dict | None = None) -> dict:
+    async def _call(
+        self, method: str, path: str, payload: dict | None = None, *, control: bool = False
+    ) -> dict:
         url = self.settings.warden_api_url.rstrip("/") + path
-        headers = {"X-Warden-Token": self.settings.warden_api_token}
+        # управляющие вызовы (pause/resume) — под control-токеном (least
+        # privilege), status — под read-токеном
+        token = (
+            self.settings.warden_control_token_effective
+            if control
+            else self.settings.warden_api_token
+        )
+        headers = {"X-Warden-Token": token}
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.request(method, url, headers=headers, json=payload) as resp:
                 if resp.status == 401:
@@ -70,7 +80,7 @@ class WardenCog(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            state = await self._call("POST", "/pause", {"minutes": int(minutes)})
+            state = await self._call("POST", "/pause", {"minutes": int(minutes)}, control=True)
         except Exception as exc:
             logger.warning("WARDEN /pause: сторож не ответил: %s", exc)
             await interaction.followup.send(
@@ -92,7 +102,7 @@ class WardenCog(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            await self._call("POST", "/resume")
+            await self._call("POST", "/resume", control=True)
         except Exception as exc:
             logger.warning("WARDEN /resume: сторож не ответил: %s", exc)
             await interaction.followup.send(
