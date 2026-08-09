@@ -28,11 +28,17 @@ class TierClampSettingsProvider(ISettingsProvider):
     def get(self, guild_id: int, key: str, default):
         value = self._inner.get(guild_id, key, default)
         cap = TIERABLE.get(key)
-        # нетарифный ключ, либо нескалярный лимит (кастомный кламп — позже)
-        if cap is None or cap.special:
+        if cap is None:  # нетарифный ключ
             return value
         # Premium/Pro не зажимаются
         if self._ent.tier(guild_id) >= PlanTier.PREMIUM:
+            return value
+        # free-тариф: зажать по типу лимита
+        if cap.special == "dict_per_level":
+            return self._clamp_dict(value, cap)
+        if cap.special == "list_length":
+            return value[: cap.free_limit] if isinstance(value, list) else value
+        if cap.special:  # неизвестный special — не трогаем
             return value
         return self._clamp(value, cap)
 
@@ -45,6 +51,17 @@ class TierClampSettingsProvider(ISettingsProvider):
         if cap.direction is ClampDir.MAX:
             return min(value, cap.free_limit)
         return max(value, cap.free_limit)
+
+    @staticmethod
+    def _clamp_dict(value, cap: TierCap):
+        """Кламп словаря вида {уровень: лимит} — каждое значение не выше потолка
+        (напр. ai_rate_limits_by_level: на free меньше реплик/час на всех уровнях)."""
+        if not isinstance(value, dict):
+            return value
+        return {
+            k: (min(v, cap.free_limit) if isinstance(v, int) and not isinstance(v, bool) else v)
+            for k, v in value.items()
+        }
 
     def __getattr__(self, name):
         # set/set_many/reset/resolved/current/load_all/reload_guild/is_override/

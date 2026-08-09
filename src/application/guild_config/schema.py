@@ -324,8 +324,10 @@ TIERABLE: dict[str, TierCap] = {
     "finds_min_interval_hours": TierCap(24, ClampDir.MIN, note="находки реже"),
     "finds_claim_cooldown_hours": TierCap(24, ClampDir.MIN, note="длиннее кулдаун похода"),
     # нескалярные — кламп кастомным кодом (не простым min/max)
+    # ГЛАВНЫЙ AI-paywall: на free каждый уровень зажат потолком (реплик/час).
+    # 10 -> низкие уровни и так ≤10 (без изменений), высокие срезаются с сотен до 10.
     "ai_rate_limits_by_level": TierCap(
-        0, ClampDir.MAX, special="dict_per_level", note="ГЛАВНЫЙ AI-paywall; кламп по уровням"
+        10, ClampDir.MAX, special="dict_per_level", note="AI-реплик/час на free ≤10/уровень"
     ),
     "autorole_ids": TierCap(1, ClampDir.MAX, special="list_length", note="free: 1 автороль"),
 }

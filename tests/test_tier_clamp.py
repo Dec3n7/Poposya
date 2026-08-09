@@ -79,14 +79,34 @@ def test_non_tierable_key_passes_through_on_free():
     assert p.get(1, "warn_threshold", 0) == 3
 
 
-def test_special_keys_pass_through_on_free():
-    """Нескалярные лимиты (dict/list) простым min/max не клампятся."""
-    specials = [k for k, c in TIERABLE.items() if c.special]
-    assert specials, "ожидался хотя бы один special-кап"
-    for key in specials:
-        inner = _FakeProvider({key: {7: 999}})
-        p = TierClampSettingsProvider(inner, _FixedTier(PlanTier.FREE))
-        assert p.get(1, key, None) == {7: 999}, key
+def _special_key(kind: str) -> str:
+    for key, cap in TIERABLE.items():
+        if cap.special == kind:
+            return key
+    raise AssertionError(f"нет {kind}-капа в TIERABLE")
+
+
+def test_dict_per_level_clamps_each_value_on_free():
+    key = _special_key("dict_per_level")
+    ceiling = TIERABLE[key].free_limit
+    inner = _FakeProvider({key: {1: 5, 4: 40, 7: 240}})
+    p = TierClampSettingsProvider(inner, _FixedTier(PlanTier.FREE))
+    # каждое значение зажато потолком; уже низкие — не тронуты
+    assert p.get(1, key, {}) == {1: min(5, ceiling), 4: ceiling, 7: ceiling}
+    # Premium — без клампа
+    p_prem = TierClampSettingsProvider(inner, _FixedTier(PlanTier.PREMIUM))
+    assert p_prem.get(1, key, {}) == {1: 5, 4: 40, 7: 240}
+
+
+def test_list_length_truncates_on_free():
+    key = _special_key("list_length")
+    n = TIERABLE[key].free_limit
+    inner = _FakeProvider({key: [10, 20, 30, 40]})
+    p = TierClampSettingsProvider(inner, _FixedTier(PlanTier.FREE))
+    assert p.get(1, key, []) == [10, 20, 30, 40][:n]
+    # Premium — полный список
+    p_prem = TierClampSettingsProvider(inner, _FixedTier(PlanTier.PREMIUM))
+    assert p_prem.get(1, key, []) == [10, 20, 30, 40]
 
 
 def test_delegates_writes_and_resolved():
