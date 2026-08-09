@@ -183,6 +183,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.introduce import IntroduceCog
         from src.infrastructure.discord.cogs.log_relay import LogRelayCog
         from src.infrastructure.discord.cogs.onboarding import OnboardingCog
+        from src.infrastructure.discord.cogs.premium import PremiumCog
         from src.infrastructure.discord.cogs.privacy import PrivacyCog
         from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
@@ -191,6 +192,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.tempvoice import TempVoiceCog
         from src.infrastructure.discord.cogs.warden import WardenCog
 
+        await self.add_cog(PremiumCog(self, self.container.settings, entitlements=entitlements))
         await self.add_cog(LogRelayCog(self, self.container.settings))
         await self.add_cog(RoleMirrorCog(self, self.container.roles))
         await self.add_cog(AutoRoleCog(self, gs))
