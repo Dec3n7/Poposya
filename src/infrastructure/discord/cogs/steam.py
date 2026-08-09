@@ -21,7 +21,7 @@ from src.domain.steam.entities import TrackedGame
 from src.domain.steam.refs import header_url, parse_app_ref, store_url
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.access import can_manage_feature
-from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.feature_flags import block_if_module_off, require_tier
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.persona_service import RegistryPersona
 from src.infrastructure.steam.bbcode import render_news
@@ -44,12 +44,14 @@ class SteamCog(commands.Cog):
         container: SteamContainer,
         settings: Settings,
         guild_settings=None,
+        entitlements=None,
         persona=None,
     ):
         self.bot = bot
         self.steam = container
         self.settings = settings
         self.gs = guild_settings
+        self.entitlements = entitlements
         self.persona = persona if persona is not None else RegistryPersona()
         self._loop_started = False
         self._tasks: list[asyncio.Task] = []
@@ -59,7 +61,9 @@ class SteamCog(commands.Cog):
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(interaction, self.settings, self.gs, "steam_enabled")
+        if not await block_if_module_off(interaction, self.settings, self.gs, "steam_enabled"):
+            return False
+        return await require_tier(interaction, self.entitlements, "steam_enabled")
 
     def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         for task in self._tasks:

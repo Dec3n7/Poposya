@@ -16,7 +16,7 @@ from src.config import Settings
 from src.domain.shared.holidays import HolidayCalendar
 from src.infrastructure.discord.accent import accent
 from src.infrastructure.discord.channels import is_designated_main, resolve_channel
-from src.infrastructure.discord.feature_flags import flag_on
+from src.infrastructure.discord.feature_flags import flag_on, tier_allows
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ class ActivityCog(commands.Cog):
         mood: MoodTracker,
         guild_settings=None,
         persona=None,
+        entitlements=None,  # IEntitlements — «Альбом» тарифицируется (Premium)
     ):
         self.bot = bot
         self.container = container
@@ -47,6 +48,7 @@ class ActivityCog(commands.Cog):
         self.settings = settings
         self.mood = mood
         self.gs = guild_settings
+        self.entitlements = entitlements
         # голос кога — из каталога фраз персоны; без PersonaService (тесты) —
         # дефолты реестра (RegistryPersona)
         self.persona = persona if persona is not None else RegistryPersona()
@@ -246,6 +248,8 @@ class ActivityCog(commands.Cog):
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
             return
+        if not tier_allows(self.entitlements, guild.id, "activity_album"):
+            return  # «Альбом» — Premium; на free тихо не постим
         if not self._feature(guild.id, "activity_album"):
             return
         album = resolve_channel(

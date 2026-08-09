@@ -494,7 +494,12 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
             await interaction.response.send_message(self._p(gid, "fun.send_self"), ephemeral=True)
             return
         key = f"send:{gid}:{interaction.user.id}"
-        if not self._send_limiter.try_acquire(key, self.settings.send_per_hour):
+        send_per_hour = (
+            self.gs.get(gid, "send_per_hour", self.settings.send_per_hour)
+            if self.gs is not None
+            else self.settings.send_per_hour
+        )
+        if not self._send_limiter.try_acquire(key, send_per_hour):
             await interaction.response.send_message(
                 self._p(gid, "fun.send_rate_limited"), ephemeral=True
             )

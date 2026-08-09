@@ -26,7 +26,7 @@ from src.application.digest.format import (
     weekday_name,
 )
 from src.config import Settings
-from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.feature_flags import block_if_module_off, require_tier
 from src.infrastructure.discord.interaction_ctx import guild_of
 
 logger = logging.getLogger(__name__)
@@ -45,12 +45,14 @@ class DigestCog(commands.Cog):
         chat,
         settings: Settings,
         guild_settings=None,
+        entitlements=None,
     ):
         self.bot = bot
         self.build = build_weekly_digest
         self.chat = chat
         self.settings = settings
         self.gs = guild_settings
+        self.entitlements = entitlements
         self._loop_started = False
         self._task: asyncio.Task | None = None
         # (guild_id, iso_year, iso_week) уже опубликованные — не дублируем за вечер
@@ -61,7 +63,9 @@ class DigestCog(commands.Cog):
         return self.gs.get(guild_id, key, default) if self.gs is not None else default
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(interaction, self.settings, self.gs, "digest_enabled")
+        if not await block_if_module_off(interaction, self.settings, self.gs, "digest_enabled"):
+            return False
+        return await require_tier(interaction, self.entitlements, "digest_enabled")
 
     def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
         if self._task is not None:

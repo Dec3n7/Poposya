@@ -15,6 +15,7 @@ from discord.ext import commands
 
 from src.application.staykick.di import StayKickContainer
 from src.config import Settings
+from src.infrastructure.discord.feature_flags import tier_allows
 from src.infrastructure.persona_service import RegistryPersona
 
 logger = logging.getLogger(__name__)
@@ -89,11 +90,13 @@ class StayKickCog(commands.Cog):
         settings: Settings,
         guild_settings=None,
         persona=None,  # PersonaService — банки фраз (голос кога)
+        entitlements=None,  # IEntitlements — staykick тарифицируется (Pro)
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
         self.gs = guild_settings
+        self.entitlements = entitlements
         self.persona = persona if persona is not None else RegistryPersona()
         self._loop_task: asyncio.Task | None = None
 
@@ -120,6 +123,10 @@ class StayKickCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
+        # тариф ниже Pro -> новых кандидатов на кик не заводим (уже
+        # запланированные обрабатываются как есть — grace при downgrade)
+        if not tier_allows(self.entitlements, member.guild.id, "staykick_enabled"):
+            return
         if member.bot or not self._cfg(member.guild.id, "staykick_enabled"):
             return
         try:

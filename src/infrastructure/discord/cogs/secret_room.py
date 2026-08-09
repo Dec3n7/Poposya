@@ -11,7 +11,11 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.domain.events.bus import IEventBus
 from src.domain.relationship.events import RelationshipRoleChanged
-from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.feature_flags import (
+    block_if_module_off,
+    require_tier,
+    tier_allows,
+)
 from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.persona_service import RegistryPersona
 
@@ -32,12 +36,14 @@ class SecretRoomCog(commands.Cog):
         settings: Settings,
         event_bus: IEventBus,
         guild_settings=None,
+        entitlements=None,
         persona=None,
     ):
         self.bot = bot
         self.container = container
         self.settings = settings
         self.gs = guild_settings
+        self.entitlements = entitlements
         # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
         self.persona = persona if persona is not None else RegistryPersona()
         # индекс роли, начиная с которого выдаётся ключ и виден канал:
@@ -49,7 +55,9 @@ class SecretRoomCog(commands.Cog):
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(interaction, self.settings, self.gs, "secret_room_enabled")
+        if not await block_if_module_off(interaction, self.settings, self.gs, "secret_room_enabled"):
+            return False
+        return await require_tier(interaction, self.entitlements, "secret_room_enabled")
 
     def _role_names(self, guild_id: int) -> list[str]:
         """Имена ролей-статусов сервера (per-guild override или глобальный дефолт)."""
@@ -67,6 +75,10 @@ class SecretRoomCog(commands.Cog):
     # --- выдача ключа при достижении уровня ---
 
     async def _on_role_changed(self, event: RelationshipRoleChanged) -> None:
+        # тайная комната — Premium; на free ключ не выдаём (иначе он бесполезен:
+        # /secret всё равно закрыт гейтом)
+        if not tier_allows(self.entitlements, event.guild_id, "secret_room_enabled"):
+            return
         crossed = (
             event.new_role_index is not None
             and event.new_role_index >= self._min_role_index

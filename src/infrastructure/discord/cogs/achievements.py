@@ -20,7 +20,7 @@ from src.domain.events.bus import IEventBus
 from src.domain.finds.events import FindClaimed
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
 from src.infrastructure.discord.channels import resolve_channel
-from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
+from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on, require_tier
 from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
@@ -48,11 +48,13 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
         card_renderer: CardRenderer,
         guild_settings=None,
         persona=None,
+        entitlements=None,
     ):
         self.bot = bot
         self.achievements = achievements
         self.settings = settings
         self.gs = guild_settings
+        self.entitlements = entitlements
         self.renderer = card_renderer
         self.persona = persona if persona is not None else RegistryPersona()
         # события, меняющие показатели → своевременная карточка. Лайки/войс/
@@ -62,9 +64,11 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
         event_bus.subscribe(ExclusiveTransferred, self._on_exclusive)  # type: ignore[arg-type]
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await block_if_module_off(
+        if not await block_if_module_off(
             interaction, self.settings, self.gs, "achievements_enabled"
-        )
+        ):
+            return False
+        return await require_tier(interaction, self.entitlements, "achievements_enabled")
 
     # ── реакция на события: открыть заслуженное и объявить ────────────────────
 

@@ -97,6 +97,9 @@ class PoposyaBot(commands.Bot):
         mood = MoodTracker()
 
         gs = cast(GuildSettingsService, self.container.guild_settings)
+        # тарифы серверов: коги Premium/Pro-модулей гейтят себя по нему (require_tier
+        # для команд, tier_allows для событий). На free-тарифе модуль недоступен.
+        entitlements = self.container.entitlements
         music_cog = MusicCog(self, self.container.music, gs, persona=self.container.persona)
         await self.add_cog(music_cog)
         # presence из персоны: строки статуса берутся из библиотек, а по NOTIFY
@@ -119,6 +122,7 @@ class PoposyaBot(commands.Bot):
                 mood,
                 gs,
                 persona=persona,
+                entitlements=entitlements,
             )
         )
         await self.add_cog(
@@ -200,10 +204,24 @@ class PoposyaBot(commands.Bot):
         await self.add_cog(OnboardingCog(self, self.container.settings, persona=persona))
         await self.add_cog(ConfigCog(self, gs, persona=persona))
         await self.add_cog(
-            GitCog(self, self.container.repos, self.container.settings, gs, persona=persona)
+            GitCog(
+                self,
+                self.container.repos,
+                self.container.settings,
+                gs,
+                persona=persona,
+                entitlements=entitlements,
+            )
         )
         await self.add_cog(
-            SteamCog(self, self.container.steam, self.container.settings, gs, persona=persona)
+            SteamCog(
+                self,
+                self.container.steam,
+                self.container.settings,
+                gs,
+                persona=persona,
+                entitlements=entitlements,
+            )
         )
         await self.add_cog(
             BanwatchCog(self, self.container.banwatch, self.container.settings, gs, persona=persona)
@@ -220,6 +238,7 @@ class PoposyaBot(commands.Bot):
                 cast(CardRenderer, self.container.card_renderer),
                 gs,
                 persona=persona,
+                entitlements=entitlements,
             )
         )
         await self.add_cog(
@@ -229,6 +248,7 @@ class PoposyaBot(commands.Bot):
                 self.container.ai_chat.chat_service,
                 self.container.settings,
                 gs,
+                entitlements=entitlements,
             )
         )
         await self.add_cog(
@@ -238,6 +258,7 @@ class PoposyaBot(commands.Bot):
                 self.container.settings,
                 gs,
                 persona=persona,
+                entitlements=entitlements,
             )
         )
         await self.add_cog(
@@ -264,6 +285,7 @@ class PoposyaBot(commands.Bot):
                 self.container.event_bus,
                 gs,
                 persona=persona,
+                entitlements=entitlements,
             )
         )
         if self.container.ai_chat.chat_service is not None:
