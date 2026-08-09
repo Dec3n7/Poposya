@@ -24,7 +24,6 @@ from src.domain.relationship.entities import RelationshipProfile
 from src.domain.relationship.policies import PointsToLevelPolicy
 from src.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.events.in_memory_bus import InMemoryEventBus
-from src.infrastructure.render.cards import ICONS
 
 _POLICY = PointsToLevelPolicy(thresholds=(100, 250, 450, 700, 950, 1200), exclusive_threshold=1250)
 
@@ -49,7 +48,7 @@ def test_catalog_integrity():
     assert len(BY_ID) == len(CATALOG)
     for a in CATALOG:
         assert a.tier in set(Tier)
-        assert a.icon in ICONS, f"иконка {a.icon!r} отсутствует в рендере"
+        assert a.icon, f"у ачивки {a.id} нет эмодзи-эмблемы"  # непустая эмодзи
         assert a.stat_label and a.name and a.description
 
 

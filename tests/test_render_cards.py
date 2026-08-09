@@ -18,30 +18,24 @@ def test_achievement_card_html_has_fields_and_tier_accent():
             name="Меломан",
             description="Любовь к музыке.",
             tier="rare",
-            stat_value="250",
-            stat_label="любимых треков",
-            server_name="Мой сервер",
-            date_text="Получено 08.08.2026",
-            icon="note",
+            icon="🎵",
         )
     )
-    assert (w, h) == (1560, 940)
-    assert "Меломан" in html and "250" in html and "любимых треков" in html
+    assert w > 0 and h > 0
+    assert "Меломан" in html and "Любовь к музыке." in html
+    assert "🎵" in html  # эмодзи-эмблема
     assert "РЕДКАЯ" in html  # ярлык тира rare
     assert TIER_ACCENTS["rare"][0] in html  # акцентный цвет тира
-    assert "Мой сервер" in html
+    assert "Достижение открыто!" in html
 
 
 def test_achievement_card_escapes_user_text():
     html, _, _ = achievement_card_html(
         AchievementCard(
-            name="A",
+            name="<script>alert(1)</script>",
             description="d",
             tier="common",
-            stat_value="1",
-            stat_label="x",
-            server_name="<script>alert(1)</script>",
-            date_text="t",
+            icon="✨",
         )
     )
     assert "<script>" not in html

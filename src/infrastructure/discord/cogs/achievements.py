@@ -8,16 +8,14 @@
 
 import io
 import logging
-from datetime import UTC, datetime
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from src.application.achievements.di import AchievementsContainer
-from src.application.achievements.use_cases import EvalResult
 from src.domain.achievements.catalog import CATALOG
-from src.domain.achievements.entities import Achievement, Tier, UserStats
+from src.domain.achievements.entities import Achievement, Tier
 from src.domain.events.bus import IEventBus
 from src.domain.finds.events import FindClaimed
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
@@ -106,17 +104,11 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
             return
         member = guild.get_member(user_id)
         mention = member.mention if member is not None else f"<@{user_id}>"
-        server_name = guild.name
         for achievement in result.unlocked:
-            await self._announce(channel, mention, server_name, achievement, result)
+            await self._announce(channel, mention, achievement)
 
     async def _announce(
-        self,
-        channel: discord.TextChannel,
-        mention: str,
-        server_name: str,
-        achievement: Achievement,
-        result: EvalResult,
+        self, channel: discord.TextChannel, mention: str, achievement: Achievement
     ) -> None:
         text = self._p(
             channel.guild.id,
@@ -124,7 +116,7 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
             user_mention=mention,
             name=achievement.name,
         )
-        png = await self._render(achievement, result.stats, server_name)
+        png = await self._render(achievement)
         try:
             if png is not None:
                 await channel.send(
@@ -135,18 +127,12 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
         except discord.HTTPException:
             logger.warning("Ачивки: не удалось отправить уведомление", exc_info=True)
 
-    async def _render(
-        self, achievement: Achievement, stats: UserStats, server_name: str
-    ) -> bytes | None:
+    async def _render(self, achievement: Achievement) -> bytes | None:
         try:
             card = AchievementCard(
                 name=achievement.name,
                 description=achievement.description,
                 tier=achievement.tier.value,
-                stat_value=str(achievement.stat(stats)),
-                stat_label=achievement.stat_label,
-                server_name=server_name,
-                date_text=f"Получено {datetime.now(UTC):%d.%m.%Y}",
                 icon=achievement.icon,
             )
             html, w, h = achievement_card_html(card)

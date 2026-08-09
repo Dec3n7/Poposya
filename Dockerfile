@@ -13,10 +13,11 @@ FROM python:3.12-slim
 # postgresql-client — pg_dump для бэкапов Postgres (на trixie это клиент 17,
 # он дампит сервер 16; при работе на SQLite просто не используется);
 # fonts-dejavu-core — кириллический TTF для Chromium-рендера карточек (в slim
-# нет системных шрифтов; без него текст карточек — «квадратики»)
+# нет системных шрифтов; без него текст карточек — «квадратики»);
+# fonts-noto-color-emoji — цветные эмодзи-эмблемы значков ачивок
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ffmpeg libopus0 postgresql-client fonts-dejavu-core \
+        ffmpeg libopus0 postgresql-client fonts-dejavu-core fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

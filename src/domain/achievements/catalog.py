@@ -1,8 +1,8 @@
 """Каталог достижений (MVP). Все условия выводимы из текущего состояния —
 значит открываются и ретроактивно (бэкфилл), и без единого нового счётчика.
 
-Тиры — словарь редкостей (common→legendary), как у находок. Иконки — ключи из
-render/cards.py (сейчас доступны "note" и "star")."""
+Тиры — словарь редкостей (common→legendary), как у находок. Иконка ачивки —
+эмодзи-эмблема (рендерится в значке карточки; в образе нужен цветной эмодзи-шрифт)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ def _a(
     return Achievement(id, name, description, tier, icon, stat_label, stat, unlocked)
 
 
-# Показатели-геттеры для карточки (крупное число + подпись).
+# Показатели-геттеры для будущей витрины (число + подпись); карточка B1 их не
+# рисует, но домен хранит — пригодятся для /achievements-плиток.
 _POINTS = (lambda s: s.points, "очков")
 _DEEP = (lambda s: s.deep_dialogs, "глубоких диалогов")
 _FINDS = (lambda s: s.finds_count, "находок")
@@ -36,7 +37,7 @@ CATALOG: list[Achievement] = [
         "Случайный прохожий",
         "Первый шаг к Попосе сделан.",
         Tier.COMMON,
-        "star",
+        "☕",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 1,
@@ -46,7 +47,7 @@ CATALOG: list[Achievement] = [
         "Знакомый силуэт",
         "Попося начала тебя узнавать.",
         Tier.COMMON,
-        "star",
+        "🌧️",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 2,
@@ -56,7 +57,7 @@ CATALOG: list[Achievement] = [
         "Занятный собеседник",
         "С тобой ей интересно.",
         Tier.UNCOMMON,
-        "star",
+        "🎨",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 3,
@@ -66,7 +67,7 @@ CATALOG: list[Achievement] = [
         "На одной волне",
         "Вы с Попосей на одной волне.",
         Tier.UNCOMMON,
-        "star",
+        "🎧",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 4,
@@ -76,7 +77,7 @@ CATALOG: list[Achievement] = [
         "Вечерняя компания",
         "Ты — часть её вечеров.",
         Tier.RARE,
-        "star",
+        "🍷",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 5,
@@ -86,7 +87,7 @@ CATALOG: list[Achievement] = [
         "Особенный",
         "Попося дорожит тобой особенно.",
         Tier.RARE,
-        "star",
+        "🖤",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.level >= 6,
@@ -96,7 +97,7 @@ CATALOG: list[Achievement] = [
         "Единственный",
         "Единственный на сервере — у самого её сердца.",
         Tier.LEGENDARY,
-        "star",
+        "👑",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.is_exclusive,
@@ -106,7 +107,7 @@ CATALOG: list[Achievement] = [
         "Открытая душа",
         "Ты рассказал Попосе о себе.",
         Tier.COMMON,
-        "star",
+        "📝",
         _POINTS[1],
         _POINTS[0],
         lambda s: s.survey_completed,
@@ -116,7 +117,7 @@ CATALOG: list[Achievement] = [
         "По душам",
         "Пять долгих разговоров с Попосей.",
         Tier.UNCOMMON,
-        "star",
+        "💬",
         _DEEP[1],
         _DEEP[0],
         lambda s: s.deep_dialogs >= 5,
@@ -126,7 +127,7 @@ CATALOG: list[Achievement] = [
         "Родственная душа",
         "Двадцать пять глубоких диалогов.",
         Tier.RARE,
-        "star",
+        "🫂",
         _DEEP[1],
         _DEEP[0],
         lambda s: s.deep_dialogs >= 25,
@@ -137,7 +138,7 @@ CATALOG: list[Achievement] = [
         "Первая находка",
         "Твоя первая ночная находка.",
         Tier.COMMON,
-        "star",
+        "🔦",
         _FINDS[1],
         _FINDS[0],
         lambda s: s.finds_count >= 1,
@@ -147,7 +148,7 @@ CATALOG: list[Achievement] = [
         "Ночной охотник",
         "Десять находок в коллекции.",
         Tier.UNCOMMON,
-        "star",
+        "🦉",
         _FINDS[1],
         _FINDS[0],
         lambda s: s.finds_count >= 10,
@@ -157,7 +158,7 @@ CATALOG: list[Achievement] = [
         "Коллекционер",
         "Полсотни находок — впечатляет.",
         Tier.RARE,
-        "star",
+        "🗃️",
         _FINDS[1],
         _FINDS[0],
         lambda s: s.finds_count >= 50,
@@ -167,7 +168,7 @@ CATALOG: list[Achievement] = [
         "Редкая удача",
         "Тебе попалась легендарная находка.",
         Tier.RARE,
-        "star",
+        "💎",
         _FINDS[1],
         _FINDS[0],
         lambda s: s.has_legendary_find,
@@ -178,7 +179,7 @@ CATALOG: list[Achievement] = [
         "Меломан",
         "Полсотни треков в личной коллекции.",
         Tier.UNCOMMON,
-        "note",
+        "🎵",
         _LIKES[1],
         _LIKES[0],
         lambda s: s.likes_count >= 50,
@@ -188,7 +189,7 @@ CATALOG: list[Achievement] = [
         "Музыкальный гурман",
         "Двести пятьдесят любимых треков.",
         Tier.RARE,
-        "note",
+        "🎶",
         _LIKES[1],
         _LIKES[0],
         lambda s: s.likes_count >= 250,
@@ -199,7 +200,7 @@ CATALOG: list[Achievement] = [
         "Завсегдатай войса",
         "Пятьдесят часов в голосовых.",
         Tier.UNCOMMON,
-        "star",
+        "🎙️",
         _VOICE[1],
         _VOICE[0],
         lambda s: s.voice_hours >= 50,
@@ -209,7 +210,7 @@ CATALOG: list[Achievement] = [
         "Голос сервера",
         "Сто часов в голосовых.",
         Tier.RARE,
-        "star",
+        "🔊",
         _VOICE[1],
         _VOICE[0],
         lambda s: s.voice_hours >= 100,
@@ -219,7 +220,7 @@ CATALOG: list[Achievement] = [
         "Житель войса",
         "Пятьсот часов в голосовых — легенда.",
         Tier.LEGENDARY,
-        "star",
+        "🏠",
         _VOICE[1],
         _VOICE[0],
         lambda s: s.voice_hours >= 500,
