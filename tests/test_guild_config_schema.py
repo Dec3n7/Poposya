@@ -6,10 +6,26 @@ from pydantic import ValidationError
 
 from src.application.guild_config.schema import (
     KEY_KINDS,
+    MODULE_MIN_TIER,
     SETTING_KEYS,
+    TIER_NEVER,
+    TIERABLE,
+    ClampDir,
     GuildSettings,
 )
 from src.config import Settings
+
+
+def _field_range(key: str):
+    lo = hi = None
+    for meta in GuildSettings.model_fields[key].metadata:
+        for attr in ("ge", "gt"):
+            if hasattr(meta, attr):
+                lo = getattr(meta, attr)
+        for attr in ("le", "lt"):
+            if hasattr(meta, attr):
+                hi = getattr(meta, attr)
+    return lo, hi
 
 
 def test_defaults_match_global_settings():
@@ -83,6 +99,45 @@ def test_exclusive_threshold_above_last():
 def test_finds_interval_order():
     with pytest.raises(ValidationError, match="интервал находок"):
         GuildSettings(finds_min_interval_hours=48, finds_max_interval_hours=12)
+
+
+def test_tierable_keys_exist_in_schema():
+    """Каждый тарифицируемый ключ должен быть реальным полем GuildSettings —
+    иначе кламп будет ссылаться на несуществующую настройку."""
+    unknown = [k for k in TIERABLE if k not in GuildSettings.model_fields]
+    assert unknown == [], f"TIERABLE ссылается на несуществующие ключи: {unknown}"
+
+
+def test_tierable_and_never_are_disjoint():
+    """Ключ не может быть одновременно тарифицируемым и «неприкосновенным»."""
+    overlap = set(TIERABLE) & TIER_NEVER
+    assert not overlap, f"ключ и клампится, и неприкосновенен: {overlap}"
+
+
+def test_tierable_special_matches_kind():
+    """Нескалярные лимиты помечены special и соответствуют своему kind;
+    скалярные — это int-поля с free_limit внутри допустимого диапазона."""
+    for key, cap in TIERABLE.items():
+        assert isinstance(cap.direction, ClampDir)
+        if cap.special == "dict_per_level":
+            assert KEY_KINDS[key] == "dict", key
+        elif cap.special == "list_length":
+            assert KEY_KINDS[key] == "list", key
+        else:
+            assert cap.special == "", f"{key}: неизвестный special {cap.special!r}"
+            assert KEY_KINDS[key] == "int", f"{key}: скалярный кап должен быть int"
+            lo, hi = _field_range(key)
+            if lo is not None:
+                assert cap.free_limit >= lo, f"{key}: free_limit {cap.free_limit} < min {lo}"
+            if hi is not None:
+                assert cap.free_limit <= hi, f"{key}: free_limit {cap.free_limit} > max {hi}"
+
+
+def test_module_min_tier_keys_are_bool_flags():
+    """Гейт по тарифу вешается на bool-тумблеры существующих модулей."""
+    for key in MODULE_MIN_TIER:
+        assert key in GuildSettings.model_fields, f"нет такого ключа: {key}"
+        assert KEY_KINDS[key] == "bool", f"{key}: гейт по тарифу только на bool-флаг"
 
 
 def test_points_policy_reflects_overrides():

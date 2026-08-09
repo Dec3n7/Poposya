@@ -1,7 +1,25 @@
 """DTO ответов API (Pydantic). ID Discord — строками: snowflake больше 2^53 и
 в JS-числе теряет точность."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class EntitlementDTO(BaseModel):
+    """Тариф (подписка) сервера — для панели. Показывается только оператору бота."""
+
+    guild_id: str
+    tier: str  # эффективный тариф: free | premium | pro
+    active: bool  # есть ли явная (неистёкшая) подписка, а не просто дефолт
+    expires_at: str | None = None  # ISO8601 UTC; null = бессрочно / нет подписки
+    default_tier: str  # тариф по умолчанию (ENTITLEMENTS_DEFAULT_TIER) — для контекста
+    enforced: bool  # включён ли enforcement (default_tier != pro)
+
+
+class EntitlementGrant(BaseModel):
+    """Ручная выдача подписки: тариф + срок в днях (N времени)."""
+
+    tier: str  # free | premium | pro (обычно premium/pro)
+    duration_days: int | None = Field(default=None, ge=0, le=3650)  # null/0 = бессрочно
 
 
 class GuildPermsDTO(BaseModel):

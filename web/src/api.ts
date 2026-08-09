@@ -37,6 +37,7 @@ import type {
   RolesView,
   SavedRoleTemplate,
   SettingField,
+  Subscription,
   Trends,
   WardenControlResult,
   WardenSnapshot,
@@ -422,6 +423,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ persona_id: personaId }),
     }),
+  // тарифы серверов (только оператор): просмотр/выдача/снятие подписки
+  entitlement: (guildId: string): Promise<Subscription> =>
+    req<Subscription>(`/api/guilds/${guildId}/entitlement`),
+  grantEntitlement: (
+    guildId: string,
+    tier: string,
+    durationDays: number | null,
+  ): Promise<Subscription> =>
+    req<Subscription>(`/api/guilds/${guildId}/entitlement`, {
+      method: "PUT",
+      body: JSON.stringify({ tier, duration_days: durationDays }),
+    }),
+  revokeEntitlement: (guildId: string): Promise<Subscription> =>
+    req<Subscription>(`/api/guilds/${guildId}/entitlement`, { method: "DELETE" }),
   wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
   wardenEnabled: (): Promise<{ enabled: boolean }> =>
     req<{ enabled: boolean }>("/api/warden/enabled"),

@@ -15,6 +15,7 @@ import { Modules } from "./Modules";
 import { Music } from "./Music";
 import { People } from "./People";
 import { Persona } from "./Persona";
+import { Subscription } from "./Subscription";
 import { Roles } from "./Roles";
 import { Warden } from "./Warden";
 
@@ -30,6 +31,7 @@ type Tab =
   | "audit"
   | "modules"
   | "settings"
+  | "subscription"
   | "persona"
   | "warden";
 
@@ -119,6 +121,15 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
 // per-guild, поэтому живёт в рельсе сервера, но видна лишь оператору
 const OPERATOR_TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   {
+    // Подписка сервера (тариф). Выдаёт вручную оператор; per-guild, поэтому в
+    // рельсе сервера, но видна лишь оператору (require_operator стережёт бэк).
+    id: "subscription",
+    label: "Подписка",
+    icon: (
+      <svg {...I}><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="M3 10h18M7 15h4" /></svg>
+    ),
+  },
+  {
     id: "persona",
     label: "Персона",
     icon: (
@@ -149,6 +160,7 @@ const TAB_KEYWORDS: Record<Tab, string> = {
   audit: "журнал аудит история действия",
   modules: "модули тумблеры включить выключить",
   settings: "настройки конфиг каналы пороги дайджест github steam",
+  subscription: "подписка тариф premium pro free монетизация выдать срок",
   persona: "персона фразы голос текст правила rules приветствие",
   warden: "warden сторож инциденты рестарт мониторинг",
 };
@@ -382,6 +394,7 @@ export function GuildView({
             {tab === "audit" && <Audit guild={guild} />}
             {tab === "modules" && <Modules guild={guild} />}
             {tab === "settings" && <GuildSettings guild={guild} />}
+            {tab === "subscription" && <Subscription guild={guild} />}
             {tab === "persona" && <Persona guild={guild} />}
             {tab === "warden" && <Warden />}
           </ErrorBoundary>
