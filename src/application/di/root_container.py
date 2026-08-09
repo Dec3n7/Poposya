@@ -620,7 +620,9 @@ def build_root_container(settings: Settings) -> RootContainer:
     )
 
     achievements = AchievementsContainer(
-        evaluate=EvaluateAchievementsUseCase(uow_factory, policy, settings_provider=settings_reader),
+        evaluate=EvaluateAchievementsUseCase(
+            uow_factory, policy, settings_provider=settings_reader
+        ),
         get=GetAchievementsUseCase(uow_factory, policy, settings_provider=settings_reader),
     )
 

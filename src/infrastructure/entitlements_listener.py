@@ -59,9 +59,7 @@ class EntitlementChangeListener(ListenerHealth):
             # NOTIFY за время без соединения не буферизуются — пересинхронизируем весь кэш
             await self._service.load_all()
             self.mark_connected()
-            logger.info(
-                "Листенер тарифов: подключён, слушаю канал %s", ENTITLEMENTS_NOTIFY_CHANNEL
-            )
+            logger.info("Листенер тарифов: подключён, слушаю канал %s", ENTITLEMENTS_NOTIFY_CHANNEL)
             while not conn.is_closed():
                 await asyncio.sleep(_HEARTBEAT)
         finally:

@@ -32,7 +32,7 @@ _TIER_BY_NAME: dict[str, PlanTier] = {t.name.lower(): t for t in PlanTier}
 
 
 def parse_tier(name: str) -> PlanTier:
-    """"free"|"premium"|"pro" -> PlanTier. ValueError на мусоре (понятный текст)."""
+    """ "free"|"premium"|"pro" -> PlanTier. ValueError на мусоре (понятный текст)."""
     try:
         return _TIER_BY_NAME[str(name).strip().lower()]
     except KeyError:
@@ -96,9 +96,7 @@ class EntitlementService(IEntitlements):
         async with self._session_factory() as session:
             row = (
                 await session.execute(
-                    select(GuildEntitlementModel).where(
-                        GuildEntitlementModel.guild_id == guild_id
-                    )
+                    select(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
                 )
             ).scalar_one_or_none()
         parsed = self._parse_row(row) if row is not None else None
@@ -152,9 +150,7 @@ class EntitlementService(IEntitlements):
         async with self._session_factory() as session:
             existing = (
                 await session.execute(
-                    select(GuildEntitlementModel).where(
-                        GuildEntitlementModel.guild_id == guild_id
-                    )
+                    select(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
                 )
             ).scalar_one_or_none()
             if existing is None:
@@ -180,9 +176,7 @@ class EntitlementService(IEntitlements):
         """Снять подписку -> сервер вернётся к тарифу по умолчанию. False — её и не было."""
         async with self._session_factory() as session:
             result = await session.execute(
-                delete(GuildEntitlementModel).where(
-                    GuildEntitlementModel.guild_id == guild_id
-                )
+                delete(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
             )
             existed = rows_affected(result) > 0
             if existed:

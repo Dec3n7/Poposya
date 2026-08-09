@@ -55,7 +55,9 @@ class SecretRoomCog(commands.Cog):
         event_bus.subscribe(RelationshipRoleChanged, self._on_role_changed)  # type: ignore[arg-type]
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not await block_if_module_off(interaction, self.settings, self.gs, "secret_room_enabled"):
+        if not await block_if_module_off(
+            interaction, self.settings, self.gs, "secret_room_enabled"
+        ):
             return False
         return await require_tier(interaction, self.entitlements, "secret_room_enabled")
 
