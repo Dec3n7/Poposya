@@ -79,20 +79,29 @@ docker compose exec -T db pg_restore -U poposya -d poposya --clean --if-exists <
 
 1. Поднимите версию в `requirements.txt` (или `pip install -U <пакет>` в venv и
    впишите новую версию).
-2. `pytest -q` локально + пуш → CI (бэкенд + фронт джобы).
-3. Коммит с версией в сообщении.
+2. **Перегенерируйте `requirements.lock`** (ОБЯЗАТЕЛЬНО — иначе Docker-образ
+   соберётся со старыми версиями, см. ниже).
+3. `pytest -q` локально + пуш → CI (бэкенд + фронт джобы).
+4. Коммит с версией в сообщении (и `requirements.txt`, и `requirements.lock`).
 
 **yt-dlp** ломается на изменениях YouTube чаще остального — держите свежим
 (проверяйте ~раз в 1–2 недели или при жалобах на музыку). Симптом: треки не
-проигрываются / ошибки извлечения → `yt-dlp` вверх.
+проигрываются / ошибки извлечения → `yt-dlp` вверх (не забудьте перелочить).
 
-Полный lock с хэшами (если захотите жёстче):
+### Регенерация requirements.lock (supply-chain: хэши)
+
+`requirements.txt` — человекочитаемый ВХОД; `requirements.lock` — производный
+lock с хэшами ВСЕХ зависимостей, из него Docker-образ ставит через
+`--require-hashes`. Хэши **платформозависимы**, поэтому лок генерируется в том же
+образе, что и сборка (`python:3.12-slim`):
 
 ```bash
-pip install pip-tools
-pip-compile --generate-hashes --output-file=requirements.lock requirements.txt
-# затем в Dockerfile ставить из requirements.lock
+docker run --rm -v "$PWD":/w -w /w python:3.12-slim bash -c \
+  "pip install pip-tools && pip-compile --generate-hashes -o requirements.lock requirements.txt"
 ```
+
+Проверка, что лок не устарел: пересоберите образ (`docker compose build bot`) —
+`--require-hashes` упадёт, если версия в локе не совпала с реально доступной.
 
 ---
 

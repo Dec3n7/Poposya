@@ -27,6 +27,14 @@ class Settings(BaseSettings):
 
     ffmpeg_path: str = "ffmpeg"
 
+    # --- рендер карточек (/rank, ачивки): вынесен в ОТДЕЛЬНЫЙ контейнер renderer ---
+    # Chromium под --no-sandbox — крупнейшая attack surface; держим её вне процесса
+    # бота (без Discord-токена, БД и интернета). Бот шлёт самодостаточный HTML
+    # (аватар вшит data-URI) на HTTP-эндпоинт renderer и получает PNG. Адрес — по
+    # имени сервиса во внутренней docker-сети.
+    renderer_url: str = "http://renderer:8090"
+    renderer_timeout_seconds: float = 20.0
+
     # --- health-эндпоинт (aiohttp, /health и /ready) ---
     health_port: int = 8080
     # токен доступа к /health/full (он светит внутренности: cogs, БД, outbox,

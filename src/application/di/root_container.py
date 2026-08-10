@@ -628,7 +628,7 @@ def build_root_container(settings: Settings) -> RootContainer:
 
     from src.infrastructure.render.browser import CardRenderer
 
-    card_renderer = CardRenderer()
+    card_renderer = CardRenderer(settings.renderer_url, timeout=settings.renderer_timeout_seconds)
 
     return RootContainer(
         settings=settings,

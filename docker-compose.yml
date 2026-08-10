@@ -44,9 +44,15 @@ services:
       # перебило адрес контейнерной базы. Логи — на volume, переживают пересборку.
       DATABASE_URL: ${BOT_DATABASE_URL:?задайте BOT_DATABASE_URL (postgresql+asyncpg://poposya:ПАРОЛЬ@db:5432/poposya) в .env}
       LOG_FILE: /app/data/logs/bot.log
+    # default — общая сеть (db/api/WARDEN); render — приватная до renderer
+    networks:
+      - default
+      - render
     depends_on:
       db:
         condition: service_healthy
+      renderer:
+        condition: service_started
     ports:
       # Только loopback: на 8080 висит /health/full с внутренними метриками
       # (коги/задачи/outbox/ошибки/листенеры) — наружу его публиковать нельзя.
@@ -172,6 +178,39 @@ services:
       start_period: 30s
     volumes:
       - pg_data:/var/lib/postgresql/data
+
+  # Изолированный рендер карточек (HTML → PNG через Chromium). Вынесен из бота:
+  # браузер под --no-sandbox — крупнейшая attack surface, и его компрометация не
+  # должна давать доступ к Discord-токену, БД или сети. Сидит ТОЛЬКО в render-сети
+  # (internal: true — без выхода в интернет), непривилегированный пользователь,
+  # cap_drop ALL, no-new-privileges. Принимает самодостаточный HTML от бота и
+  # отдаёт PNG. Наружу порт не публикуется.
+  renderer:
+    build: ./renderer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Chromium прожорлив к памяти на старте страницы; 512M с запасом. OOM локален.
+    mem_limit: 512m
+    networks:
+      - render
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # обычная bridge-сеть проекта (poposyap_default) — её же снаружи подключает
+  # WARDEN; имя не меняем, иначе сторож потеряет bot/api.
+  default:
+  # приватная сеть бот↔renderer: internal — без выхода в интернет. Даже если
+  # браузер скомпрометируют, ему некуда ходить, и с хоста он недостижим.
+  render:
+    internal: true
 
 volumes:
   bot_data:

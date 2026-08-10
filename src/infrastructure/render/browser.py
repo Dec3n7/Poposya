@@ -1,70 +1,61 @@
-"""HTML → PNG рендер карточек через Playwright + Chromium.
+"""Клиент сервиса рендера карточек (HTML → PNG).
 
-Карточки (`/rank`, ачивки) — это HTML/CSS: glassmorphism, градиенты, свечения и
-SVG-иконки, чего Pillow чисто не даёт. Браузер поднимается один раз на процесс и
-переиспользуется: старт Chromium дорогой (~сотни мс), а на каждую карточку
-заводится лёгкая новая страница.
+Сам браузер (Playwright + Chromium под --no-sandbox) вынесен в ОТДЕЛЬНЫЙ
+изолированный контейнер `renderer` — он самая крупная attack surface, и его
+компрометация не должна давать доступ к Discord-токену, БД и сети. Здесь только
+тонкий HTTP-клиент: бот строит самодостаточный HTML (аватар уже вшит data-URI) и
+просит renderer растеризовать его в PNG.
 
-Блокировка на старте — чтобы параллельные первые запросы не подняли два браузера.
-Сам рендер параллелится страницами и лончера не лочит.
+Интерфейс намеренно тот же, что был у прежнего внутрипроцессного рендера
+(`start()`/`render()`/`close()`) — коги и контейнер менять не пришлось. Если
+renderer недоступен, `render()` бросает исключение, а вызывающий ког показывает
+текстовый фолбэк (как и раньше при сбое браузера).
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
-from playwright.async_api import Browser, Playwright, async_playwright
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
 
 class CardRenderer:
-    """Единый лончер Chromium. `start()` при старте бота, `close()` при остановке.
+    """HTTP-клиент к сервису renderer. `scale=2` — просим рендер в 2× (ретина-
+    качество PNG в Discord); фактический device_scale_factor применяет renderer."""
 
-    `scale=2` — рендер в 2× и отдача чёткого PNG (ретина-качество в Discord)."""
-
-    def __init__(self, scale: int = 2):
+    def __init__(self, url: str, scale: int = 2, timeout: float = 20.0):
+        self._url = url.rstrip("/")
         self._scale = scale
-        self._pw: Playwright | None = None
-        self._browser: Browser | None = None
-        self._start_lock = asyncio.Lock()
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._session: aiohttp.ClientSession | None = None
 
     async def start(self) -> None:
-        async with self._start_lock:
-            if self._browser is not None:
-                return
-            pw = await async_playwright().start()
-            self._pw = pw
-            self._browser = await pw.chromium.launch(
-                args=["--no-sandbox", "--disable-gpu", "--hide-scrollbars"]
-            )
-            logger.info("CardRenderer: Chromium поднят")
+        """Поднимает переиспользуемую HTTP-сессию. Renderer стартует сам в своём
+        контейнере — здесь браузер больше не поднимается."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=self._timeout)
+            logger.info("CardRenderer: клиент renderer готов (%s)", self._url)
 
-    async def _ensure(self) -> Browser:
-        if self._browser is None:
+    async def _ensure(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
             await self.start()
-        assert self._browser is not None
-        return self._browser
+        assert self._session is not None
+        return self._session
 
     async def render(self, html: str, width: int, height: int) -> bytes:
-        """HTML документа фиксированного размера → PNG-байты. Страница закрывается
-        всегда: утечка вкладок за часы работы съела бы память."""
-        browser = await self._ensure()
-        page = await browser.new_page(
-            viewport={"width": width, "height": height},
-            device_scale_factor=self._scale,
-        )
-        try:
-            await page.set_content(html, wait_until="networkidle")
-            return await page.screenshot(type="png")
-        finally:
-            await page.close()
+        """Самодостаточный HTML → PNG-байты через сервис renderer. Бросает при
+        недоступности/ошибке renderer — верхний ког отвечает текстом."""
+        session = await self._ensure()
+        payload = {"html": html, "width": width, "height": height, "scale": self._scale}
+        async with session.post(f"{self._url}/render", json=payload) as resp:
+            if resp.status != 200:
+                detail = (await resp.text())[:200]
+                raise RuntimeError(f"renderer вернул {resp.status}: {detail}")
+            return await resp.read()
 
     async def close(self) -> None:
-        if self._browser is not None:
-            await self._browser.close()
-            self._browser = None
-        if self._pw is not None:
-            await self._pw.stop()
-            self._pw = None
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+        self._session = None
