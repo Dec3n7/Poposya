@@ -24,7 +24,7 @@ from src.infrastructure.entitlements import EntitlementService, parse_tier
 router = APIRouter(prefix="/api/guilds/{guild_id}/entitlement", tags=["entitlements"])
 
 
-def _dto(service: EntitlementService, guild_id: int) -> EntitlementDTO:
+def _dto(service: EntitlementService, guild_id: int, trial_used: bool) -> EntitlementDTO:
     tier, expires_at, active = service.current(guild_id)
     return EntitlementDTO(
         guild_id=str(guild_id),
@@ -34,6 +34,7 @@ def _dto(service: EntitlementService, guild_id: int) -> EntitlementDTO:
         expires_at=(expires_at.replace(tzinfo=UTC).isoformat() if expires_at else None),
         default_tier=service.default_tier.name.lower(),
         enforced=service.default_tier is not PlanTier.PRO,
+        trial_used=trial_used,
     )
 
 
@@ -43,7 +44,31 @@ async def get_entitlement(
     session: Session = Depends(require_operator),
     container=Depends(get_container),
 ) -> EntitlementDTO:
-    return _dto(container.entitlements, guild_id)
+    trial_used = await container.entitlements.has_used_trial(guild_id)
+    return _dto(container.entitlements, guild_id, trial_used)
+
+
+@router.post("/trial", response_model=EntitlementDTO)
+async def start_trial(
+    guild_id: int,
+    session: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> EntitlementDTO:
+    """Одноразовый пробный Premium (14 дней). Серверный enforcement: если триал
+    уже был у этого сервера — 409, даже если подписку успели снять (запись о
+    триале переживает revoke). UI не решает — решает бэкенд."""
+    started = await container.entitlements.start_trial(guild_id, session.user_id)
+    if not started:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Пробный период уже был использован")
+    await record_audit(
+        container,
+        guild_id,
+        session.user_id,
+        "entitlement.trial",
+        target="premium",
+        details={"duration_days": 14},
+    )
+    return _dto(container.entitlements, guild_id, trial_used=True)
 
 
 @router.put("", response_model=EntitlementDTO)
@@ -69,7 +94,8 @@ async def grant_entitlement(
         target=tier.name.lower(),
         details={"tier": tier.name.lower(), "duration_days": body.duration_days},
     )
-    return _dto(container.entitlements, guild_id)
+    trial_used = await container.entitlements.has_used_trial(guild_id)
+    return _dto(container.entitlements, guild_id, trial_used)
 
 
 @router.delete("", response_model=EntitlementDTO)
@@ -81,4 +107,5 @@ async def revoke_entitlement(
     existed = await container.entitlements.revoke(guild_id)
     if existed:
         await record_audit(container, guild_id, session.user_id, "entitlement.revoke")
-    return _dto(container.entitlements, guild_id)
+    trial_used = await container.entitlements.has_used_trial(guild_id)
+    return _dto(container.entitlements, guild_id, trial_used)

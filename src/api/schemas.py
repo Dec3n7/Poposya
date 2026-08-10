@@ -13,6 +13,7 @@ class EntitlementDTO(BaseModel):
     expires_at: str | None = None  # ISO8601 UTC; null = бессрочно / нет подписки
     default_tier: str  # тариф по умолчанию (ENTITLEMENTS_DEFAULT_TIER) — для контекста
     enforced: bool  # включён ли enforcement (default_tier != pro)
+    trial_used: bool = False  # пробный период уже использован (кнопка триала гаснет)
 
 
 class EntitlementGrant(BaseModel):

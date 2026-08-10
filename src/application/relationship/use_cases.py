@@ -306,7 +306,12 @@ class UpdateUserNotesUseCase:
     async def execute(self, user_id: int, guild_id: int, notes: str) -> None:
         max_chars = self._max_chars
         if self._settings is not None:
-            max_chars = self._settings.resolved(guild_id).relationship_notes_max_chars
+            # get() (не resolved().<поле>): relationship_notes_max_chars —
+            # TIERABLE, и его надо читать через клампящий провайдер, иначе на
+            # free-тарифе лимит не зажимается (footgun из v2-аудита §20)
+            max_chars = self._settings.get(
+                guild_id, "relationship_notes_max_chars", self._max_chars
+            )
         async with self._uow_factory() as uow:
             profile = await uow.relationships.get_or_create(user_id, guild_id)
             profile.user_notes = notes.strip()[:max_chars]

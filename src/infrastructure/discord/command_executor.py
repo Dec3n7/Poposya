@@ -144,11 +144,27 @@ class DiscordCommandExecutor:
             return
         await cog.notify_punishment(guild, user, key, action, **vars)  # type: ignore[attr-defined]
 
+    async def _already_banned(self, guild: discord.Guild, user_id: int) -> bool:
+        """Reconciliation перед баном: если пользователь уже в бане — команда была
+        исполнена ранее (в т.ч. упавшим до _finish воркером), и повторный бан не
+        нужен. Делает ban/tempban безопасными к ретраю после краша (v2-аудит §13).
+        Ошибку проверки трактуем как «не знаем» (False) — лучше выполнить, чем
+        молча пропустить бан."""
+        try:
+            await guild.fetch_ban(discord.Object(id=user_id))
+            return True
+        except discord.NotFound:
+            return False
+        except discord.HTTPException:
+            return False
+
     async def _tempban(self, guild: discord.Guild, command: Command) -> str:
         p = command.payload
         user_id = int(p["user_id"])
         minutes = int(p["minutes"])
         reason = str(p.get("reason") or "без причины")
+        if await self._already_banned(guild, user_id):
+            return "Уже забанен."
         now = datetime.now(UTC)
         when = f"<t:{int((now + timedelta(minutes=minutes)).timestamp())}:f>"
         # ЛС до бана: после бана общий сервер исчезает и написать уже нельзя
@@ -198,6 +214,8 @@ class DiscordCommandExecutor:
         p = command.payload
         user_id = int(p["user_id"])
         reason = str(p.get("reason") or "без причины")
+        if await self._already_banned(guild, user_id):
+            return "Уже забанен."
         delete_days = max(0, min(int(p.get("delete_days") or 0), 7))
         # ЛС до бана: после бана общий сервер исчезает и написать уже нельзя
         await self._notify_punished(guild, user_id, "moderation.dm_banned", "ban", reason=reason)

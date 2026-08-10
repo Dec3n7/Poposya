@@ -139,3 +139,46 @@ async def test_enforced_flag_when_default_free(session_factory):
     ) as client:
         body = (await client.get(_url())).json()
         assert body["tier"] == "free" and body["enforced"] is True
+
+
+# --- одноразовый пробный период (P1 из v2-аудита) ----------------------------
+
+
+async def test_trial_grants_premium(client, container):
+    r = await client.post(_url() + "/trial")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tier"] == "premium"
+    assert body["active"] is True
+    assert body["trial_used"] is True
+    assert container.entitlements.tier(GUILD) is PlanTier.PREMIUM
+
+
+async def test_trial_is_one_time(client):
+    assert (await client.post(_url() + "/trial")).status_code == 200
+    # второй раз — 409, сервер не даёт крутить триал повторно
+    assert (await client.post(_url() + "/trial")).status_code == 409
+
+
+async def test_trial_not_reset_by_revoke(client):
+    # именно эта дыра названа в аудите: триал -> revoke -> снова триал
+    assert (await client.post(_url() + "/trial")).status_code == 200
+    assert (await client.delete(_url())).status_code == 200  # сняли подписку
+    # запись о триале живёт отдельно и пережила revoke -> всё ещё запрещён
+    assert (await client.post(_url() + "/trial")).status_code == 409
+
+
+async def test_trial_used_flag_surfaced_in_get(client):
+    assert (await client.get(_url())).json()["trial_used"] is False
+    await client.post(_url() + "/trial")
+    assert (await client.get(_url())).json()["trial_used"] is True
+
+
+async def test_trial_requires_operator(container):
+    app = create_app(container)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies={SESSION_COOKIE: _cookie(container.settings, STRANGER)},
+    ) as stranger:
+        assert (await stranger.post(_url() + "/trial")).status_code == 403

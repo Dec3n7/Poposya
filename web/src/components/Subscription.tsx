@@ -117,7 +117,8 @@ export function Subscription({ guild }: { guild: Guild }) {
     setNote(null);
     setError(null);
     try {
-      const s = await api.grantEntitlement(guild.id, "premium", 14);
+      // серверный enforcement: одноразовый триал, 409 если уже был
+      const s = await api.startTrial(guild.id);
       setSub(s);
       setNote(`Триал Premium на 14 дней активирован — до ${fmtDate(s.expires_at)}.`);
     } catch (e) {
@@ -177,10 +178,13 @@ export function Subscription({ guild }: { guild: Guild }) {
             <button className="btn primary small" disabled={busy} onClick={grant}>
               Выдать
             </button>
-            {!sub?.active && (
+            {!sub?.active && !sub?.trial_used && (
               <button className="btn small" disabled={busy} onClick={trial}>
                 🎁 Триал 14 дней
               </button>
+            )}
+            {!sub?.active && sub?.trial_used && (
+              <span className="muted small">Пробный период уже использован</span>
             )}
             {sub?.active && (
               <button className="btn small" disabled={busy} onClick={revoke}>

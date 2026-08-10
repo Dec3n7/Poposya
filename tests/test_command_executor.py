@@ -146,6 +146,9 @@ class FakeGuild:
         self.me = me
         self.ban = AsyncMock()
         self.unban = AsyncMock()
+        # по умолчанию не в бане: reconciliation-проверка _already_banned
+        # получит NotFound и пропустит к самому бану (как раньше)
+        self.fetch_ban = AsyncMock(side_effect=not_found())
         self.create_role = AsyncMock(return_value=FakeRole(self, 555, name="Created"))
         self.edit_role_positions = AsyncMock()
         self.fetch_member = AsyncMock(side_effect=not_found())
@@ -262,6 +265,22 @@ async def test_tempban_default_reason():
     executor, _bot, moderation = make_executor(guild=guild)
     await executor.execute(cmd("mod.tempban", {"user_id": "1", "minutes": 5}))
     assert moderation.temp_ban.execute.await_args.args[3] == "без причины"
+
+
+async def test_ban_reconciliation_skips_when_already_banned():
+    """Ретрай после краша: пользователь уже в бане -> команда no-op, без второго
+    guild.ban и без повторного temp_ban (идемпотентность из v2-аудита §13)."""
+    guild = FakeGuild()
+    guild.fetch_ban = AsyncMock(return_value=object())  # уже в бане
+    executor, _bot, moderation = make_executor(guild=guild)
+
+    result = await executor.execute(cmd("mod.ban_perm", {"user_id": "42"}))
+    assert result == "Уже забанен."
+    guild.ban.assert_not_awaited()
+
+    result2 = await executor.execute(cmd("mod.tempban", {"user_id": "42", "minutes": 60}))
+    assert result2 == "Уже забанен."
+    moderation.temp_ban.execute.assert_not_awaited()
 
 
 async def test_tempban_forbidden():

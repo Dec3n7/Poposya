@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -107,8 +108,12 @@ def create_web_app(health_checker: HealthChecker, full_token: str = "") -> web.A
         токен = открыт (совместимость; сеть всё же loopback/внутренняя). /health
         и /ready остаются открытыми — на них завязан docker healthcheck.
         """
-        if full_token and request.headers.get(_HEALTH_FULL_HEADER) != full_token:
-            return web.json_response({"error": "unauthorized"}, status=401)
+        if full_token:
+            got = request.headers.get(_HEALTH_FULL_HEADER) or ""
+            # constant-time сравнение (defence-in-depth от timing-анализа токена).
+            # .encode(): compare_digest со str падает на не-ASCII; в байтах — любой
+            if not hmac.compare_digest(got.encode(), full_token.encode()):
+                return web.json_response({"error": "unauthorized"}, status=401)
         started = time.perf_counter()
         checks = await health_checker.check()
         metrics = await health_checker.collect()

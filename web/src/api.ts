@@ -437,6 +437,9 @@ export const api = {
     }),
   revokeEntitlement: (guildId: string): Promise<Subscription> =>
     req<Subscription>(`/api/guilds/${guildId}/entitlement`, { method: "DELETE" }),
+  // одноразовый пробный Premium: сервер вернёт 409, если триал уже был
+  startTrial: (guildId: string): Promise<Subscription> =>
+    req<Subscription>(`/api/guilds/${guildId}/entitlement/trial`, { method: "POST" }),
   wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
   wardenEnabled: (): Promise<{ enabled: boolean }> =>
     req<{ enabled: boolean }>("/api/warden/enabled"),

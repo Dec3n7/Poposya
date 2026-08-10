@@ -21,3 +21,16 @@ class GuildEntitlementModel(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     granted_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # id оператора
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class GuildTrialModel(Base):
+    """Факт использования пробного периода сервером. ОТДЕЛЬНО от подписки: строка
+    подписки удаляется при revoke, а запись о триале обязана пережить это —
+    иначе связка «триал → revoke → снова триал» давала бы бесконечный Premium.
+    Наличие строки = триал уже был; серверный enforcement, а не доверие UI."""
+
+    __tablename__ = "guild_trials"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    granted_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # оператор

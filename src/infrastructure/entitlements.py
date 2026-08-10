@@ -12,17 +12,21 @@
 См. docs/plans/monetization-prep.md."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.interfaces.entitlements import IEntitlements, PlanTier
 from src.config import Settings
 from src.infrastructure.db.dml import rows_affected
-from src.infrastructure.db.models.entitlements import GuildEntitlementModel
+from src.infrastructure.db.models.entitlements import GuildEntitlementModel, GuildTrialModel
 
 logger = logging.getLogger(__name__)
+
+# длительность одноразового пробного Premium (дни)
+TRIAL_DAYS = 14
 
 # Канал Postgres LISTEN/NOTIFY: панель, выдав/сняв подписку, шлёт сюда guild_id,
 # а бот перечитывает тариф этой гильдии (EntitlementChangeListener).
@@ -172,8 +176,64 @@ class EntitlementService(IEntitlements):
             await session.commit()
         self._cache[guild_id] = (tier, expires_naive)
 
+    async def has_used_trial(self, guild_id: int) -> bool:
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(GuildTrialModel.guild_id).where(GuildTrialModel.guild_id == guild_id)
+                )
+            ).scalar_one_or_none()
+            return row is not None
+
+    async def start_trial(self, guild_id: int, operator_id: int | None) -> bool:
+        """Одноразовый пробный Premium на TRIAL_DAYS дней. False — триал у этого
+        сервера уже был (в т.ч. если подписку потом сняли: запись о триале живёт
+        отдельно от подписки и переживает revoke). Запись о триале и сама подписка
+        ставятся в ОДНОЙ транзакции — атомарно, без окна на двойной триал."""
+        now = _now_naive()
+        expires = now + timedelta(days=TRIAL_DAYS)
+        async with self._session_factory() as session:
+            used = (
+                await session.execute(
+                    select(GuildTrialModel.guild_id).where(GuildTrialModel.guild_id == guild_id)
+                )
+            ).scalar_one_or_none()
+            if used is not None:
+                return False
+            session.add(GuildTrialModel(guild_id=guild_id, started_at=now, granted_by=operator_id))
+            existing = (
+                await session.execute(
+                    select(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(
+                    GuildEntitlementModel(
+                        guild_id=guild_id,
+                        tier=PlanTier.PREMIUM.name.lower(),
+                        expires_at=expires,
+                        granted_by=operator_id,
+                        updated_at=now,
+                    )
+                )
+            else:
+                existing.tier = PlanTier.PREMIUM.name.lower()
+                existing.expires_at = expires
+                existing.granted_by = operator_id
+                existing.updated_at = now
+            await self._notify(session, guild_id)
+            try:
+                await session.commit()
+            except IntegrityError:
+                # гонка двух параллельных триалов: PK guild_trials поймал второй
+                await session.rollback()
+                return False
+        self._cache[guild_id] = (PlanTier.PREMIUM, expires)
+        return True
+
     async def revoke(self, guild_id: int) -> bool:
-        """Снять подписку -> сервер вернётся к тарифу по умолчанию. False — её и не было."""
+        """Снять подписку -> сервер вернётся к тарифу по умолчанию. False — её и не было.
+        Запись о триале НЕ трогаем: повторный триал после revoke запрещён."""
         async with self._session_factory() as session:
             result = await session.execute(
                 delete(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)

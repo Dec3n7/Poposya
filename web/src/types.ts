@@ -606,4 +606,5 @@ export interface Subscription {
   expires_at: string | null; // ISO8601 UTC; null = бессрочно / нет подписки
   default_tier: Tier; // ENTITLEMENTS_DEFAULT_TIER — тариф без подписки
   enforced: boolean; // включён ли enforcement (default_tier != pro)
+  trial_used: boolean; // пробный период уже использован (кнопка триала гаснет)
 }
