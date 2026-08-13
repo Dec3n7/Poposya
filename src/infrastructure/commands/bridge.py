@@ -157,11 +157,19 @@ class CommandProcessor:
         executor: Executor,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         lease_timeout: float = LEASE_TIMEOUT_SECONDS,
+        non_idempotent: frozenset[str] = frozenset(),
     ):
         self._session_factory = session_factory
         self._executor = executor
         self._max_attempts = max_attempts
         self._lease_timeout = lease_timeout
+        # типы команд, которые НЕЛЬЗЯ повторять после краха исполнителя: их side
+        # effect не сверяется с состоянием (role.create породит дубль, music.skip
+        # пропустит второй трек — в отличие от ban/role.assign/pause, которые
+        # идемпотентны сами). Для них протухший lease -> сразу failed, без ретрая:
+        # «возможно не выполнено, проверь» безопаснее молчаливого дубля. Набор
+        # задаёт исполнитель (семантика команд), мост лишь применяет политику.
+        self._non_idempotent = non_idempotent
 
     async def _claim(self, cmd_id: int) -> Command | None:
         """Переводит pending->running атомарно и ставит lease; None — уже
@@ -202,7 +210,11 @@ class CommandProcessor:
         cutoff = _now() - timedelta(seconds=self._lease_timeout)
         async with self._session_factory() as session:
             stmt = (
-                select(BotCommandModel.id, BotCommandModel.attempts)
+                select(
+                    BotCommandModel.id,
+                    BotCommandModel.command_type,
+                    BotCommandModel.attempts,
+                )
                 .where(
                     BotCommandModel.status == RUNNING,
                     or_(
@@ -216,8 +228,26 @@ class CommandProcessor:
             rows = list((await session.execute(stmt)).all())
 
         requeued = 0
-        for cmd_id, attempts in rows:
-            if attempts >= self._max_attempts:
+        for cmd_id, cmd_type, attempts in rows:
+            if cmd_type in self._non_idempotent:
+                # неидемпотентная команда с протухшим lease: НЕ ретраим (иначе
+                # риск дубля/двойного действия), сразу терминальный failed.
+                # Guard status==RUNNING — не затираем результат, если исполнитель
+                # как раз finish'нул.
+                await self._finish_if_running(
+                    cmd_id,
+                    FAILED,
+                    "Команда не повторяется автоматически после перезапуска "
+                    "(могла частично выполниться). Проверьте результат и при "
+                    "необходимости повторите вручную.",
+                )
+                logger.warning(
+                    "Неидемпотентная команда %s (%s) зависла в running — "
+                    "помечена failed без ретрая",
+                    cmd_id,
+                    cmd_type,
+                )
+            elif attempts >= self._max_attempts:
                 # исчерпаны попытки: терминальный failed. Guard status==RUNNING —
                 # не затираем результат, если исполнитель как раз finish'нул
                 await self._finish_if_running(

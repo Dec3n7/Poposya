@@ -732,6 +732,21 @@ class DiscordCommandExecutor:
         return f"Правила опубликованы в #{channel.name}."
 
 
+# Команды, чей side effect нельзя безопасно повторить после краха исполнителя
+# (нет сверки состояния перед действием). Мост при протухшем lease помечает их
+# failed, а не ретраит (см. CommandProcessor._non_idempotent). Остальные команды
+# идемпотентны сами: ban/tempban сверяют _already_banned, role.assign/unassign —
+# наличие роли, pause/resume — is_paused, import/preset — существующее имя.
+#  · role.create   — повтор породит вторую роль с тем же именем
+#  · music.skip    — повтор пропустит ещё один трек
+#  · music.previous— повтор уведёт ещё на трек назад
+#  · music.shuffle — повтор перемешает заново (потеря прежнего порядка)
+#  · music.remove  — позиция сдвигается, повтор снимет ДРУГОЙ трек
+NON_IDEMPOTENT_COMMANDS: frozenset[str] = frozenset(
+    {"role.create", "music.skip", "music.previous", "music.shuffle", "music.remove"}
+)
+
+
 _HANDLERS = {
     "mod.tempban": DiscordCommandExecutor._tempban,
     "mod.unban": DiscordCommandExecutor._unban,

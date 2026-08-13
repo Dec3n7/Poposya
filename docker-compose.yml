@@ -29,6 +29,15 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # ФС образа только на чтение: побег/RCE не сможет дописать в бинарь или код.
+    # Всё писчее у бота уходит на volume /app/data (SQLite/логи/аудиокэш) — он
+    # монтируется поверх ro-rootfs и остаётся писабельным. /tmp — эфемерный tmpfs
+    # для сюрпризных записей библиотек; XDG_CACHE_HOME=/tmp уводит туда же кэш
+    # yt-dlp (иначе он бился бы о read-only /app/.cache). .pyc не пишем
+    # (PYTHONDONTWRITEBYTECODE в Dockerfile).
+    read_only: true
+    tmpfs:
+      - /tmp
     # Без лимита утечка в боте съедает весь хост — вместе со сторожем (WARDEN),
     # и авария остаётся никем не замеченной. С лимитом отказ локален и точно
     # назван: Docker выставляет OOMKilled, мониторинг читает его напрямую.
@@ -37,6 +46,8 @@ services:
     mem_limit: 512m
     env_file: .env
     environment:
+      # кэш библиотек (в т.ч. yt-dlp) — в tmpfs /tmp, а не в read-only HOME=/app
+      XDG_CACHE_HOME: /tmp
       # Внутри контейнера БД — всегда Postgres (сервис db). BOT_DATABASE_URL
       # обязателен: без него compose падает на разборе файла (:?), а не уводит
       # бота на тихий пустой SQLite. Отдельное имя (не DATABASE_URL) — чтобы
@@ -84,9 +95,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # ФС только на чтение: api вообще не пишет на диск (логи в stdout, БД —
+    # Postgres по сети). /tmp — эфемерный tmpfs на случай библиотечных записей.
+    read_only: true
+    tmpfs:
+      - /tmp
     mem_limit: 256m
     env_file: .env
     environment:
+      # кэш библиотек — в tmpfs, а не в read-only HOME=/app
+      XDG_CACHE_HOME: /tmp
       # та же БД, что у бота (см. BOT_DATABASE_URL в .env); обязательна (:?)
       DATABASE_URL: ${BOT_DATABASE_URL:?задайте BOT_DATABASE_URL (postgresql+asyncpg://poposya:ПАРОЛЬ@db:5432/poposya) в .env}
       LOG_FILE: ""   # api логирует в stdout, файл не нужен
@@ -192,6 +210,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # ФС контейнера только на чтение: браузер под --no-sandbox — крупнейшая attack
+    # surface, read-only rootfs лишает эксплойт возможности что-либо дописать в
+    # образ. Всё писчее — в эфемерный tmpfs /tmp (профиль Chromium, shared memory
+    # через --disable-dev-shm-usage). Браузер лежит в /ms-playwright (тоже ro, ок).
+    read_only: true
+    tmpfs:
+      - /tmp
     # Chromium прожорлив к памяти на старте страницы; 512M с запасом. OOM локален.
     mem_limit: 512m
     networks:

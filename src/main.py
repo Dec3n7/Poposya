@@ -176,11 +176,17 @@ async def run() -> None:
     # командный мост панель→бот: панель кладёт команду в bot_commands + NOTIFY,
     # бот исполняет реальное Discord-действие (бан/мут/музыка). Только Postgres.
     from src.infrastructure.commands.listener import make_command_listener
-    from src.infrastructure.discord.command_executor import DiscordCommandExecutor
+    from src.infrastructure.discord.command_executor import (
+        NON_IDEMPOTENT_COMMANDS,
+        DiscordCommandExecutor,
+    )
 
     command_executor = DiscordCommandExecutor(bot, container.moderation)
     command_listener = make_command_listener(
-        settings.database_url, session_factory, command_executor.execute
+        settings.database_url,
+        session_factory,
+        command_executor.execute,
+        non_idempotent=NON_IDEMPOTENT_COMMANDS,
     )
 
     # реестр фоновых задач: заполняется ниже, но метрика ссылается на него уже

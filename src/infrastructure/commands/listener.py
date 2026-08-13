@@ -30,10 +30,11 @@ def make_command_listener(
     database_url: str,
     session_factory: async_sessionmaker[AsyncSession],
     executor: Executor,
+    non_idempotent: frozenset[str] = frozenset(),
 ) -> "CommandListener | None":
     if not database_url.startswith("postgresql"):
         return None
-    processor = CommandProcessor(session_factory, executor)
+    processor = CommandProcessor(session_factory, executor, non_idempotent=non_idempotent)
     return CommandListener(_asyncpg_dsn(database_url), processor)
 
 

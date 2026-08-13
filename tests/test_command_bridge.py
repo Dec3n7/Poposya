@@ -155,7 +155,8 @@ async def test_fresh_lease_is_not_recovered(session_factory):
 
 async def test_exhausted_attempts_marked_failed(session_factory):
     proc = CommandProcessor(session_factory, _ok_executor, max_attempts=2)
-    cmd_id = await enqueue_command(session_factory, GUILD, "role.create", {"name": "x"}, 1)
+    # role.assign идемпотентна (сверяет наличие роли) — её мост ретраит до предела
+    cmd_id = await enqueue_command(session_factory, GUILD, "role.assign", {"role_id": "1"}, 1)
     # первый прогон рухнул -> вернули в очередь (attempts=1)
     await proc._claim(cmd_id)
     await _age_claim(session_factory, cmd_id, 9999)
@@ -167,6 +168,35 @@ async def test_exhausted_attempts_marked_failed(session_factory):
     status, result = await get_status(session_factory, cmd_id)
     assert status == FAILED
     assert "перезапус" in result.lower()
+
+
+async def test_non_idempotent_stale_marked_failed_without_retry(session_factory):
+    # неидемпотентную команду (role.create) при протухшем lease мост НЕ ретраит:
+    # сразу failed, даже если попытки ещё не исчерпаны — иначе риск дубля роли
+    proc = CommandProcessor(
+        session_factory, _ok_executor, max_attempts=2, non_idempotent=frozenset({"role.create"})
+    )
+    cmd_id = await enqueue_command(session_factory, GUILD, "role.create", {"name": "x"}, 1)
+    await proc._claim(cmd_id)  # running, attempts=1 (не исчерпано)
+    await _age_claim(session_factory, cmd_id, 9999)  # эмулируем краш
+    assert await proc.recover_stale() == 0  # НЕ вернули в очередь
+    status, result = await get_status(session_factory, cmd_id)
+    assert status == FAILED  # сразу терминальный, без второго прогона
+    assert "повтор" in result.lower()
+
+
+async def test_idempotent_stale_still_requeued(session_factory):
+    # контроль: команда не из non_idempotent при протухшем lease по-прежнему
+    # возвращается в очередь (регресс-гард на политику выше)
+    proc = CommandProcessor(
+        session_factory, _ok_executor, non_idempotent=frozenset({"role.create"})
+    )
+    cmd_id = await enqueue_command(session_factory, GUILD, "mod.ban_perm", {"user_id": "1"}, 1)
+    await proc._claim(cmd_id)
+    await _age_claim(session_factory, cmd_id, 9999)
+    assert await proc.recover_stale() == 1
+    status, _ = await get_status(session_factory, cmd_id)
+    assert status == PENDING
 
 
 async def test_process_pending_recovers_then_runs(session_factory):

@@ -25,15 +25,35 @@ _ALLOWLIST = {
 
 def test_no_tierable_field_read_via_raw_resolved():
     keys = "|".join(re.escape(k) for k in TIERABLE)
-    pattern = re.compile(r"resolved\([^)]*\)\.(" + keys + r")\b")
+    # прямой паттерн: resolved(...).<tierable>
+    direct = re.compile(r"resolved\([^)]*\)\.(" + keys + r")\b")
+    # indirection: <var> = ...resolved(...)  затем в этом же файле  <var>.<tierable>
+    assign = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*[^=\n]*\bresolved\([^)]*\)")
     violations: list[str] = []
     for path in _SRC.rglob("*.py"):
         rel = path.relative_to(_SRC).as_posix()
-        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            for m in pattern.finditer(line):
-                if (rel, m.group(1)) in _ALLOWLIST:
-                    continue
-                violations.append(
-                    f"{rel}:{i}: resolved().{m.group(1)} (TIERABLE — читай через get())"
-                )
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        # переменные, которым присвоили resolved(...) — их атрибуты тоже сырые
+        resolved_vars = {m.group(1) for m in assign.finditer(text)}
+        indirect = (
+            re.compile(
+                r"\b(" + "|".join(re.escape(v) for v in resolved_vars) + r")\.(" + keys + r")\b"
+            )
+            if resolved_vars
+            else None
+        )
+        for i, line in enumerate(lines, 1):
+            for m in direct.finditer(line):
+                if (rel, m.group(1)) not in _ALLOWLIST:
+                    violations.append(
+                        f"{rel}:{i}: resolved().{m.group(1)} (TIERABLE — читай через get())"
+                    )
+            if indirect is not None and "resolved(" not in line:
+                for m in indirect.finditer(line):
+                    if (rel, m.group(2)) not in _ALLOWLIST:
+                        violations.append(
+                            f"{rel}:{i}: {m.group(1)}.{m.group(2)} — {m.group(1)} это "
+                            f"resolved() (TIERABLE-поле {m.group(2)} мимо клампа, читай через get())"
+                        )
     assert not violations, "Тарифные поля мимо клампа:\n" + "\n".join(violations)

@@ -37,7 +37,15 @@ class _Renderer:
             if self._browser is None:
                 self._pw = await async_playwright().start()
                 self._browser = await self._pw.chromium.launch(
-                    args=["--no-sandbox", "--disable-gpu", "--hide-scrollbars"]
+                    # --disable-dev-shm-usage: держать shared memory в /tmp, а не в
+                    # /dev/shm (64 МБ по умолчанию под docker — Chromium там падает).
+                    # Заодно совместимо с read_only-rootfs: пишем только в tmpfs /tmp.
+                    args=[
+                        "--no-sandbox",
+                        "--disable-gpu",
+                        "--hide-scrollbars",
+                        "--disable-dev-shm-usage",
+                    ]
                 )
                 logger.info("Chromium поднят")
         assert self._browser is not None
