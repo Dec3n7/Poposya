@@ -198,6 +198,7 @@ class PoposyaBot(commands.Bot):
                 self.container.settings,
                 entitlements=entitlements,
                 card_renderer=cast(CardRenderer, self.container.card_renderer),
+                premium_keys=self.container.premium_keys,
             )
         )
         await self.add_cog(LogRelayCog(self, self.container.settings))

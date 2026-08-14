@@ -608,3 +608,48 @@ export interface Subscription {
   enforced: boolean; // включён ли enforcement (default_tier != pro)
   trial_used: boolean; // пробный период уже использован (кнопка триала гаснет)
 }
+
+// --- пул лицензионных ключей Premium/Pro (операторская вкладка «Ключи») ---
+
+export interface KeyBatch {
+  batch_id: number;
+  label: string;
+  tier: string; // premium | pro
+  duration_days: number; // 30 | 90 | 180 | 365
+  seats: number; // premium=1, pro=5
+  issued: number; // сколько ключей выпущено
+  redeemed_seats: number; // сколько ситов потрачено
+  capacity: number; // issued * seats — всего слотов
+  revoked: boolean;
+  created_at: string; // ISO8601 UTC
+  note: string | null;
+}
+
+export interface KeySku {
+  tier: string;
+  duration_days: number;
+  issued: number;
+  redeemed_seats: number;
+  capacity: number;
+  remaining: number; // свободных слотов в активных партиях
+}
+
+export interface KeysOverview {
+  enabled: boolean; // false = KEY_SIGNING_SECRET не задан
+  durations: number[]; // допустимые SKU-длительности
+  skus: KeySku[];
+  batches: KeyBatch[];
+}
+
+export interface IssuedKey {
+  key: string; // перевыпущенный полный ключ POPO-…
+  nonce: string;
+  seats_used: number;
+  seats_total: number;
+  status: "unredeemed" | "partial" | "full";
+}
+
+export interface MintedBatch {
+  batch_id: number;
+  keys: string[];
+}

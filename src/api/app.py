@@ -26,6 +26,7 @@ from src.api.routers import (
     music,
     people,
     personas,
+    premium_keys,
     roles,
     settings,
     warden,
@@ -155,5 +156,6 @@ def create_app(container: ApiContainer) -> FastAPI:
     app.include_router(finds.router)
     app.include_router(personas.router)
     app.include_router(entitlements.router)
+    app.include_router(premium_keys.router)
     app.include_router(warden.router)
     return app

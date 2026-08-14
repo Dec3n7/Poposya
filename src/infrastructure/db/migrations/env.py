@@ -13,6 +13,7 @@ import src.infrastructure.db.models.moderation  # noqa: F401
 import src.infrastructure.db.models.music  # noqa: F401
 import src.infrastructure.db.models.outbox  # noqa: F401
 import src.infrastructure.db.models.persona  # noqa: F401
+import src.infrastructure.db.models.premium_keys  # noqa: F401
 import src.infrastructure.db.models.privacy  # noqa: F401
 import src.infrastructure.db.models.relationship  # noqa: F401
 import src.infrastructure.db.models.roles  # noqa: F401

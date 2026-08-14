@@ -68,6 +68,7 @@ from src.infrastructure.events.in_memory_bus import InMemoryEventBus
 from src.infrastructure.guild_settings import GuildSettingsService
 from src.infrastructure.persona_listener import PersonaChangeListener, make_persona_listener
 from src.infrastructure.persona_service import PersonaService
+from src.infrastructure.premium_keys.service import PremiumKeyService
 from src.infrastructure.session_epoch import SessionEpochService
 from src.infrastructure.settings_listener import SettingsChangeListener, make_settings_listener
 
@@ -81,6 +82,8 @@ class ApiContainer:
     # тарифы серверов (монетизация): свой кэш + NOTIFY, как у настроек — выдача
     # подписки из панели должна быть видна и здесь, и боту
     entitlements: EntitlementService
+    # лицензионные ключи Premium/Pro: выпуск партий, отзыв, пул с самими ключами
+    premium_keys: PremiumKeyService
     # персоны (текст/личность бота): API держит свой кэш + слушает NOTIFY, как
     # и с настройками — правки из панели должны быть видны сразу
     persona: PersonaService
@@ -170,6 +173,13 @@ def assemble_container(
 
     entitlements = EntitlementService(settings, session_factory)
     entitlements_listener = make_entitlements_listener(settings.database_url, entitlements)
+    premium_keys = PremiumKeyService(
+        session_factory,
+        entitlements,
+        settings.key_signing_secret,
+        attempts_per_hour=settings.premium_key_attempts_per_hour,
+        shelf_life_days=settings.premium_key_shelf_life_days,
+    )
 
     event_bus = InMemoryEventBus()
 
@@ -187,6 +197,7 @@ def assemble_container(
         session_factory=session_factory,
         guild_settings=guild_settings,
         entitlements=entitlements,
+        premium_keys=premium_keys,
         persona=persona,
         bot_guilds=BotGuildsCache(settings.discord_token),
         session_epochs=SessionEpochService(session_factory),

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, api, setUnauthorizedHandler } from "./api";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildView } from "./components/GuildView";
+import { Keys } from "./components/Keys";
 import { Login } from "./components/Login";
 import { useHashRoute } from "./route";
 import type { Me } from "./types";
@@ -14,6 +15,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const route = useHashRoute();
 
   // Любой 401 из api.ts (протухшая/отозванная сессия) -> на экран логина.
@@ -110,6 +112,11 @@ export default function App() {
     );
   }
 
+  // операторский пул ключей — глобальный (не привязан к серверу)
+  if (showKeys && me?.is_operator) {
+    return <Keys onBack={() => setShowKeys(false)} />;
+  }
+
   // сервер выбран — полноэкранная оболочка с сайдбаром
   if (guild && me) {
     return (
@@ -133,6 +140,11 @@ export default function App() {
         </span>
         <span className="spacer" />
         {me && <span className="who">{me.username}</span>}
+        {me?.is_operator && (
+          <button className="btn ghost small" onClick={() => setShowKeys(true)}>
+            🔑 Ключи
+          </button>
+        )}
         <button className="btn ghost small" onClick={logout}>
           Выйти
         </button>

@@ -129,7 +129,7 @@ export function Subscription({ guild }: { guild: Guild }) {
   }
 
   return (
-    <div className="card acc">
+    <div className="card acc rules-publish">
       <div className="rules-publish-head">
         <span className="acc-icon" aria-hidden>
           🎟️

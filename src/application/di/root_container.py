@@ -51,6 +51,7 @@ class RootContainer:
     guild_settings: object  # GuildSettingsService; main вызывает load_all
     entitlements: object  # EntitlementService; main вызывает load_all
     entitlements_listener: object | None  # EntitlementChangeListener (Postgres); цикл в main
+    premium_keys: object  # PremiumKeyService; выпуск/активация лицензионных ключей
     persona: object  # PersonaService; main вызывает load_all
     privacy: object  # PrivacyService; удаление данных (on_guild_remove/forgetme)
     engine: object  # AsyncEngine; закрывается в main при завершении
@@ -161,6 +162,18 @@ def build_root_container(settings: Settings) -> RootContainer:
     entitlements = EntitlementService(settings, session_factory)
     entitlements_listener = make_entitlements_listener(settings.database_url, entitlements)
     settings_reader = TierClampSettingsProvider(guild_settings, entitlements)
+
+    # лицензионные ключи Premium/Pro (выпуск/активация/пул). Пустой секрет =
+    # фича выключена (redeem вернёт «недоступно», выпуск бросит).
+    from src.infrastructure.premium_keys.service import PremiumKeyService
+
+    premium_keys = PremiumKeyService(
+        session_factory,
+        entitlements,
+        settings.key_signing_secret,
+        attempts_per_hour=settings.premium_key_attempts_per_hour,
+        shelf_life_days=settings.premium_key_shelf_life_days,
+    )
 
     # персоны (библиотеки текста/личности бота): тот же паттерн, что и настройки —
     # кэш в памяти + Postgres NOTIFY для инвалидации при правках из панели
@@ -652,6 +665,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         guild_settings=settings_reader,
         entitlements=entitlements,
         entitlements_listener=entitlements_listener,
+        premium_keys=premium_keys,
         persona=persona,
         privacy=privacy,
         engine=engine,

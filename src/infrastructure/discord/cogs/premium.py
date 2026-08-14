@@ -14,6 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.application.interfaces.entitlements import PlanTier
+from src.infrastructure.premium_keys.service import RedeemOutcome, RedeemResult
 from src.infrastructure.render.cards import premium_card_html
 
 logger = logging.getLogger(__name__)
@@ -37,11 +38,14 @@ _PRO = "Всё из Premium + 24/7-присутствие и приоритет.
 
 
 class PremiumCog(commands.Cog):
-    def __init__(self, bot: commands.Bot, settings, entitlements=None, card_renderer=None):
+    def __init__(
+        self, bot: commands.Bot, settings, entitlements=None, card_renderer=None, premium_keys=None
+    ):
         self.bot = bot
         self.settings = settings
         self.entitlements = entitlements
         self.renderer = card_renderer  # None (тесты/нет браузера) → эмбед-фолбэк
+        self.premium_keys = premium_keys  # PremiumKeyService | None (фича выключена)
 
     def _tier_of(self, gid: int):
         if self.entitlements is not None:
@@ -92,3 +96,42 @@ class PremiumCog(commands.Cog):
             )
             return
         await interaction.followup.send(embed=self._embed(tier, expires_at, active))
+
+    @staticmethod
+    def _redeem_message(res: RedeemResult) -> str:
+        """Ответ на активацию голосом Попоси (ephemeral)."""
+        until = ""
+        if res.expires_at is not None:
+            until = f" до {res.expires_at.replace(tzinfo=UTC).strftime('%d.%m.%Y')}"
+        tier = res.tier.name.title() if res.tier else "Premium"
+        match res.outcome:
+            case RedeemOutcome.OK:
+                return f"Готово — включила **{tier}**{until}. Устраивайся поудобнее. 🖤"
+            case RedeemOutcome.EXTENDED:
+                return f"Продлила **{tier}**{until}. Никуда не расходимся."
+            case RedeemOutcome.FULL:
+                return f"Этот ключ уже разобрали — все {res.seats_total} слот(а/ов) заняты."
+            case RedeemOutcome.REVOKED:
+                return "Этот ключ отозвали. Напиши туда, где брал(а)."
+            case RedeemOutcome.EXPIRED:
+                return "Ключ просрочен — его не выкупили вовремя."
+            case RedeemOutcome.RATE_LIMITED:
+                return "Слишком много попыток подряд. Выдохни и попробуй через час."
+            case _:
+                return "Не узнаю этот ключ. Проверь, не закралась ли опечатка."
+
+    @app_commands.command(name="activate", description="Активировать ключ Premium/Pro")
+    @app_commands.guild_only()
+    @app_commands.describe(key="Лицензионный ключ (POPO-…)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def activate(self, interaction: discord.Interaction, key: str) -> None:
+        """Активация ключа на этом сервере. Гейт — Manage Guild (§5): включать
+        подписку может админ, а не любой участник. Ответ ephemeral: ключ и итог не
+        уходят в канал."""
+        await interaction.response.defer(ephemeral=True)
+        if self.premium_keys is None or not self.premium_keys.enabled:
+            await interaction.followup.send("Активация ключей сейчас недоступна.", ephemeral=True)
+            return
+        gid = interaction.guild_id or 0
+        res = await self.premium_keys.redeem(key.strip(), gid, interaction.user.id)
+        await interaction.followup.send(self._redeem_message(res), ephemeral=True)

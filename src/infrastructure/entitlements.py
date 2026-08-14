@@ -142,6 +142,44 @@ class EntitlementService(IEntitlements):
 
     # --- запись (БД + кэш + NOTIFY) ---
 
+    async def upsert_in_session(
+        self,
+        session: AsyncSession,
+        guild_id: int,
+        tier: PlanTier,
+        expires_at: datetime | None,
+        granted_by: int | None,
+    ) -> datetime | None:
+        """Записать/обновить подписку в ПЕРЕДАННОЙ сессии (без commit, без кэша) +
+        транзакционный NOTIFY. Для операций, которым нужно писать грант в одной
+        транзакции с чем-то ещё (редемпшн ключа: сит + Premium атомарно, §3
+        premium-keys). Кэш вызывающий обновляет после commit через reload_guild.
+        Возвращает наивный expires."""
+        expires_naive = _as_naive_utc(expires_at)
+        now = _now_naive()
+        existing = (
+            await session.execute(
+                select(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.add(
+                GuildEntitlementModel(
+                    guild_id=guild_id,
+                    tier=tier.name.lower(),
+                    expires_at=expires_naive,
+                    granted_by=granted_by,
+                    updated_at=now,
+                )
+            )
+        else:
+            existing.tier = tier.name.lower()
+            existing.expires_at = expires_naive
+            existing.granted_by = granted_by
+            existing.updated_at = now
+        await self._notify(session, guild_id)
+        return expires_naive
+
     async def grant(
         self,
         guild_id: int,
@@ -149,30 +187,10 @@ class EntitlementService(IEntitlements):
         expires_at: datetime | None,
         granted_by: int | None,
     ) -> None:
-        expires_naive = _as_naive_utc(expires_at)
-        now = _now_naive()
         async with self._session_factory() as session:
-            existing = (
-                await session.execute(
-                    select(GuildEntitlementModel).where(GuildEntitlementModel.guild_id == guild_id)
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                session.add(
-                    GuildEntitlementModel(
-                        guild_id=guild_id,
-                        tier=tier.name.lower(),
-                        expires_at=expires_naive,
-                        granted_by=granted_by,
-                        updated_at=now,
-                    )
-                )
-            else:
-                existing.tier = tier.name.lower()
-                existing.expires_at = expires_naive
-                existing.granted_by = granted_by
-                existing.updated_at = now
-            await self._notify(session, guild_id)
+            expires_naive = await self.upsert_in_session(
+                session, guild_id, tier, expires_at, granted_by
+            )
             await session.commit()
         self._cache[guild_id] = (tier, expires_naive)
 

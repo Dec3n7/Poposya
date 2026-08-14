@@ -15,8 +15,11 @@ import type {
   GuildPersona,
   GuildSummary,
   GuildWarn,
+  IssuedKey,
+  KeysOverview,
   Me,
   MemberRoles,
+  MintedBatch,
   ModCase,
   MovieDetail,
   NowPlaying,
@@ -440,6 +443,33 @@ export const api = {
   // одноразовый пробный Premium: сервер вернёт 409, если триал уже был
   startTrial: (guildId: string): Promise<Subscription> =>
     req<Subscription>(`/api/guilds/${guildId}/entitlement/trial`, { method: "POST" }),
+  // пул лицензионных ключей (только оператор бота — стережёт require_operator)
+  premiumKeysOverview: (): Promise<KeysOverview> =>
+    req<KeysOverview>("/api/admin/premium-keys"),
+  mintKeys: (
+    tier: string,
+    durationDays: number,
+    count: number,
+    label: string,
+    note?: string | null,
+  ): Promise<MintedBatch> =>
+    req<MintedBatch>("/api/admin/premium-keys/batches", {
+      method: "POST",
+      body: JSON.stringify({ tier, duration_days: durationDays, count, label, note: note ?? null }),
+    }),
+  batchKeys: (batchId: number): Promise<IssuedKey[]> =>
+    req<IssuedKey[]>(`/api/admin/premium-keys/batches/${batchId}/keys`),
+  revokeBatch: (
+    batchId: number,
+    reason: string,
+    hard: boolean,
+  ): Promise<{ batch_id: number; hard: boolean; guilds_stripped: number }> =>
+    req(`/api/admin/premium-keys/batches/${batchId}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ reason, hard }),
+    }),
+  reactivateBatch: (batchId: number): Promise<{ reactivated: boolean }> =>
+    req(`/api/admin/premium-keys/batches/${batchId}/reactivate`, { method: "POST" }),
   wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
   wardenEnabled: (): Promise<{ enabled: boolean }> =>
     req<{ enabled: boolean }>("/api/warden/enabled"),

@@ -93,6 +93,17 @@ class Settings(BaseSettings):
     # "pro" — enforcement выключен (все получают максимум). Значения: free | premium | pro.
     entitlements_default_tier: str = "free"
 
+    # --- лицензионные ключи Premium/Pro (docs/plans/premium-keys.md) ---
+    # Секрет подписи ключей (HMAC). ТОЛЬКО из окружения, отдельный от web-секрета.
+    # Пусто = выпуск/активация ключей выключены (сервис вернёт ошибку). Задан —
+    # обязан быть стойким (валидатор ниже). Ротация = отзыв всех невыкупленных.
+    key_signing_secret: str = ""
+    # анти-брутфорс активации: сколько попыток на пользователя в час (§4)
+    premium_key_attempts_per_hour: int = 2
+    # срок годности невыкупленного ключа на полке в днях (§1a): непроданный запас
+    # не должен жить вечно, но и не умирать раньше времени
+    premium_key_shelf_life_days: int = 730
+
     # --- WARDEN (внешний сторож-монитор) ---
     # Панель показывает его состояние на отдельной вкладке. Ходит только
     # бэкенд: токен во фронт не попадает. Пусто = вкладка не показывается.
@@ -454,4 +465,12 @@ class Settings(BaseSettings):
                     "DISCORD_CLIENT_SECRET обязателен, когда включена веб-панель "
                     "(задан DISCORD_CLIENT_ID)."
                 )
+        # ключи Premium опциональны (пустой секрет = фича выключена), но ЗАДАННЫЙ
+        # секрет обязан быть стойким: слабый HMAC-ключ = подделываемые лицензии.
+        if self.key_signing_secret and len(self.key_signing_secret) < _MIN_SESSION_SECRET_LEN:
+            raise ValueError(
+                "KEY_SIGNING_SECRET должен быть не короче "
+                f"{_MIN_SESSION_SECRET_LEN} символов (иначе ключи подделываемы). "
+                'Сгенерируйте: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
         return self
