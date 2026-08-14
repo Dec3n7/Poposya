@@ -653,3 +653,22 @@ export interface MintedBatch {
   batch_id: number;
   keys: string[];
 }
+
+export interface KeyActivation {
+  nonce: string;
+  key_masked: string; // …хвост ключа
+  guild_id: string; // Discord id строкой (точность JS)
+  user_id: string;
+  tier: string;
+  duration_days: number;
+  batch_id: number;
+  batch_label: string;
+  redeemed_at: string; // ISO8601 UTC
+}
+
+export interface KeyAttempt {
+  user_id: string;
+  guild_id: string;
+  at: string;
+  outcome: string; // ok | extended | invalid | expired | revoked | full | rate_limited
+}

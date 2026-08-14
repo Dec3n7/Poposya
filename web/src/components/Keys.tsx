@@ -1,7 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { IssuedKey, KeyBatch, KeysOverview } from "../types";
+import type { IssuedKey, KeyActivation, KeyAttempt, KeyBatch, KeysOverview } from "../types";
 import { Dropdown } from "./Dropdown";
 
 // Операторский пул лицензионных ключей Premium/Pro: генерация партий по SKU,
@@ -175,6 +175,7 @@ export function Keys({ onBack }: { onBack: () => void }) {
             <MintForm durations={data.durations} onMinted={load} />
             <SkuTable data={data} />
             <BatchList batches={data.batches} onChanged={load} />
+            <Journal onChanged={load} />
           </>
         ) : null}
       </main>
@@ -512,6 +513,173 @@ function BatchRow({ batch, onChanged }: { batch: KeyBatch; onChanged: () => void
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const OUTCOME_LABELS: Record<string, string> = {
+  ok: "выдан",
+  extended: "продлён",
+  full: "слоты заняты",
+  invalid: "неверный",
+  expired: "просрочен",
+  revoked: "отозван",
+  rate_limited: "лимит",
+};
+const OUTCOME_OK = new Set(["ok", "extended"]);
+
+function fmtDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+// Журнал активаций (§7): кто/сервер/тариф/ключ(маска)/когда + точечное
+// освобождение сита (§3). Плюс лента попыток (успех и отказ) для видимости абуза.
+function Journal({ onChanged }: { onChanged: () => void }) {
+  const [acts, setActs] = useState<KeyActivation[] | null>(null);
+  const [attempts, setAttempts] = useState<KeyAttempt[] | null>(null);
+  const [showAttempts, setShowAttempts] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadActs = useCallback(() => {
+    api
+      .keyActivations()
+      .then(setActs)
+      .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить журнал."));
+  }, []);
+  useEffect(() => loadActs(), [loadActs]);
+
+  async function release(a: KeyActivation) {
+    if (
+      !window.confirm(
+        `Снять сервер ${a.guild_id} с лицензии? Premium будет снят, а сит освободится — ключ можно будет активировать на другом сервере.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.releaseSeat(a.nonce, a.guild_id);
+      loadActs();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось освободить сит.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openAttempts() {
+    setShowAttempts(true);
+    if (attempts === null) {
+      try {
+        setAttempts(await api.keyAttempts());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Не удалось загрузить попытки.");
+      }
+    }
+  }
+
+  return (
+    <div className="card pad">
+      <div className="acc-title" style={{ marginBottom: 8 }}>
+        Активации
+      </div>
+      {error && (
+        <div className="error-banner" style={{ marginBottom: 8 }}>
+          {error}
+        </div>
+      )}
+      {acts === null ? (
+        <p className="muted small">Загружаю…</p>
+      ) : acts.length === 0 ? (
+        <div className="muted small">Пока никто не активировал ключи.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88em" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                <th style={{ padding: "4px 8px" }}>Кто</th>
+                <th style={{ padding: "4px 8px" }}>Сервер</th>
+                <th style={{ padding: "4px 8px" }}>Тариф</th>
+                <th style={{ padding: "4px 8px" }}>Ключ</th>
+                <th style={{ padding: "4px 8px" }}>Когда</th>
+                <th style={{ padding: "4px 8px" }} />
+              </tr>
+            </thead>
+            <tbody>
+              {acts.map((a) => (
+                <tr key={`${a.nonce}-${a.guild_id}`} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "6px 8px", fontFamily: "monospace" }}>{a.user_id}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "monospace" }}>{a.guild_id}</td>
+                  <td style={{ padding: "6px 8px" }}>
+                    <TierBadge tier={a.tier} />
+                  </td>
+                  <td style={{ padding: "6px 8px", fontFamily: "monospace" }}>{a.key_masked}</td>
+                  <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                    {fmtDateTime(a.redeemed_at)}
+                  </td>
+                  <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                    <button className="btn ghost small" disabled={busy} onClick={() => release(a)}>
+                      Освободить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12 }}>
+        {!showAttempts ? (
+          <button className="btn ghost small" onClick={openAttempts}>
+            Показать попытки активации
+          </button>
+        ) : (
+          <AttemptsTable attempts={attempts} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AttemptsTable({ attempts }: { attempts: KeyAttempt[] | null }) {
+  if (attempts === null) return <p className="muted small">Загружаю…</p>;
+  if (attempts.length === 0) return <div className="muted small">Попыток пока не было.</div>;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div className="muted small" style={{ marginBottom: 6 }}>
+        Все попытки активации (успех и отказ) — видно перебор/абуз.
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85em" }}>
+        <thead>
+          <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+            <th style={{ padding: "4px 8px" }}>Кто</th>
+            <th style={{ padding: "4px 8px" }}>Сервер</th>
+            <th style={{ padding: "4px 8px" }}>Исход</th>
+            <th style={{ padding: "4px 8px" }}>Когда</th>
+          </tr>
+        </thead>
+        <tbody>
+          {attempts.map((a, i) => (
+            <tr key={`${a.user_id}-${a.at}-${i}`} style={{ borderTop: "1px solid var(--line)" }}>
+              <td style={{ padding: "5px 8px", fontFamily: "monospace" }}>{a.user_id}</td>
+              <td style={{ padding: "5px 8px", fontFamily: "monospace" }}>{a.guild_id}</td>
+              <td
+                style={{ padding: "5px 8px", color: OUTCOME_OK.has(a.outcome) ? "#7bd88f" : "#e0a0a0" }}
+              >
+                {OUTCOME_LABELS[a.outcome] ?? a.outcome}
+              </td>
+              <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{fmtDateTime(a.at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

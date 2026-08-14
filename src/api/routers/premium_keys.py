@@ -18,6 +18,8 @@ from src.api.security import Session
 from src.infrastructure.entitlements import parse_tier
 from src.infrastructure.premium_keys.codec import KEY_DURATIONS
 from src.infrastructure.premium_keys.service import (
+    ActivationView,
+    AttemptView,
     BatchView,
     KeyView,
     PremiumKeyService,
@@ -95,6 +97,34 @@ class ReactivateResponse(BaseModel):
     reactivated: bool
 
 
+class ActivationDTO(BaseModel):
+    nonce: str
+    key_masked: str
+    guild_id: str  # Discord id строкой — JS теряет точность на >2^53
+    user_id: str
+    tier: str
+    duration_days: int
+    batch_id: int
+    batch_label: str
+    redeemed_at: str
+
+
+class AttemptDTO(BaseModel):
+    user_id: str
+    guild_id: str
+    at: str
+    outcome: str
+
+
+class ReleaseRequest(BaseModel):
+    nonce: str
+    guild_id: int
+
+
+class ReleaseResponse(BaseModel):
+    released: bool
+
+
 def _batch_dto(b: BatchView) -> BatchDTO:
     return BatchDTO(
         batch_id=b.batch_id,
@@ -129,6 +159,29 @@ def _key_dto(k: KeyView) -> KeyDTO:
         seats_used=k.seats_used,
         seats_total=k.seats_total,
         status=k.status,
+    )
+
+
+def _activation_dto(a: ActivationView) -> ActivationDTO:
+    return ActivationDTO(
+        nonce=a.nonce,
+        key_masked=a.key_masked,
+        guild_id=str(a.guild_id),
+        user_id=str(a.user_id),
+        tier=a.tier.name.lower(),
+        duration_days=a.duration_days,
+        batch_id=a.batch_id,
+        batch_label=a.batch_label,
+        redeemed_at=a.redeemed_at.replace(tzinfo=UTC).isoformat(),
+    )
+
+
+def _attempt_dto(a: AttemptView) -> AttemptDTO:
+    return AttemptDTO(
+        user_id=str(a.user_id),
+        guild_id=str(a.guild_id),
+        at=a.at.replace(tzinfo=UTC).isoformat(),
+        outcome=a.outcome,
     )
 
 
@@ -267,3 +320,53 @@ async def export_batch(
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
     return "\n".join(keys)
+
+
+@router.get("/activations", response_model=list[ActivationDTO])
+async def activations(
+    guild_id: int | None = Query(None),
+    user_id: int | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> list[ActivationDTO]:
+    """Журнал активаций: кто/сервер/когда/tier/ключ(маска). Фильтры по серверу и
+    пользователю. Источник — потраченные ситы (успешные активации, §7)."""
+    rows = await _svc(container).list_activations(
+        limit=limit, offset=offset, guild_id=guild_id, user_id=user_id
+    )
+    return [_activation_dto(a) for a in rows]
+
+
+@router.get("/attempts", response_model=list[AttemptDTO])
+async def attempts(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> list[AttemptDTO]:
+    """Лента попыток активации (успех и отказ) — видимость перебора/абуза (§4)."""
+    rows = await _svc(container).list_attempts(limit=limit, offset=offset)
+    return [_attempt_dto(a) for a in rows]
+
+
+@router.post("/seats/release", response_model=ReleaseResponse)
+async def release_seat(
+    body: ReleaseRequest,
+    session: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> ReleaseResponse:
+    """Точечно снять сервер с лицензии (§3): освободить сит (nonce, guild) и снять
+    Premium с сервера. Сит возвращается — ключ можно активировать на другом."""
+    freed = await _svc(container).release_seat(body.nonce, body.guild_id)
+    if not freed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Такого активированного сита нет")
+    await record_audit(
+        container,
+        body.guild_id,
+        session.user_id,
+        "keys.release_seat",
+        target=body.nonce,
+    )
+    return ReleaseResponse(released=True)

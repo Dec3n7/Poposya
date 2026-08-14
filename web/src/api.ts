@@ -16,6 +16,8 @@ import type {
   GuildSummary,
   GuildWarn,
   IssuedKey,
+  KeyActivation,
+  KeyAttempt,
   KeysOverview,
   Me,
   MemberRoles,
@@ -470,6 +472,19 @@ export const api = {
     }),
   reactivateBatch: (batchId: number): Promise<{ reactivated: boolean }> =>
     req(`/api/admin/premium-keys/batches/${batchId}/reactivate`, { method: "POST" }),
+  keyActivations: (guildId?: string): Promise<KeyActivation[]> =>
+    req<KeyActivation[]>(
+      `/api/admin/premium-keys/activations${guildId ? `?guild_id=${guildId}` : ""}`,
+    ),
+  keyAttempts: (): Promise<KeyAttempt[]> =>
+    req<KeyAttempt[]>("/api/admin/premium-keys/attempts"),
+  // guildId шлём СТРОКОЙ: Discord id > 2^53, JSON-число потеряло бы точность —
+  // бэкенд (pydantic int) распарсит строку в произвольную точность
+  releaseSeat: (nonce: string, guildId: string): Promise<{ released: boolean }> =>
+    req("/api/admin/premium-keys/seats/release", {
+      method: "POST",
+      body: JSON.stringify({ nonce, guild_id: guildId }),
+    }),
   wardenStatus: (): Promise<WardenSnapshot> => req<WardenSnapshot>("/api/warden/status"),
   wardenEnabled: (): Promise<{ enabled: boolean }> =>
     req<{ enabled: boolean }>("/api/warden/enabled"),

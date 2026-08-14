@@ -18,6 +18,13 @@ SECRET = "svc-signing-secret-not-for-production-0123456789"
 OPERATOR = 1000
 
 
+def _nonce(key: str) -> str:
+    """nonce (hex) из ключа — для точечного release_seat в тестах."""
+    payload = codec.verify(SECRET, key)
+    assert payload is not None
+    return payload.nonce_hex
+
+
 def _settings(**over):
     return Settings(_env_file=None, discord_token="t", **over)
 
@@ -209,3 +216,62 @@ async def test_sku_inventory_groups_by_tier_duration(session_factory):
     assert prem30.issued == 3 and prem30.remaining == 3  # 3 ключа premium=1 сит
     pro365 = next(s for s in skus if s.tier is PlanTier.PRO and s.duration_days == 365)
     assert pro365.issued == 1 and pro365.capacity == 5
+
+
+# ── журнал активаций и попыток (§7) ──────────────────────────────────────────
+
+
+async def test_list_activations_records_who_where_which_key(session_factory):
+    svc, _ = _service(session_factory)
+    batch = await _mint(svc, tier=PlanTier.PRO, count=1)
+    await svc.redeem(batch.keys[0], guild_id=500, user_id=7)
+    acts = await svc.list_activations()
+    assert len(acts) == 1
+    a = acts[0]
+    assert a.guild_id == 500 and a.user_id == 7 and a.tier is PlanTier.PRO
+    assert a.batch_id == batch.batch_id
+    assert a.key_masked.startswith("…") and a.key_masked.endswith(
+        batch.keys[0][-6:]
+    )  # маска = хвост
+
+
+async def test_list_activations_filters_by_guild(session_factory):
+    svc, _ = _service(session_factory)
+    batch = await _mint(svc, tier=PlanTier.PRO)  # seats=5
+    await svc.redeem(batch.keys[0], 500, 7)
+    await svc.redeem(batch.keys[0], 501, 8)
+    assert len(await svc.list_activations(guild_id=500)) == 1
+    assert len(await svc.list_activations()) == 2
+
+
+async def test_list_attempts_records_success_and_failure(session_factory):
+    svc, _ = _service(session_factory)
+    batch = await _mint(svc)
+    await svc.redeem(batch.keys[0], 500, 7)  # ok
+    await svc.redeem("POPO-BAD-KEYY", 500, 7)  # invalid
+    attempts = await svc.list_attempts()
+    outcomes = {a.outcome for a in attempts}
+    assert "ok" in outcomes and "invalid" in outcomes
+
+
+# ── точечное освобождение сита (§3) ──────────────────────────────────────────
+
+
+async def test_release_seat_frees_and_strips_premium(session_factory):
+    svc, ent = _service(session_factory)
+    batch = await _mint(svc, tier=PlanTier.PREMIUM)  # seats=1
+    await svc.redeem(batch.keys[0], 500, 7)
+    assert ent.tier(500) is PlanTier.PREMIUM
+    # второй сервер не влезает — сит занят
+    assert (await svc.redeem(batch.keys[0], 999, 7)).outcome is RedeemOutcome.FULL
+
+    freed = await svc.release_seat(_nonce(batch.keys[0]), 500)
+    assert freed is True
+    assert ent.tier(500) is PlanTier.FREE  # Premium снят с освобождённого сервера
+    # сит вернулся — теперь ключ активируется на другом сервере
+    assert (await svc.redeem(batch.keys[0], 999, 7)).outcome is RedeemOutcome.OK
+
+
+async def test_release_seat_absent_returns_false(session_factory):
+    svc, _ = _service(session_factory)
+    assert await svc.release_seat("deadbeefdeadbeef", 500) is False

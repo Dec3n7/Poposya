@@ -179,3 +179,59 @@ async def test_revoke_404_missing(client):
     assert (
         await client.post(f"{BASE}/batches/999/revoke", json={"reason": "x"})
     ).status_code == 404
+
+
+# --- журнал активаций и освобождение сита -----------------------------------
+
+
+async def test_activations_journal_after_redeem(client, container):
+    minted = await _mint(client, tier="pro", count=1)
+    await container.premium_keys.redeem(minted["keys"][0], guild_id=555, user_id=77)
+    r = await client.get(f"{BASE}/activations")
+    assert r.status_code == 200
+    acts = r.json()
+    assert len(acts) == 1
+    a = acts[0]
+    assert a["guild_id"] == "555" and a["user_id"] == "77" and a["tier"] == "pro"
+    assert a["key_masked"].startswith("…")
+    # фильтр по серверу
+    assert len((await client.get(f"{BASE}/activations?guild_id=555")).json()) == 1
+    assert len((await client.get(f"{BASE}/activations?guild_id=999")).json()) == 0
+
+
+async def test_attempts_log(client, container):
+    minted = await _mint(client)
+    await container.premium_keys.redeem(minted["keys"][0], 555, 77)
+    await container.premium_keys.redeem("POPO-BAD-KEYY", 555, 77)
+    outcomes = {a["outcome"] for a in (await client.get(f"{BASE}/attempts")).json()}
+    assert "ok" in outcomes and "invalid" in outcomes
+
+
+async def test_release_seat_frees_and_strips(client, container):
+    minted = await _mint(client, tier="premium", count=1)
+    await container.premium_keys.redeem(minted["keys"][0], 555, 77)
+    nonce = (await client.get(f"{BASE}/activations")).json()[0]["nonce"]
+    r = await client.post(f"{BASE}/seats/release", json={"nonce": nonce, "guild_id": 555})
+    assert r.status_code == 200 and r.json()["released"] is True
+    assert container.entitlements.tier(555) is container.entitlements.default_tier
+    assert len((await client.get(f"{BASE}/activations")).json()) == 0  # сит освобождён
+
+
+async def test_release_seat_404_absent(client):
+    r = await client.post(
+        f"{BASE}/seats/release", json={"nonce": "deadbeefdeadbeef", "guild_id": 1}
+    )
+    assert r.status_code == 404
+
+
+async def test_journal_and_release_require_operator(container):
+    app = create_app(container)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies={SESSION_COOKIE: _cookie(container.settings, STRANGER)},
+    ) as stranger:
+        assert (await stranger.get(f"{BASE}/activations")).status_code == 403
+        assert (
+            await stranger.post(f"{BASE}/seats/release", json={"nonce": "x", "guild_id": 1})
+        ).status_code == 403

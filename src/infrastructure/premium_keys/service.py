@@ -14,10 +14,11 @@ from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from secrets import randbits
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.interfaces.entitlements import PlanTier
+from src.infrastructure.db.dml import rows_affected
 from src.infrastructure.db.models.premium_keys import (
     KeySeatModel,
     PremiumKeyAttemptModel,
@@ -116,6 +117,31 @@ class SkuView:
     redeemed_seats: int
     capacity: int
     remaining: int
+
+
+@dataclass(frozen=True)
+class ActivationView:
+    """Успешная активация (потраченный сит): кто/где/когда/каким ключом (§7)."""
+
+    nonce: str
+    key_masked: str  # …хвост перевыпущенного ключа — корреляция без раскрытия
+    guild_id: int
+    user_id: int  # redeemed_by_user
+    tier: PlanTier
+    duration_days: int
+    batch_id: int
+    batch_label: str
+    redeemed_at: datetime
+
+
+@dataclass(frozen=True)
+class AttemptView:
+    """Попытка активации (успех и отказ) — видимость перебора/абуза (§4)."""
+
+    user_id: int
+    guild_id: int
+    at: datetime
+    outcome: str
 
 
 class PremiumKeyService:
@@ -534,6 +560,91 @@ class PremiumKeyService:
             )
             for (tier, dur), vals in sorted(agg.items(), key=lambda kv: (kv[0][0].value, kv[0][1]))
         ]
+
+    # ── журнал активаций и освобождение сита (§3, §7) ──────────────────────
+
+    async def list_activations(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        guild_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[ActivationView]:
+        """Успешные активации (потраченные ситы) — кто/где/когда/каким ключом.
+        Новые сверху. Фильтры по серверу и пользователю. Ключ маскируется
+        (перевыпуск + хвост), полностью в журнал не светим (§7)."""
+        stmt = (
+            select(KeySeatModel, PremiumKeyBatchModel)
+            .join(PremiumKeyIssuedModel, KeySeatModel.nonce == PremiumKeyIssuedModel.nonce)
+            .join(
+                PremiumKeyBatchModel,
+                PremiumKeyIssuedModel.batch_id == PremiumKeyBatchModel.batch_id,
+            )
+        )
+        if guild_id is not None:
+            stmt = stmt.where(KeySeatModel.guild_id == guild_id)
+        if user_id is not None:
+            stmt = stmt.where(KeySeatModel.redeemed_by_user == user_id)
+        stmt = stmt.order_by(KeySeatModel.redeemed_at.desc()).limit(limit).offset(offset)
+        async with self._sf() as session:
+            rows = list((await session.execute(stmt)).all())
+        views: list[ActivationView] = []
+        for seat, batch in rows:
+            masked = (
+                "…" + self._remint(batch, seat.nonce)[-6:]
+                if self.enabled
+                else "…" + seat.nonce[-6:]
+            )
+            views.append(
+                ActivationView(
+                    nonce=seat.nonce,
+                    key_masked=masked,
+                    guild_id=seat.guild_id,
+                    user_id=seat.redeemed_by_user,
+                    tier=parse_tier(seat.tier),
+                    duration_days=batch.duration_days,
+                    batch_id=batch.batch_id,
+                    batch_label=batch.label,
+                    redeemed_at=seat.redeemed_at,
+                )
+            )
+        return views
+
+    async def list_attempts(self, *, limit: int = 100, offset: int = 0) -> list[AttemptView]:
+        """Лента попыток активации (успех и отказ) — видимость перебора. Ключ тут
+        не хранится (журнал попыток лёгкий), только пользователь/сервер/исход."""
+        async with self._sf() as session:
+            rows = list(
+                (
+                    await session.execute(
+                        select(PremiumKeyAttemptModel)
+                        .order_by(PremiumKeyAttemptModel.at.desc())
+                        .limit(limit)
+                        .offset(offset)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [AttemptView(a.user_id, a.guild_id, a.at, a.outcome) for a in rows]
+
+    async def release_seat(self, nonce: str, guild_id: int) -> bool:
+        """Точечно снять сервер с лицензии (§3): удалить сит (nonce, guild) и снять
+        Premium с этого сервера. Сит возвращается — ключ можно активировать на
+        другом сервере. True — сит был и освобождён; False — такого сита нет."""
+        async with self._sf() as session:
+            res = await session.execute(
+                delete(KeySeatModel).where(
+                    KeySeatModel.nonce == nonce, KeySeatModel.guild_id == guild_id
+                )
+            )
+            existed = rows_affected(res) > 0
+            await session.commit()
+        if existed:
+            await self._ent.revoke(guild_id)  # снять Premium с сервера
+            logger.info("Сит (%s…, guild %s) освобождён, Premium снят", nonce[:6], guild_id)
+        return existed
 
     # ── журнал попыток ──────────────────────────────────────────────────────
 
