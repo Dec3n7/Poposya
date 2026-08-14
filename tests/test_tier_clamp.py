@@ -119,3 +119,21 @@ def test_delegates_writes_and_resolved():
 
 def test_stub_is_pro_so_seam_is_noop():
     assert UnlimitedEntitlements().tier(123) == PlanTier.PRO
+
+
+# --- нудж апгрейда при лимите (уведомления «дальше по подписке») ---
+
+
+def test_upgrade_hint_shown_on_free_only():
+    inner = _FakeProvider()
+    free = TierClampSettingsProvider(inner, _FixedTier(PlanTier.FREE))
+    premium = TierClampSettingsProvider(inner, _FixedTier(PlanTier.PREMIUM))
+    pro = TierClampSettingsProvider(inner, _FixedTier(PlanTier.PRO))
+    assert "/premium" in free.upgrade_hint(10)  # free — нудим на подписку
+    assert premium.upgrade_hint(10) == ""  # у Premium лимиты полные — не нудим
+    assert pro.upgrade_hint(10) == ""
+    assert free.upgrade_hint(None) == ""  # нет гильдии — пусто
+
+
+def test_base_provider_upgrade_hint_empty():
+    assert _FakeProvider().upgrade_hint(10) == ""  # провайдер без тарифа — нудж пуст

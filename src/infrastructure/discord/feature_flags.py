@@ -9,6 +9,14 @@ import discord
 from src.application.guild_config.schema import MODULE_MIN_TIER
 
 
+def limit_suffix(gs, guild_id: int | None) -> str:
+    """Суффикс-нудж к сообщению о достигнутом лимите: перевод строки + подсказка
+    про подписку, если сервер на free (провайдер решает). Пусто на Premium/Pro или
+    когда провайдер не подключён (тесты). Добавляется к тексту лимита в когах."""
+    hint = gs.upgrade_hint(guild_id) if gs is not None else ""
+    return f"\n{hint}" if hint else ""
+
+
 def flag_on(settings, gs, guild_id: int, key: str) -> bool:
     default = getattr(settings, key, True)
     value = gs.get(guild_id, key, default) if gs is not None else default

@@ -15,7 +15,7 @@ from src.config import Settings
 from src.domain.cinema.entities import MovieEntry
 from src.infrastructure.cinema.provider import IMovieSearch, MovieInfo
 from src.infrastructure.discord.accent import accent
-from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.feature_flags import block_if_module_off, limit_suffix
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.scheduler import DeferredScheduler
@@ -207,7 +207,8 @@ class CinemaCog(PersonaPhraseMixin, commands.Cog):
             return
         if result.status == "limit":
             await interaction.followup.send(
-                self._p(gid, "cinema.add_limit", max=self._cfg(gid, "cinema_watchlist_max")),
+                self._p(gid, "cinema.add_limit", max=self._cfg(gid, "cinema_watchlist_max"))
+                + limit_suffix(self.gs, gid),
                 ephemeral=True,
             )
             return

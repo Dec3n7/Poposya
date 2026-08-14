@@ -19,11 +19,25 @@ from src.application.guild_config.schema import TIERABLE, ClampDir, TierCap
 from src.application.interfaces.entitlements import IEntitlements, PlanTier
 from src.application.interfaces.settings_provider import ISettingsProvider
 
+# нудж на подписку, который коги добавляют к сообщению о лимите, когда free-сервер
+# упёрся в тарифный потолок. Короткий, в голосе Попоси. На Premium/Pro не
+# показывается (у них лимиты уже полные — незачем нудить). Правится тут централизованно.
+_UPGRADE_HINT = (
+    "Это гостевой потолок — со «своим домом» его нет. Что откроет подписка, шепну в `/premium` 🖤"
+)
+
 
 class TierClampSettingsProvider(ISettingsProvider):
     def __init__(self, inner: ISettingsProvider, entitlements: IEntitlements):
         self._inner = inner
         self._ent = entitlements
+
+    def upgrade_hint(self, guild_id: int | None) -> str:
+        """Подсказка про подписку для сообщений о лимите — ТОЛЬКО на free-тарифе
+        (Premium/Pro уже с полными лимитами, их не трогаем). Пусто = не показывать."""
+        if guild_id is None:
+            return ""
+        return _UPGRADE_HINT if self._ent.tier(guild_id) < PlanTier.PREMIUM else ""
 
     def get(self, guild_id: int, key: str, default):
         value = self._inner.get(guild_id, key, default)

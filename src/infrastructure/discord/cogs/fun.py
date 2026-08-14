@@ -16,7 +16,7 @@ from src.application.relationship.di import RelationshipContainer
 from src.config import Settings
 from src.infrastructure.ai.rate_limiter import InMemoryRateLimiter
 from src.infrastructure.discord.accent import accent
-from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on
+from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on, limit_suffix
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
@@ -501,7 +501,8 @@ class FunCog(PersonaPhraseMixin, commands.Cog):
         )
         if not self._send_limiter.try_acquire(key, send_per_hour):
             await interaction.response.send_message(
-                self._p(gid, "fun.send_rate_limited"), ephemeral=True
+                self._p(gid, "fun.send_rate_limited") + limit_suffix(self.gs, gid),
+                ephemeral=True,
             )
             return
         # дальше — сетевые вызовы (ЛС получателю): отвечаем через defer

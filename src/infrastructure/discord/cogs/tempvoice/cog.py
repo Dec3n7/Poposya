@@ -24,7 +24,7 @@ from discord.ext import commands
 from src.application.tempvoice.di import TempVoiceContainer
 from src.config import Settings
 from src.domain.tempvoice.entities import TempChannel
-from src.infrastructure.discord.feature_flags import flag_on
+from src.infrastructure.discord.feature_flags import flag_on, limit_suffix
 from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
@@ -254,7 +254,10 @@ class TempVoiceCog(PersonaPhraseMixin, commands.Cog):
         if await self.container.count.execute(guild.id) >= self._cfg(
             guild.id, "tempvoice_max_per_guild"
         ):
-            await _dm_quiet(member, self._p(guild.id, "tempvoice.cap_reached"))
+            await _dm_quiet(
+                member,
+                self._p(guild.id, "tempvoice.cap_reached") + limit_suffix(self.gs, guild.id),
+            )
             return
 
         temp = await self._create_channel(member, channel)

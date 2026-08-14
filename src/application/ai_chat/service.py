@@ -268,8 +268,13 @@ class ChatService:
         limit = rate_limits.get(award.level, 5)
         key = f"{request.guild_id}:{request.user_id}"
         if not self._limiter.try_acquire(key, limit):
+            text = random.choice(self._phrase_list(request.guild_id, "ai_chat.brush_offs"))
+            # на free-тарифе лимит реплик зажат — намекнём, что подписка его снимает
+            hint = (
+                self._settings.upgrade_hint(request.guild_id) if self._settings is not None else ""
+            )
             return ChatReply(
-                text=random.choice(self._phrase_list(request.guild_id, "ai_chat.brush_offs")),
+                text=f"{text}\n{hint}" if hint else text,
                 rate_limited=True,
                 award=award,
                 stale_session=stale,

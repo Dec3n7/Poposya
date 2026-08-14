@@ -168,6 +168,27 @@ async def test_respond_rate_limited_returns_brush_off():
     assert provider.calls == []  # AI не дёргается при лимите
 
 
+class _NudgeSettings:
+    """Провайдер настроек, который на лимите даёт нудж на подписку (как кламп-
+    провайдер на free-тарифе)."""
+
+    def get(self, guild_id, key, default):
+        return default
+
+    def upgrade_hint(self, guild_id):
+        return "Подписка снимает лимит — /premium"
+
+
+async def test_respond_rate_limited_appends_upgrade_hint_on_free():
+    # на free-тарифе к brush-off добавляется нудж «дальше по подписке» (§6 идей)
+    svc = make_service(limiter=FakeRateLimiter(allow=False), settings_provider=_NudgeSettings())
+    reply = await svc.respond(make_request(), NOW)
+    assert reply.rate_limited is True
+    assert "/premium" in reply.text  # нудж добавлен
+    brush_offs = PHRASE_SPECS["ai_chat.brush_offs"].default
+    assert any(reply.text.startswith(b) for b in brush_offs)  # это brush-off + нудж
+
+
 async def test_respond_rate_limit_uses_level_specific_limit():
     limiter = FakeRateLimiter(allow=True)
     svc = make_service(limiter=limiter, award=FakeAward(make_award(level=2)))
