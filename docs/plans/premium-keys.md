@@ -1,5 +1,7 @@
 # Монетизация: активация Premium/Pro по ключам — ПЛАН
 
+> **Решение:** [ADR-014](../adr/ADR-014-entitlement-grant-and-billing.md).
+
 > Статус: **план, не реализовано.** Дизайн под реализацию. Опирается на готовый
 > `EntitlementService` / `guild_entitlements` (см. `monetization-prep.md`).
 >

@@ -4,6 +4,9 @@
 > 2026-07-17), командный мост панель↔бот на LISTEN/NOTIFY работает. Файл
 > оставлен как исторический план и аудит-обоснование.
 > Дата аудита: 2026-07-18
+>
+> **Решение:** [ADR-001](../adr/ADR-001-postgresql-production-database.md) (PostgreSQL в проде),
+> [ADR-010](../adr/ADR-010-panel-bot-listen-notify.md) (`LISTEN/NOTIFY`).
 
 ## Зачем это
 

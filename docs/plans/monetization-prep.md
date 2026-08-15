@@ -1,5 +1,8 @@
 # Монетизация: тарифы / entitlement — РЕАЛИЗОВАНО
 
+> **Решение:** [ADR-009](../adr/ADR-009-tier-enforcement-seam.md) (шов enforcement),
+> [ADR-014](../adr/ADR-014-entitlement-grant-and-billing.md) (выдача тарифа / биллинг).
+
 > Статус: **внедрено полностью и проверено.** Полный тест-сет — **1907 passed /
 > 19 skipped**; фронт собирается (`tsc` + `vite build`); миграция 0040
 > применяется через alembic; ruff + mypy чисты. Осталось только внешнее —

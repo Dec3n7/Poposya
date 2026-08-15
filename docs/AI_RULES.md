@@ -1,3 +1,6 @@
+<!-- Правила слоёв следуют из ADR-007 (adr/ADR-007-hexagonal-dependency-rule.md);
+     реестр решений — adr/README.md. -->
+
 Перед генерацией кода проверь:
 
 □ Не нарушает ли код Dependency Rule?
