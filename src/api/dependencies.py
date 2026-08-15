@@ -11,19 +11,60 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from src.api.container import ApiContainer
 from src.api.discord_oauth import OAuthError
 from src.api.security import (
+    CSRF_COOKIE,
     PERM_BAN_MEMBERS,
     PERM_KICK_MEMBERS,
     PERM_MANAGE_ROLES,
     PERM_MODERATE_MEMBERS,
     SESSION_COOKIE,
     Session,
+    csrf_token,
     decode_session,
     encode_session,
 )
 
+# методы без побочных эффектов не гейтим свежестью прав (чтения всегда проходят)
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
 
 def get_container(request: Request) -> ApiContainer:
     return request.app.state.container
+
+
+def _set_csrf_cookie(container: ApiContainer, session: Session, response: Response) -> None:
+    """Выдать/обновить НЕ-httpOnly куку с CSRF-токеном сессии (её читает фронт и
+    шлёт эхом в заголовке). Ставится на каждом авторизованном запросе, чтобы и
+    уже вошедшие пользователи получили токен без перелогина."""
+    response.set_cookie(
+        CSRF_COOKIE,
+        csrf_token(container.settings.web_session_secret, session.user_id, session.epoch),
+        max_age=_cookie_ttl_seconds(container),
+        httponly=False,  # фронту нужно прочитать значение из JS
+        samesite="lax",
+        secure=container.settings.web_oauth_redirect.startswith("https"),
+    )
+
+
+def _cookie_ttl_seconds(container: ApiContainer) -> int:
+    s = container.settings
+    if s.web_idle_ttl_minutes > 0:
+        return s.web_idle_ttl_minutes * 60
+    return s.web_session_ttl_hours * 3600
+
+
+def assert_perms_fresh(request: Request, container: ApiContainer, session: Session) -> None:
+    """Привилегированные ДЕЙСТВИЯ требуют не слишком старого снимка прав Discord
+    (web_perm_ttl_minutes). Чтения (safe-методы) и выключенный потолок (0) —
+    проходят. Иначе 401: фронт по любому 401 уводит на логин, где права
+    перечитываются из OAuth. Так разжалованный в Discord админ теряет доступ к
+    действиям за минуты, а не за весь TTL сессии."""
+    ttl = container.settings.web_perm_ttl_minutes
+    if ttl <= 0 or request.method in _SAFE_METHODS:
+        return
+    if int(time.time()) - session.perms_at > ttl * 60:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "права устарели — войдите заново"
+        )
 
 
 def _slide_session(container: ApiContainer, session: Session, response: Response) -> None:
@@ -46,6 +87,9 @@ def _slide_session(container: ApiContainer, session: Session, response: Response
         session.epoch,
         idle_minutes=s.web_idle_ttl_minutes,
         session_start=session.issued_at,
+        # снимок прав НЕ омолаживаем при продлении — иначе web_perm_ttl_minutes
+        # никогда не сработает у активного пользователя
+        perms_at=session.perms_at,
     )
     response.set_cookie(
         SESSION_COOKIE,
@@ -73,6 +117,8 @@ def current_session(request: Request, response: Response) -> Session:
     if session.epoch != container.session_epochs.epoch_of(session.user_id):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "сессия отозвана")
     _slide_session(container, session, response)
+    # double-submit: выдаём/обновляем куку CSRF-токена (её эхом сверяет middleware)
+    _set_csrf_cookie(container, session, response)
     return session
 
 
@@ -115,6 +161,7 @@ async def require_guild_manager(
     require_guild_permission ниже."""
     if not session.can_manage(guild_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "нет прав управлять этим сервером")
+    assert_perms_fresh(request, get_container(request), session)
     await _assert_bot_present(request, guild_id)
     return guild_id
 
@@ -135,6 +182,7 @@ def require_guild_permission(
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, f"на сервере нужно право Discord: {label}"
             )
+        assert_perms_fresh(request, get_container(request), session)
         await _assert_bot_present(request, guild_id)
         return guild_id
 
@@ -156,6 +204,7 @@ async def require_any_moderator(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "нужно право модерации (бан, кик или тайм-аут)"
         )
+    assert_perms_fresh(request, get_container(request), session)
     await _assert_bot_present(request, guild_id)
     return guild_id
 

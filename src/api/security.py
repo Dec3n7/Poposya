@@ -6,6 +6,8 @@
 секреты сюда не кладём.
 """
 
+import hashlib
+import hmac
 import time
 from dataclasses import dataclass
 
@@ -13,7 +15,29 @@ import jwt
 
 SESSION_COOKIE = "poposya_session"
 OAUTH_STATE_COOKIE = "poposya_oauth_state"
+# CSRF double-submit: значение кладём в НЕ-httpOnly куку (её читает фронт) и
+# требуем эхом в заголовке на мутациях от браузера (см. api/app.csrf_origin_guard)
+CSRF_COOKIE = "poposya_csrf"
+CSRF_HEADER = "X-CSRF-Token"
 _ALGO = "HS256"
+
+
+def csrf_token(secret: str, user_id: int, epoch: int) -> str:
+    """Подписанный CSRF-токен, привязанный к сессии (пользователь+эпоха).
+
+    Детерминированный: сервер пересчитывает его из расшифрованной сессии и
+    сверяет с заголовком, без отдельного стора. Не подделать без секрета; при
+    отзыве сессии (bump эпохи) старый токен автоматически перестаёт совпадать.
+    Кроссдоменный атакующий не может ни прочитать куку-токен (SOP), ни вычислить
+    его (нет секрета) — потому подходит для double-submit."""
+    mac = hmac.new(secret.encode(), f"{user_id}:{epoch}".encode(), hashlib.sha256)
+    return mac.hexdigest()
+
+
+def csrf_token_valid(secret: str, user_id: int, epoch: int, provided: str | None) -> bool:
+    if not provided:
+        return False
+    return hmac.compare_digest(csrf_token(secret, user_id, epoch), provided)
 
 # Биты прав Discord (в токене — маска пользователя на конкретном сервере).
 # Вход в панель по-прежнему требует MANAGE_GUILD/админ (см. discord_oauth), а
@@ -52,6 +76,11 @@ class Session:
     # продлении, чтобы держать абсолютный потолок жизни сессии независимо от
     # активности. Легаси-токен без claim = 0 (потолок отсчитается заново).
     issued_at: int = 0
+    # момент СНИМКА прав Discord (unix, claim `pat`) — когда права были прочитаны
+    # из OAuth (при входе). При скользящем продлении переносится (права заново НЕ
+    # читаем), поэтому измеряет возраст снимка прав. Ограничивается через
+    # web_perm_ttl_minutes. Легаси-токен без claim = 0 (падает на iat0/iat).
+    perms_at: int = 0
 
     def can_manage(self, guild_id: int) -> bool:
         return any(g.id == guild_id for g in self.guilds)
@@ -80,6 +109,7 @@ def encode_session(
     *,
     idle_minutes: int = 0,
     session_start: int | None = None,
+    perms_at: int | None = None,
 ) -> str:
     """Подписать сессию.
 
@@ -91,6 +121,9 @@ def encode_session(
     вкладку в JS. idle_minutes = 0 — прежнее поведение (exp = now + ttl_hours)."""
     now = int(time.time())
     start = session_start if session_start is not None else now
+    # снимок прав по умолчанию свежий (вход/новый снимок); при скользящем
+    # продлении вызывающий передаёт исходный perms_at, чтобы не «омолаживать» права
+    perms_stamp = perms_at if perms_at is not None else now
     absolute_deadline = start + ttl_hours * 3600
     if idle_minutes > 0:
         exp = min(now + idle_minutes * 60, absolute_deadline)
@@ -116,6 +149,8 @@ def encode_session(
         "ep": epoch,
         # iat0 — начало сессии (для абсолютного потолка при скользящем продлении)
         "iat0": start,
+        # pat — момент снимка прав Discord (для web_perm_ttl_minutes)
+        "pat": perms_stamp,
         "iat": now,
         "exp": exp,
     }
@@ -155,6 +190,8 @@ def decode_session(secret: str, token: str, version: int = 1) -> Session | None:
             epoch=int(payload.get("ep", 0)),
             # нет claim `iat0` (легаси-токен) = отсчитываем потолок от iat/now
             issued_at=int(payload.get("iat0", payload.get("iat", 0))),
+            # нет claim `pat` (легаси-токен) = возраст снимка прав от начала сессии
+            perms_at=int(payload.get("pat", payload.get("iat0", payload.get("iat", 0)))),
         )
     except (KeyError, ValueError, TypeError):
         return None

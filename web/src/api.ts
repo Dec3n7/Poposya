@@ -71,11 +71,28 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   onUnauthorized = fn;
 }
 
+// CSRF double-submit: бэкенд кладёт токен в НЕ-httpOnly куку poposya_csrf, мы
+// читаем её и шлём эхом в заголовке на мутациях. Кроссдоменный сайт куку не
+// прочитает (SOP), поэтому подделать заголовок не сможет.
+function readCookie(name: string): string | null {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (!CSRF_SAFE_METHODS.has(method)) {
+    const csrf = readCookie("poposya_csrf");
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include", // слать сессию-куку кросс-origin
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();

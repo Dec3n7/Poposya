@@ -16,6 +16,7 @@ from src.api.dependencies import current_session, get_container, require_operato
 from src.api.discord_users import avatar_url, guild_icon_url
 from src.api.schemas import GuildDTO, GuildPermsDTO, MeDTO
 from src.api.security import (
+    CSRF_COOKIE,
     OAUTH_STATE_COOKIE,
     PERM_BAN_MEMBERS,
     PERM_KICK_MEMBERS,
@@ -24,6 +25,7 @@ from src.api.security import (
     SESSION_COOKIE,
     Session,
     SessionGuild,
+    csrf_token,
     decode_session,
     encode_session,
 )
@@ -103,12 +105,13 @@ async def callback(
         avatar=user.get("avatar"),
         guilds=discord_oauth.manageable_guilds(guilds),
     )
+    epoch = container.session_epochs.epoch_of(session.user_id)
     jwt_token = encode_session(
         s.web_session_secret,
         session,
         s.web_session_ttl_hours,
         s.web_session_version,
-        container.session_epochs.epoch_of(session.user_id),
+        epoch,
         idle_minutes=s.web_idle_ttl_minutes,
     )
     resp = RedirectResponse(s.web_allowed_origin)
@@ -120,6 +123,16 @@ async def callback(
         # сам браузер; сервер всё равно держит границу через exp в JWT
         max_age=_cookie_max_age(s),
         httponly=True,
+        samesite="lax",
+        secure=_secure_cookies(container),
+    )
+    # CSRF double-submit: НЕ-httpOnly кука с токеном сессии — фронт читает её и
+    # шлёт эхом в X-CSRF-Token на мутациях (сверяет csrf_origin_guard)
+    resp.set_cookie(
+        CSRF_COOKIE,
+        csrf_token(s.web_session_secret, session.user_id, epoch),
+        max_age=_cookie_max_age(s),
+        httponly=False,
         samesite="lax",
         secure=_secure_cookies(container),
     )

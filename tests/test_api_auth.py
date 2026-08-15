@@ -435,8 +435,37 @@ async def test_csrf_blocks_cross_site_referer(client, mock_discord):
 
 async def test_csrf_allows_matching_origin(client, mock_discord):
     await _login(client)
-    resp = await client.post("/api/auth/logout", headers={"origin": "http://localhost:5173"})
+    # свой Origin -> кроме совпадения требуется валидный double-submit токен
+    csrf = client.cookies["poposya_csrf"]
+    resp = await client.post(
+        "/api/auth/logout",
+        headers={"origin": "http://localhost:5173", "X-CSRF-Token": csrf},
+    )
     assert resp.status_code == 204
+
+
+async def test_csrf_token_required_when_origin_present(client, mock_discord):
+    # свой Origin, но БЕЗ токена -> отбой (double-submit не выполнен)
+    await _login(client)
+    resp = await client.post("/api/auth/logout", headers={"origin": "http://localhost:5173"})
+    assert resp.status_code == 403
+
+
+async def test_csrf_token_rejected_when_forged(client, mock_discord):
+    await _login(client)
+    resp = await client.post(
+        "/api/auth/logout",
+        headers={"origin": "http://localhost:5173", "X-CSRF-Token": "deadbeef"},
+    )
+    assert resp.status_code == 403
+
+
+async def test_csrf_cookie_set_on_login(client, mock_discord):
+    # колбэк выдаёт НЕ-httpOnly куку с CSRF-токеном (её читает фронт)
+    state = await _login_get_state(client)
+    resp = await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "poposya_csrf=" in set_cookie
 
 
 async def test_csrf_allows_absent_origin(client, mock_discord):
@@ -451,6 +480,65 @@ async def test_csrf_ignores_safe_methods(client, mock_discord):
     await _login(client)
     resp = await client.get("/api/auth/me", headers={"origin": "http://evil.example"})
     assert resp.status_code == 200
+
+
+# --- TTL снимка прав Discord (web_perm_ttl_minutes) --------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from fastapi import HTTPException  # noqa: E402
+
+from src.api.dependencies import assert_perms_fresh  # noqa: E402
+
+
+def test_perms_at_roundtrips():
+    sess = Session(user_id=1, username="u", avatar=None, guilds=[])
+    start = int(_time.time()) - 9000
+    token = encode_session(_SECRET, sess, 24, 2, idle_minutes=15, perms_at=start)
+    decoded = decode_session(_SECRET, token, version=2)
+    assert decoded is not None and decoded.perms_at == start
+
+
+def test_legacy_token_without_pat_falls_back_to_session_start():
+    # токен без claim pat -> возраст снимка прав считаем от начала сессии (iat0)
+    start = int(_time.time()) - 100
+    payload = {
+        "sub": "1", "username": "u", "avatar": None, "guilds": [],
+        "sv": 2, "ep": 0, "iat0": start, "iat": start, "exp": int(_time.time()) + 3600,
+    }
+    token = jwt.encode(payload, _SECRET, algorithm="HS256")
+    decoded = decode_session(_SECRET, token, version=2)
+    assert decoded is not None and decoded.perms_at == start
+
+
+def _perm_ctx(ttl_minutes: int, perms_age_seconds: int, method: str = "POST"):
+    request = SimpleNamespace(method=method)
+    container = SimpleNamespace(settings=SimpleNamespace(web_perm_ttl_minutes=ttl_minutes))
+    session = Session(
+        user_id=1, username="u", avatar=None, guilds=[],
+        perms_at=int(_time.time()) - perms_age_seconds,
+    )
+    return request, container, session
+
+
+def test_perms_fresh_disabled_by_default():
+    # ttl=0 -> проверка выключена, старый снимок проходит
+    assert_perms_fresh(*_perm_ctx(ttl_minutes=0, perms_age_seconds=10_000))  # не бросает
+
+
+def test_perms_fresh_allows_recent_snapshot():
+    assert_perms_fresh(*_perm_ctx(ttl_minutes=30, perms_age_seconds=60))  # свежий -> ок
+
+
+def test_perms_fresh_rejects_stale_write():
+    with pytest.raises(HTTPException) as exc:
+        assert_perms_fresh(*_perm_ctx(ttl_minutes=30, perms_age_seconds=31 * 60))
+    assert exc.value.status_code == 401
+
+
+def test_perms_fresh_ignores_safe_methods():
+    # чтение (GET) не гейтим свежестью прав, даже если снимок протух
+    assert_perms_fresh(*_perm_ctx(ttl_minutes=30, perms_age_seconds=10_000, method="GET"))
 
 
 # --- интерактивная схема FastAPI выключена по умолчанию (web_docs_enabled) ----

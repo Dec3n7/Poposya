@@ -140,14 +140,29 @@ curl http://127.0.0.1:8080/health                                       # 200
 
 ---
 
-## 6. Дальнейший хардненинг (опционально)
+## 6. Хардненинг контейнеров (сделано) и проверка после деплоя
 
-- **nginx полностью rootless.** Сейчас мастер nginx стартует под root (штатно),
-  воркеры — под `nginx`; включён `no-new-privileges`. Для полного rootless —
-  базовый образ `nginxinc/nginx-unprivileged:alpine` в `web/Dockerfile`: слушает
-  `8080`/`8443` вместо `80`/`443` (поправьте `listen` в `web/nginx.conf`,
-  маппинг портов сервиса `web` и, при COPY, `USER root`→`USER nginx`). Даёт
-  возможность добавить `cap_drop: [ALL]` и веб-контейнеру.
-- **Read-only rootfs.** К bot/api можно добавить `read_only: true` + `tmpfs: [/tmp]`
-  (всё писабельное уже на volume `bot_data`); проверьте, что ffmpeg/yt-dlp не
-  пишут во временные пути вне `/app/data`.
+Все четыре сервиса (`bot`, `api`, `web`, `renderer`) идут с `cap_drop: [ALL]`,
+`no-new-privileges` и `read_only: true` (писчее — в `tmpfs`/на volume).
+
+- **web/nginx — rootless (UID 101).** Образ `nginxinc/nginx-unprivileged:alpine`,
+  слушает `8080`/`8443` (не `80`/`443`), pid и temp — под `/tmp` (tmpfs). Capability
+  не требуется (`cap_drop: [ALL]`, без `cap_add`). **Проверка после деплоя:**
+  1. `docker compose up -d --build web` — контейнер поднялся и `healthy`
+     (`docker compose ps`; healthcheck бьёт внутренний `http://127.0.0.1:8080/`).
+  2. Панель открывается на `https://localhost:8443`, логин и мутации (напр.
+     сохранить настройку) проходят.
+  3. **Права на сертификат:** приватный ключ `web/certs/privkey.pem` должен быть
+     ЧИТАЕМ пользователем `nginx` (UID 101) — не `0600 root`. Иначе nginx не
+     стартует (`SSL_CTX_use_PrivateKey ... permission denied` в логах web).
+     Проверить: `docker compose logs web | grep -i ssl`.
+
+## 7. Ревалидация прав Discord в панели (`WEB_PERM_TTL_MINUTES`)
+
+Права Discord вшиваются в сессию при входе (OAuth-токен не хранится). Чтобы
+разжалованный в Discord админ не сохранял доступ к ДЕЙСТВИЯМ панели весь TTL
+сессии, задайте `WEB_PERM_TTL_MINUTES` (напр. `30`): при снимке прав старше
+этого привилегированные действия (бан/кик/тайм-аут/роли/настройки) вернут `401`
+«права устарели — войдите заново», и пользователь перелогинится со свежими
+правами. Чтения и операторские права (`WEB_OPERATOR_IDS`) не затрагиваются.
+`0` (по умолчанию) — выключено (граница только по TTL/idle сессии).

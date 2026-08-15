@@ -126,40 +126,36 @@ services:
   web:
     build: ./web
     restart: unless-stopped
-    # nginx мастер стартует под root (штатно), воркеры — под nginx; снимаем хотя
-    # бы повышение прав. Полный rootless — опция nginx-unprivileged (см. RUNBOOK).
+    # Rootless: образ nginx-unprivileged работает под UID 101 (мастер И воркеры),
+    # слушает высокие порты 8080/8443 -> НИ ОДНОЙ capability не нужно.
     security_opt:
       - no-new-privileges:true
-    # cap_drop ALL + вернуть только необходимое nginx-мастеру под root:
-    # CHOWN (владелец cache/log), SETUID/SETGID (сброс воркеров в nginx),
-    # NET_BIND_SERVICE (bind :80/:443), DAC_OVERRIDE (чтение файлов). Всё
-    # остальное (raw sockets, mknod, ptrace, …) недоступно.
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - NET_BIND_SERVICE
-      - DAC_OVERRIDE
+    # read-only rootfs: всё писчее nginx (pid, client/proxy temp) образ уже держит
+    # под /tmp -> монтируем туда tmpfs. Скомпрометированный nginx не перезапишет
+    # ни бинарь, ни конфиг, ни статику.
+    read_only: true
+    tmpfs:
+      - /tmp
     mem_limit: 128m
     depends_on:
       - api
     ports:
-      # локальный HTTPS: панель на https://localhost:8443. :80 больше не
-      # публикуем — только https снаружи (внутри :80 остаётся для healthcheck).
-      - "8443:443"
+      # локальный HTTPS: панель на https://localhost:8443. Контейнерный порт тоже
+      # 8443 (rootless nginx). :8080 (внутренний HTTP) наружу НЕ публикуем.
+      - "8443:8443"
     volumes:
       # самоподписанный серт (web/certs/*.pem, в git не коммитится). Смена серта
       # без пересборки образа — просто подмени файлы и перезапусти web.
+      # Файлы должны быть читаемы UID 101 (nginx) — приватный ключ не 0600 root-only.
       - ./web/certs:/etc/nginx/certs:ro
     healthcheck:
-      # раздача статики жива? (busybox wget есть в nginx:alpine). Не завязано на
-      # api — панель отвечает index.html даже при недоступном бэкенде.
-      # 127.0.0.1, НЕ localhost: localhost в alpine резолвится в ::1, а nginx
-      # слушает только IPv4 0.0.0.0:80 -> по ::1 отказ и ложный unhealthy.
-      # Бьёмся во внутренний :80 (не публикуется) — серт проверять не нужно.
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      # раздача статики жива? (busybox wget есть в образе). Не завязано на api —
+      # панель отвечает index.html даже при недоступном бэкенде. 127.0.0.1, НЕ
+      # localhost: localhost в alpine резолвится в ::1, а nginx слушает IPv4
+      # 0.0.0.0:8080 -> по ::1 отказ и ложный unhealthy. Бьёмся во внутренний :8080.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

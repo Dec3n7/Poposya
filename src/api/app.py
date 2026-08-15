@@ -31,6 +31,7 @@ from src.api.routers import (
     settings,
     warden,
 )
+from src.api.security import CSRF_HEADER, SESSION_COOKIE, csrf_token_valid, decode_session
 
 logger = logging.getLogger(__name__)
 
@@ -123,13 +124,17 @@ def create_app(container: ApiContainer) -> FastAPI:
 
     @app.middleware("http")
     async def csrf_origin_guard(request: Request, call_next):
-        """CSRF-защита state-changing запросов проверкой Origin/Referer.
+        """CSRF-защита state-changing запросов: Origin/Referer + double-submit токен.
 
-        Кука сессии уже SameSite=Lax — это основная граница. Здесь второй рубеж:
-        браузер при mutating-fetch всегда шлёт Origin; если он присутствует и не
-        равен разрешённому фронту — это классический cross-site POST, режем 403.
-        Origin ОТСУТСТВУЕТ (сервер-сервер, curl, старый клиент) — пропускаем: это
-        не браузерный CSRF-вектор, а кука и так Lax. Defense-in-depth, не единственная защита."""
+        Кука сессии уже SameSite=Lax — базовая граница. Рубеж №2 — Origin: браузер
+        при mutating-fetch всегда шлёт Origin; если он есть и не равен фронту — это
+        cross-site POST, режем 403. Рубеж №3 — подписанный CSRF-токен: если Origin
+        присутствует (браузерный запрос к нам) и сессия валидна, требуем эхо токена
+        в заголовке X-CSRF-Token, совпадающее с привязанным к сессии значением.
+        Кроссдоменный атакующий не может ни прочитать куку-токен, ни вычислить его.
+        Origin ОТСУТСТВУЕТ (сервер-сервер, curl) — пропускаем: не браузерный вектор,
+        кука и так Lax. Токен требуем только при наличии Origin, чтобы не ломать
+        не-браузерных клиентов."""
         if request.method not in _CSRF_SAFE_METHODS and request.url.path.startswith("/api/"):
             origin = request.headers.get("origin")
             if origin is None:
@@ -139,6 +144,28 @@ def create_app(container: ApiContainer) -> FastAPI:
                 return JSONResponse(
                     {"detail": "перекрёстный запрос отклонён (CSRF)"}, status_code=403
                 )
+            if origin is not None:
+                token = request.cookies.get(SESSION_COOKIE)
+                session = (
+                    decode_session(
+                        container.settings.web_session_secret,
+                        token,
+                        container.settings.web_session_version,
+                    )
+                    if token
+                    else None
+                )
+                # только для аутентифицированных: неавторизованную мутацию всё
+                # равно отвергнет зависимость (401), защищать её от CSRF нечего
+                if session is not None and not csrf_token_valid(
+                    container.settings.web_session_secret,
+                    session.user_id,
+                    session.epoch,
+                    request.headers.get(CSRF_HEADER),
+                ):
+                    return JSONResponse(
+                        {"detail": "нет или неверный CSRF-токен"}, status_code=403
+                    )
         return await call_next(request)
 
     @app.get("/api/health")
