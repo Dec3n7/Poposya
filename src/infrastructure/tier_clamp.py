@@ -22,9 +22,7 @@ from src.application.interfaces.settings_provider import ISettingsProvider
 # нудж на подписку, который коги добавляют к сообщению о лимите, когда free-сервер
 # упёрся в тарифный потолок. Короткий, в голосе Попоси. На Premium/Pro не
 # показывается (у них лимиты уже полные — незачем нудить). Правится тут централизованно.
-_UPGRADE_HINT = (
-    "Это гостевой потолок — со «своим домом» его нет. Что откроет подписка, шепну в `/premium` 🖤"
-)
+_UPGRADE_HINT = "🖤 Это лимит бесплатного тарифа. Premium его расширяет — загляни в `/premium`."
 
 
 class TierClampSettingsProvider(ISettingsProvider):
