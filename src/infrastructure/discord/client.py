@@ -100,7 +100,13 @@ class PoposyaBot(commands.Bot):
         # тарифы серверов: коги Premium/Pro-модулей гейтят себя по нему (require_tier
         # для команд, tier_allows для событий). На free-тарифе модуль недоступен.
         entitlements = self.container.entitlements
-        music_cog = MusicCog(self, self.container.music, gs, persona=self.container.persona)
+        music_cog = MusicCog(
+            self,
+            self.container.music,
+            gs,
+            persona=self.container.persona,
+            entitlements=entitlements,
+        )
         await self.add_cog(music_cog)
         # presence из персоны: строки статуса берутся из библиотек, а по NOTIFY
         # (панель сменила персону/присвоение) статус переустанавливается сразу

@@ -12,6 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.application.interfaces.entitlements import PlanTier
 from src.application.music.di import MusicContainer
 from src.domain.music.entities import Track
 from src.domain.music.exceptions import TrackResolveError
@@ -33,7 +34,7 @@ from src.infrastructure.discord.cogs.music.views import (
     QueueView,
     SearchView,
 )
-from src.infrastructure.discord.feature_flags import block_if_module_off
+from src.infrastructure.discord.feature_flags import block_if_module_off, limit_suffix
 from src.infrastructure.discord.interaction_ctx import guild_of, member_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.discord.presence import PresenceService
@@ -65,6 +66,10 @@ logger = logging.getLogger(__name__)
 # завалили бы и тредпул yt-dlp, и сам YouTube. Шесть — компромисс.
 _SPOTIFY_SEARCH_CONCURRENCY = 6
 
+# free-потолок личных лайков (не через YouTube → можно тарифить). Premium/Pro
+# получают полный music_liked_max_per_user. Плеер/очередь/радио — free целиком.
+_FREE_LIKED_MAX = 20
+
 
 class MusicCog(PersonaPhraseMixin, commands.Cog):
     def __init__(
@@ -73,11 +78,13 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
         container: MusicContainer,
         guild_settings=None,
         persona=None,
+        entitlements=None,
     ):
         self.bot = bot
         self.container = container
         self.settings = container.settings
         self.gs = guild_settings
+        self.entitlements = entitlements  # тариф: гейт караоке-live (Premium)
         # голос кога — каталог фраз персоны (дефолты реестра без PersonaService)
         self.persona = persona if persona is not None else RegistryPersona()
         self.audio = container.audio_source
@@ -123,6 +130,11 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await block_if_module_off(interaction, self.settings, self.gs, "music_enabled")
+
+    def _is_free(self, guild_id: int) -> bool:
+        """Сервер на free-тарифе — для гейта не-YouTube музыкальных фич (лайки >20,
+        караоке-live). Нет провайдера тарифов (тесты) → не-free, не гейтим."""
+        return self.entitlements is not None and self.entitlements.tier(guild_id) < PlanTier.PREMIUM
 
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -524,6 +536,13 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
     @app_commands.guild_only()
     async def lyrics_command(self, interaction: discord.Interaction, live: bool = False) -> None:
         gid = guild_of(interaction).id
+        # караоке-live — Premium (текст с lrclib, не YouTube). Статичный текст ниже
+        # остаётся free. Гейт ДО defer.
+        if live and self._is_free(gid):
+            await interaction.response.send_message(
+                self._p(gid, "music.karaoke_premium"), ephemeral=True
+            )
+            return
         player = self.service.get_player(gid)
         if player is None or player.current is None:
             await interaction.response.send_message(
@@ -771,14 +790,19 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         track = player.current
+        # лайки — личная коллекция (не через YouTube → тарифим): free ≤20,
+        # Premium/Pro — полный music_liked_max_per_user. Гейт по тарифу гильдии,
+        # где нажали ❤️.
+        cap = _FREE_LIKED_MAX if self._is_free(gid) else self.settings.music_liked_max_per_user
         status = await self.container.toggle_like.execute(
-            interaction.user.id, track, datetime.now(UTC)
+            interaction.user.id, track, datetime.now(UTC), max_per_user=cap
         )
         title = trim(track.title, 100)
         replies = {
             "liked": self._p(gid, "music.like_liked", title=title),
             "unliked": self._p(gid, "music.like_unliked", title=title),
-            "limit": self._p(gid, "music.like_limit", limit=self.settings.music_liked_max_per_user),
+            # на free упёрлись в 20 — намекнём, что Premium расширяет список
+            "limit": self._p(gid, "music.like_limit", limit=cap) + limit_suffix(self.gs, gid),
         }
         await interaction.followup.send(replies[status], ephemeral=True)
 

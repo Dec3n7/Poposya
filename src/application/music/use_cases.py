@@ -70,14 +70,19 @@ class ToggleLikeUseCase:
         self._uow_factory = uow_factory
         self._max_per_user = max_per_user
 
-    async def execute(self, user_id: int, track: Track, now: datetime) -> str:
+    async def execute(
+        self, user_id: int, track: Track, now: datetime, max_per_user: int | None = None
+    ) -> str:
+        # потолок можно переопределить на вызов (тарифный кламп по гильдии, где
+        # нажали ❤️): free ≤20, Premium/Pro — конструкторный дефолт (300)
+        cap = max_per_user if max_per_user is not None else self._max_per_user
         async with self._uow_factory() as uow:
             existing = await uow.liked_tracks.get(user_id, track.video_id)
             if existing is not None:
                 await uow.liked_tracks.remove(user_id, track.video_id)
                 await uow.commit()
                 return "unliked"
-            if await uow.liked_tracks.count(user_id) >= self._max_per_user:
+            if await uow.liked_tracks.count(user_id) >= cap:
                 return "limit"
             await uow.liked_tracks.add(
                 LikedTrack(

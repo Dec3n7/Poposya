@@ -154,6 +154,17 @@ async def test_like_limit(uow_factory):
     assert await uc.execute(2, make_track("c"), NOW) == "liked"
 
 
+async def test_like_limit_per_call_override(uow_factory):
+    # потолок на вызов переопределяет конструкторный (тарифный кламп по гильдии):
+    # free ≤20 против Premium-дефолта. Здесь: конструктор 300, но free-вызов = 2
+    uc = ToggleLikeUseCase(uow_factory, max_per_user=300)
+    await uc.execute(1, make_track("a"), NOW, max_per_user=2)
+    await uc.execute(1, make_track("b"), NOW, max_per_user=2)
+    assert await uc.execute(1, make_track("c"), NOW, max_per_user=2) == "limit"
+    # тот же пользователь без клампа (Premium) — дальше можно
+    assert await uc.execute(1, make_track("c"), NOW) == "liked"
+
+
 async def test_lists_are_personal(uow_factory):
     toggle = ToggleLikeUseCase(uow_factory, max_per_user=300)
     listing = ListLikedUseCase(uow_factory)

@@ -1602,6 +1602,14 @@ PHRASE_SPECS: dict[str, PhraseSpec] = {
             allowed_modes=STATIC_MODES,
         ),
         _spec(
+            "music.karaoke_premium",
+            "music",
+            "str",
+            "Караоке-режим — уже про «свой дом». Что открывает подписка — в `/premium` 🖤",
+            label="Караоке: только Premium",
+            allowed_modes=STATIC_MODES,
+        ),
+        _spec(
             "music.karaoke_no_synced",
             "music",
             "str",
