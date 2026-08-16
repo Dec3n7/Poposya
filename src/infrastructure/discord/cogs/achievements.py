@@ -20,7 +20,12 @@ from src.domain.events.bus import IEventBus
 from src.domain.finds.events import FindClaimed
 from src.domain.relationship.events import ExclusiveTransferred, RelationshipRoleChanged
 from src.infrastructure.discord.channels import resolve_channel
-from src.infrastructure.discord.feature_flags import block_if_module_off, flag_on, require_tier
+from src.infrastructure.discord.feature_flags import (
+    block_if_module_off,
+    flag_on,
+    require_tier,
+    tier_allows,
+)
 from src.infrastructure.discord.interaction_ctx import guild_of
 from src.infrastructure.discord.persona_phrase import PersonaPhraseMixin
 from src.infrastructure.persona_service import RegistryPersona
@@ -87,6 +92,10 @@ class AchievementsCog(PersonaPhraseMixin, commands.Cog):
         if guild_id == 0 or user_id == 0:
             return
         if not flag_on(self.settings, self.gs, guild_id, "achievements_enabled"):
+            return
+        # Ачивки — Premium. Событийный путь (нет interaction) гейтим tier_allows,
+        # иначе уведомления «капали» бы на free мимо гейта /achievements.
+        if not tier_allows(self.entitlements, guild_id, "achievements_enabled"):
             return
         try:
             result = await self.achievements.evaluate.execute(user_id, guild_id)

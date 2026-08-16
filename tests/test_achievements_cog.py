@@ -13,7 +13,7 @@ from src.infrastructure.discord.cogs.achievements import AchievementsCog
 from tests.cog_fakes import make_interaction
 
 
-def make_cog(eval_result=None, unlocked_ids=None, gs=None, renderer=None):
+def make_cog(eval_result=None, unlocked_ids=None, gs=None, renderer=None, entitlements=None):
     bot = MagicMock()
     ach = SimpleNamespace(
         evaluate=SimpleNamespace(
@@ -25,7 +25,9 @@ def make_cog(eval_result=None, unlocked_ids=None, gs=None, renderer=None):
     )
     settings = SimpleNamespace(main_channel="основной", achievements_enabled=True)
     renderer = renderer or MagicMock(render=AsyncMock(return_value=b"\x89PNG"))
-    cog = AchievementsCog(bot, ach, settings, MagicMock(), renderer, gs, persona=None)
+    cog = AchievementsCog(
+        bot, ach, settings, MagicMock(), renderer, gs, persona=None, entitlements=entitlements
+    )
     return cog, bot, ach
 
 
@@ -68,6 +70,22 @@ async def test_award_skipped_when_module_off():
     cog, bot, ach = make_cog(gs=gs)
     await cog._on_find_claimed(FindClaimed(aggregate_id="10", guild_id=10, user_id=1))
     ach.evaluate.execute.assert_not_awaited()
+
+
+async def test_award_skipped_on_free_tier(monkeypatch):
+    # Ачивки — Premium: событийные уведомления не идут на free-сервер (гейт tier)
+    from src.application.interfaces.entitlements import PlanTier
+
+    free = SimpleNamespace(tier=lambda gid: PlanTier.FREE)
+    result = EvalResult(unlocked=[BY_ID["finds_first"]], stats=UserStats(finds_count=1))
+    cog, bot, ach = make_cog(eval_result=result, entitlements=free)
+    guild, channel = _guild_with_channel(monkeypatch)
+    bot.get_guild.return_value = guild
+
+    await cog._on_find_claimed(FindClaimed(aggregate_id="10", guild_id=10, user_id=1))
+
+    ach.evaluate.execute.assert_not_awaited()  # тариф отсекает ДО пересчёта
+    channel.send.assert_not_awaited()
 
 
 async def test_award_ignores_empty_ids():
