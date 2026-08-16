@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from aiohttp import web
 from playwright.async_api import Browser, Playwright, async_playwright
+from render_cache import RenderCache, render_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("renderer")
@@ -24,6 +26,23 @@ logger = logging.getLogger("renderer")
 # предохранители на вход: сервис внутренний, но вход всё равно валидируем
 _MAX_HTML_BYTES = 4 * 1024 * 1024
 _MAX_DIM = 4000
+
+
+def _cache_from_env() -> RenderCache:
+    """Границы кэша — из окружения, правятся без пересборки образа. Нули
+    (`RENDER_CACHE_MAX_BYTES=0`) полностью выключают кэш — аварийный тумблер."""
+    entries = int(os.getenv("RENDER_CACHE_MAX_ENTRIES", "512"))
+    mbytes = int(os.getenv("RENDER_CACHE_MAX_BYTES", str(256 * 1024 * 1024)))
+    return RenderCache(max_entries=entries, max_bytes=mbytes)
+
+
+# A3: admission control. Замер (perf-baseline.md) показал near-OOM при 8
+# одновременных рендерах — Chromium открывает страницу на каждый. Кап конкуррент-
+# ности держит память в узде: лишние запросы ждут слот короткое время, и если не
+# дождались — быстрый 503, по которому бот показывает embed-фолбэк (штатный путь
+# при сбое renderer), а не копит страницы до OOM.
+_MAX_CONCURRENCY = int(os.getenv("RENDER_MAX_CONCURRENCY", "3"))
+_QUEUE_TIMEOUT = float(os.getenv("RENDER_QUEUE_TIMEOUT_SECONDS", "10"))
 
 
 class _Renderer:
@@ -71,11 +90,22 @@ class _Renderer:
             self._pw = None
 
 
-def create_app() -> web.Application:
-    renderer = _Renderer()
+def create_app(
+    renderer: object | None = None,
+    cache: RenderCache | None = None,
+    max_concurrency: int | None = None,
+    queue_timeout: float | None = None,
+) -> web.Application:
+    # renderer/cache/лимиты инъектируемы: тест подставляет фейк-рендер (без
+    # Chromium), свой кэш и малый кап; прод берёт настоящий браузер и env.
+    renderer = _Renderer() if renderer is None else renderer
+    cache = _cache_from_env() if cache is None else cache
+    slots = max_concurrency if max_concurrency is not None else _MAX_CONCURRENCY
+    timeout = queue_timeout if queue_timeout is not None else _QUEUE_TIMEOUT
+    gate = asyncio.Semaphore(slots)
 
     async def health(_: web.Request) -> web.Response:
-        return web.json_response({"status": "ok"})
+        return web.json_response({"status": "ok", "cache": cache.stats()})
 
     async def render(request: web.Request) -> web.Response:
         try:
@@ -97,19 +127,38 @@ def create_app() -> web.Application:
             return web.json_response({"error": "dimensions out of range"}, status=400)
         if not (1 <= scale <= 4):
             return web.json_response({"error": "scale out of range"}, status=400)
+
+        # A2: content-addressed кэш. Ключ по HTML+размерам+scale; на попадании
+        # отдаём готовый PNG, минуя Chromium целиком.
+        key = render_key(html, width, height, scale)
+        cached = cache.get(key)
+        if cached is not None:
+            # HIT не трогает браузер — слот конкуррентности ему не нужен.
+            return web.Response(body=cached, content_type="image/png", headers={"X-Cache": "HIT"})
+
+        # A3: ждём слот ограниченное время; не дождались — 503 (→ embed-фолбэк).
+        try:
+            await asyncio.wait_for(gate.acquire(), timeout=timeout)
+        except TimeoutError:
+            return web.json_response({"error": "renderer busy"}, status=503)
         try:
             png = await renderer.render(html, width, height, scale)
         except Exception:
             logger.exception("рендер упал")
             return web.json_response({"error": "render failed"}, status=500)
-        return web.Response(body=png, content_type="image/png")
+        finally:
+            gate.release()
+        cache.put(key, png)
+        return web.Response(body=png, content_type="image/png", headers={"X-Cache": "MISS"})
 
     app = web.Application(client_max_size=_MAX_HTML_BYTES + 64 * 1024)
     app.router.add_get("/health", health)
     app.router.add_post("/render", render)
 
     async def _cleanup(_: web.Application) -> None:
-        await renderer.close()
+        close = getattr(renderer, "close", None)
+        if close is not None:
+            await close()
 
     app.on_cleanup.append(_cleanup)
     return app

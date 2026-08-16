@@ -26,8 +26,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN playwright install-deps chromium
 
-COPY server.py ./
-
 # непривилегированный пользователь (UID отличается от бота — 10002)
 RUN groupadd --system --gid 10002 renderer \
     && useradd --system --uid 10002 --gid renderer --home-dir /app --no-create-home renderer \
@@ -37,6 +35,12 @@ USER renderer
 
 # браузер качаем под renderer в общий каталог (как у бота)
 RUN playwright install chromium
+
+# Код — ПОСЛЕДНИМ слоём: правки server.py/render_cache.py не должны
+# инвалидировать дорогую установку Chromium выше (иначе каждый деплой заново
+# тянет ~2 ГБ браузера — та самая хрупкость параллельной сборки из
+# docs/plans/scale-300-guilds.md). Файлы root-owned 644 — читаются под renderer.
+COPY server.py render_cache.py ./
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1 \
