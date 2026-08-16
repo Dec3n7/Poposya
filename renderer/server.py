@@ -15,10 +15,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from aiohttp import web
-from playwright.async_api import Browser, Playwright, async_playwright
 from render_cache import RenderCache, render_key
+
+if TYPE_CHECKING:
+    # Только для аннотаций: playwright есть лишь в образе renderer. Держать его
+    # импорт на верхнем уровне значило бы требовать playwright везде, где просто
+    # импортируют этот модуль (тесты кэша/admission на фейк-рендере, CI бота без
+    # renderer-зависимостей). Реальный импорт — лениво в _Renderer._ensure().
+    from playwright.async_api import Browser, Playwright
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("renderer")
@@ -52,6 +59,10 @@ class _Renderer:
         self._lock = asyncio.Lock()
 
     async def _ensure(self) -> Browser:
+        # Ленивый импорт: playwright требуется только при реальном подъёме
+        # Chromium, а не при импорте модуля (см. TYPE_CHECKING-блок выше).
+        from playwright.async_api import async_playwright
+
         async with self._lock:
             if self._browser is None:
                 self._pw = await async_playwright().start()
