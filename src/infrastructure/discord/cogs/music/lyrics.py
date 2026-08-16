@@ -51,12 +51,17 @@ class LyricsService(PersonaPhraseMixin):
         spawn: Callable[[Coroutine], None],
         guild_settings=None,
         persona=None,
+        is_free: Callable[[int], bool] | None = None,
     ):
         self._client = client
         self._settings = settings
         self._get_session = get_session
         self._spawn = spawn
         self._gs = guild_settings
+        # тариф: караоке-live — Premium. Кнопка 📜 обязана гейтить его так же, как
+        # /lyrics live, иначе free-сервер получал бы live мимо гейта. Нет провайдера
+        # (тесты) → не-free, не гейтим (как _is_free в коге).
+        self._is_free = is_free
         # голос сервиса — каталог фраз персоны (дефолты реестра без PersonaService)
         self.persona = persona if persona is not None else RegistryPersona()
         self._cache: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
@@ -240,12 +245,23 @@ class LyricsService(PersonaPhraseMixin):
         await interaction.response.defer(ephemeral=True)
         track = session.player.current
         synced, plain = await self.get(track)
-        if synced and await self.start_karaoke(
-            cast(discord.abc.Messageable, interaction.channel), guild_id, track, synced
+        free = self._is_free is not None and self._is_free(guild_id)
+        if (
+            synced
+            and not free
+            and await self.start_karaoke(
+                cast(discord.abc.Messageable, interaction.channel), guild_id, track, synced
+            )
         ):
             await interaction.followup.send(self._p(guild_id, "music.karaoke_on"), ephemeral=True)
         elif plain:
+            # free получает статичный текст (он бесплатный), Premium — если synced не встал
             await interaction.followup.send(embed=self.plain_embed(track, plain), ephemeral=True)
+        elif synced and free:
+            # синхронный текст есть, но плейна нет: live-караоке — Premium, шлём нудж
+            await interaction.followup.send(
+                self._p(guild_id, "music.karaoke_premium"), ephemeral=True
+            )
         else:
             await interaction.followup.send(
                 self._p(guild_id, "music.karaoke_no_text"), ephemeral=True

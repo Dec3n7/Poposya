@@ -103,6 +103,7 @@ class MusicCog(PersonaPhraseMixin, commands.Cog):
             self.service.spawn,
             guild_settings=guild_settings,
             persona=self.persona,
+            is_free=self._is_free,  # кнопка 📜 гейтит караоке-live как /lyrics live
         )
         self.radio = RadioService(bot, container, self.service.get_session)
         self.service.radio = self.radio

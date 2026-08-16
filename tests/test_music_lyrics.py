@@ -23,11 +23,11 @@ def make_settings():
     )
 
 
-def make_service(client=None, session=None, spawn=None):
+def make_service(client=None, session=None, spawn=None, is_free=None):
     client = client or SimpleNamespace(find_both=AsyncMock(return_value=(SYNCED, "плейн текст")))
     get_session = lambda gid: session
     spawn = spawn or (lambda coro: coro.close())
-    return LyricsService(client, make_settings(), get_session, spawn)
+    return LyricsService(client, make_settings(), get_session, spawn, is_free=is_free)
 
 
 # --- кэш и префетч ----------------------------------------------------------
@@ -217,3 +217,56 @@ async def test_toggle_no_lyrics_found():
     interaction.followup = MagicMock(send=AsyncMock())
     await svc.toggle(interaction)
     assert "не нашла" in interaction.followup.send.await_args.args[0]
+
+
+# --- гейт тарифа: караоке-live — Premium (кнопка 📜 как /lyrics live) ----------
+
+
+def _toggle_interaction():
+    interaction = MagicMock()
+    interaction.guild_id = 10
+    interaction.channel = MagicMock()
+    interaction.response = MagicMock(defer=AsyncMock(), send_message=AsyncMock())
+    interaction.followup = MagicMock(send=AsyncMock())
+    return interaction
+
+
+async def test_toggle_free_tier_gets_plain_not_karaoke():
+    # free-тариф: караоке-live под гейтом → 📜 отдаёт статичный текст, НЕ караоке
+    client = SimpleNamespace(find_both=AsyncMock(return_value=(SYNCED, "плейн")))
+    player = MagicMock()
+    player.current = make_track()
+    session = GuildMusicSession(player=player)
+    svc = make_service(client=client, session=session, is_free=lambda gid: True)
+    svc.start_karaoke = AsyncMock()  # не должна вызываться на free
+    interaction = _toggle_interaction()
+    await svc.toggle(interaction)
+    svc.start_karaoke.assert_not_awaited()
+    assert "embed" in interaction.followup.send.await_args.kwargs  # плейн-текст
+
+
+async def test_toggle_free_tier_synced_only_shows_premium_nudge():
+    # free + только synced (плейна нет): live — Premium → нудж, не караоке
+    client = SimpleNamespace(find_both=AsyncMock(return_value=(SYNCED, None)))
+    player = MagicMock()
+    player.current = make_track()
+    session = GuildMusicSession(player=player)
+    svc = make_service(client=client, session=session, is_free=lambda gid: True)
+    svc.start_karaoke = AsyncMock()
+    interaction = _toggle_interaction()
+    await svc.toggle(interaction)
+    svc.start_karaoke.assert_not_awaited()
+    assert "/premium" in interaction.followup.send.await_args.args[0]
+
+
+async def test_toggle_premium_starts_karaoke():
+    # premium (is_free False): synced → караоке стартует как раньше
+    client = SimpleNamespace(find_both=AsyncMock(return_value=(SYNCED, "плейн")))
+    player = MagicMock()
+    player.current = make_track()
+    session = GuildMusicSession(player=player)
+    svc = make_service(client=client, session=session, is_free=lambda gid: False)
+    svc.start_karaoke = AsyncMock(return_value=True)
+    interaction = _toggle_interaction()
+    await svc.toggle(interaction)
+    svc.start_karaoke.assert_awaited_once()
