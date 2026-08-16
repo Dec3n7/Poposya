@@ -51,13 +51,20 @@ docker compose run --rm --user root --entrypoint sh bot -c "chown -R 10001:10001
 volume `bot_data`). Код — `src/infrastructure/db/backup.py`.
 
 ⚠️ Дампы лежат на **том же хосте**, что и БД: падение диска/хоста уносит и базу, и
-бэкапы. Перед публичным запуском настройте выгрузку наружу, например cron на хосте:
+бэкапы. Перед публичным запуском настройте выгрузку наружу — двумя способами:
 
+**In-app** (встроено): задайте `BACKUP_OFFSITE_CMD` в `.env` — бот прогонит каждый
+свежий дамп этой командой (`{path}` = путь дампа), напр.
+`rclone copy {path} <remote>:poposya-backups/`. Пусто = выкл; провал выгрузки не
+фатален. Нужно положить инструмент выгрузки и креды в контейнер бота.
+
+**Host-cron** (не трогает образ бота):
 ```bash
-# ежедневно: копия последних дампов в off-site (S3 / другой хост)
-0 4 * * *  docker compose exec -T bot sh -c 'ls -t /app/data/backups/*.dump | head -1' \
-           | xargs -I{} docker compose cp bot:{} - | aws s3 cp - s3://ВАШ-БАКЕТ/poposya/$(date +\%F).dump
+VOL=$(docker volume inspect poposyap_bot_data -f '{{.Mountpoint}}')
+0 4 * * *  rclone copy $VOL/backups <remote>:poposya-backups/ --min-age 1m
 ```
+
+Полная процедура развёртывания с бэкапом и мониторингом — [DEPLOY.md](DEPLOY.md).
 
 Ручной дамп/восстановление:
 
