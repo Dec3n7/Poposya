@@ -183,8 +183,29 @@ services:
     # 128 МБ) — тесный лимит вытеснит кэш и замедлит базу. И OOM у Postgres не
     # мягкий: убитый backend уводит postmaster в crash recovery, то есть рвёт
     # все соединения и перезапускает кластер целиком.
-    # Настоящую границу задаёт конфиг Postgres, не этот лимит.
+    # Настоящую границу задаёт конфиг Postgres (command ниже), не этот лимит.
+    # На малом VPS limit можно ужать до 768 МБ–1 ГБ (B2, docs/plans/scale-300-
+    # guilds.md) — это осознанный выбор под конкретный бокс, а не дефолт: OOM у
+    # Postgres рвёт кластер в crash recovery, поэтому меняем с замером, не на ходу.
     mem_limit: 2g
+    # Явный конфиг Postgres (B2): раньше всё шло на дефолтах. shared_buffers 128→
+    # 256 МБ (кэш горячих страниц), effective_cache_size — подсказка планировщику
+    # о доступном page cache (память не резервирует). max_connections 100→50 под
+    # ужатый пул приложения (5+10 на процесс × 2 = 30, см. session.py) с запасом
+    # на psql/миграции. work_mem умеренно: 50 коннектов × сортировки не должны
+    # пробить limit. Числа консервативны — на росте данных калибровать под бокс.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=50
     environment:
       POSTGRES_DB: poposya
       POSTGRES_USER: poposya
