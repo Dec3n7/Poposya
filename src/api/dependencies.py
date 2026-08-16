@@ -62,9 +62,7 @@ def assert_perms_fresh(request: Request, container: ApiContainer, session: Sessi
     if ttl <= 0 or request.method in _SAFE_METHODS:
         return
     if int(time.time()) - session.perms_at > ttl * 60:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "права устарели — войдите заново"
-        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "права устарели — войдите заново")
 
 
 def _slide_session(container: ApiContainer, session: Session, response: Response) -> None:

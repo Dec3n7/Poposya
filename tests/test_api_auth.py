@@ -503,8 +503,15 @@ def test_legacy_token_without_pat_falls_back_to_session_start():
     # токен без claim pat -> возраст снимка прав считаем от начала сессии (iat0)
     start = int(_time.time()) - 100
     payload = {
-        "sub": "1", "username": "u", "avatar": None, "guilds": [],
-        "sv": 2, "ep": 0, "iat0": start, "iat": start, "exp": int(_time.time()) + 3600,
+        "sub": "1",
+        "username": "u",
+        "avatar": None,
+        "guilds": [],
+        "sv": 2,
+        "ep": 0,
+        "iat0": start,
+        "iat": start,
+        "exp": int(_time.time()) + 3600,
     }
     token = jwt.encode(payload, _SECRET, algorithm="HS256")
     decoded = decode_session(_SECRET, token, version=2)
@@ -515,7 +522,10 @@ def _perm_ctx(ttl_minutes: int, perms_age_seconds: int, method: str = "POST"):
     request = SimpleNamespace(method=method)
     container = SimpleNamespace(settings=SimpleNamespace(web_perm_ttl_minutes=ttl_minutes))
     session = Session(
-        user_id=1, username="u", avatar=None, guilds=[],
+        user_id=1,
+        username="u",
+        avatar=None,
+        guilds=[],
         perms_at=int(_time.time()) - perms_age_seconds,
     )
     return request, container, session

@@ -163,9 +163,7 @@ def create_app(container: ApiContainer) -> FastAPI:
                     session.epoch,
                     request.headers.get(CSRF_HEADER),
                 ):
-                    return JSONResponse(
-                        {"detail": "нет или неверный CSRF-токен"}, status_code=403
-                    )
+                    return JSONResponse({"detail": "нет или неверный CSRF-токен"}, status_code=403)
         return await call_next(request)
 
     @app.get("/api/health")

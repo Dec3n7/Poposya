@@ -39,6 +39,7 @@ def csrf_token_valid(secret: str, user_id: int, epoch: int, provided: str | None
         return False
     return hmac.compare_digest(csrf_token(secret, user_id, epoch), provided)
 
+
 # Биты прав Discord (в токене — маска пользователя на конкретном сервере).
 # Вход в панель по-прежнему требует MANAGE_GUILD/админ (см. discord_oauth), а
 # каждое действие внутри дополнительно сверяется со своим правом.
