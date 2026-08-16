@@ -139,6 +139,11 @@ class Settings(BaseSettings):
     backup_interval_hours: int = 24
     backup_keep: int = 7
     backup_dir: str = "data/backups"  # используется для Postgres; SQLite кладёт рядом с БД
+    # off-box выгрузка: команда, которой прогоняется каждый свежий дамп (напр.
+    # "rclone copy {path} remote:poposya-backups/"). {path} = путь дампа; пусто =
+    # выключено. Спасает от отказа самого хостера (локальные бэкапы лежат с БД на
+    # одном боксе). Ошибка выгрузки не фатальна — локальная копия остаётся.
+    backup_offsite_cmd: str = ""
     # outbox критичных событий: как часто добивать неопубликованные, сек
     outbox_dispatch_interval: int = 60
     outbox_max_attempts: int = 10  # после стольких неудач событие оставляется в покое

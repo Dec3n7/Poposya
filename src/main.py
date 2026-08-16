@@ -217,6 +217,7 @@ async def run() -> None:
         settings.backup_dir,
         settings.backup_interval_hours,
         settings.backup_keep,
+        settings.backup_offsite_cmd,
     )
     # задачи держим в словаре по имени: метрика background_tasks должна называть
     # умершую задачу, а не сообщать «одна из пяти»

@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+import shlex
 import sqlite3
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -12,6 +14,56 @@ logger = logging.getLogger(__name__)
 
 # страховка от зависшего pg_dump: поток executor'а иначе висел бы вечно
 _PG_DUMP_TIMEOUT_SECONDS = 600
+
+# offsite-выгрузка: копия каждого свежего дампа наружу (S3/другой хост), чтобы
+# отказ самого провайдера не унёс и БД, и её бэкапы вместе с боксом. Механизм —
+# настраиваемая команда (rclone/scp/aws s3 …), пусто = выключено. Ошибка выгрузки
+# НЕ фатальна: локальный бэкап уже сделан, offsite — лучшее-усилие поверх него.
+_OFFSITE_TIMEOUT_SECONDS = 600
+
+
+def offsite_argv(cmd_template: str, path: Path) -> list[str]:
+    """Команда выгрузки → argv с подстановкой пути дампа. `{path}` в шаблоне
+    заменяется на путь; если плейсхолдера нет — путь добавляется последним
+    аргументом (тогда `rclone copy remote:bucket` соберётся с дампом сам)."""
+    if "{path}" in cmd_template:
+        return [part.replace("{path}", str(path)) for part in shlex.split(cmd_template)]
+    return [*shlex.split(cmd_template), str(path)]
+
+
+def command_offsite_uploader(cmd_template: str) -> Callable[[Path], None] | None:
+    """Строит выгрузчик из команды; пустой шаблон → None (offsite выключен).
+    Команду задаёт оператор в .env — доверенный вход, поэтому без shell (argv
+    через shlex, чтобы имя файла-дампа не могло стать инъекцией)."""
+    if not cmd_template.strip():
+        return None
+
+    def upload(path: Path) -> None:
+        result = subprocess.run(
+            offsite_argv(cmd_template, path),
+            capture_output=True,
+            text=True,
+            timeout=_OFFSITE_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"offsite-команда упала ({result.returncode}): {result.stderr.strip()[:300]}"
+            )
+
+    return upload
+
+
+def ship_offsite(offsite: Callable[[Path], None] | None, path: Path) -> None:
+    """Выгрузка дампа наружу — НЕ фатально при ошибке: локальная копия уже есть,
+    и провал offsite не должен рвать цикл бэкапов. Синхронна (зовётся из
+    executor, как и сам pg_dump)."""
+    if offsite is None:
+        return
+    try:
+        offsite(path)
+        logger.info("Бэкап выгружен offsite", extra={"backup": str(path)})
+    except Exception:
+        logger.exception("Offsite-выгрузка бэкапа не удалась (локальная копия цела)")
 
 
 def sqlite_path_from_url(database_url: str) -> Path | None:
@@ -44,13 +96,17 @@ def postgres_params_from_url(database_url: str) -> dict[str, str] | None:
     }
 
 
-def make_backup_service(database_url: str, backup_dir: str, interval_hours: int, keep: int):
+def make_backup_service(
+    database_url: str, backup_dir: str, interval_hours: int, keep: int, offsite_cmd: str = ""
+):
     """Правильный сервис бэкапа под тип БД; None — тип неизвестен (диагностика
-    об этом предупредит отдельно)."""
+    об этом предупредит отдельно). `offsite_cmd` (пусто = выкл) включает выгрузку
+    каждого свежего дампа наружу поверх локальной копии."""
+    offsite = command_offsite_uploader(offsite_cmd)
     if database_url.startswith("sqlite"):
-        return SqliteBackupService(database_url, interval_hours, keep)
+        return SqliteBackupService(database_url, interval_hours, keep, offsite)
     if database_url.startswith("postgresql"):
-        return PostgresBackupService(database_url, backup_dir, interval_hours, keep)
+        return PostgresBackupService(database_url, backup_dir, interval_hours, keep, offsite)
     return None
 
 
@@ -60,10 +116,17 @@ class SqliteBackupService:
     Бэкапы лежат в <каталог БД>/backups (в Docker это volume bot_data),
     старые ротируются, хранится keep последних."""
 
-    def __init__(self, database_url: str, interval_hours: int, keep: int):
+    def __init__(
+        self,
+        database_url: str,
+        interval_hours: int,
+        keep: int,
+        offsite: Callable[[Path], None] | None = None,
+    ):
         self._db_path = sqlite_path_from_url(database_url)
         self._interval_seconds = interval_hours * 3600
         self._keep = keep
+        self._offsite = offsite
 
     @property
     def enabled(self) -> bool:
@@ -111,6 +174,7 @@ class SqliteBackupService:
                 target = await loop.run_in_executor(None, self.backup_once)
                 if target is not None:
                     logger.info("Бэкап БД создан", extra={"backup": str(target)})
+                    await loop.run_in_executor(None, ship_offsite, self._offsite, target)
             except Exception:
                 logger.exception("Бэкап БД не удался")
             await asyncio.sleep(self._interval_seconds)
@@ -127,11 +191,19 @@ class PostgresBackupService:
     run_forever/_prune намеренно дублируют SQLite-версию, а не прячутся в общую
     базу: две простые реализации читаются легче одной универсальной."""
 
-    def __init__(self, database_url: str, backup_dir: str, interval_hours: int, keep: int):
+    def __init__(
+        self,
+        database_url: str,
+        backup_dir: str,
+        interval_hours: int,
+        keep: int,
+        offsite: Callable[[Path], None] | None = None,
+    ):
         self._params = postgres_params_from_url(database_url)
         self._backup_dir = Path(backup_dir)
         self._interval_seconds = interval_hours * 3600
         self._keep = keep
+        self._offsite = offsite
 
     @property
     def enabled(self) -> bool:
@@ -192,6 +264,7 @@ class PostgresBackupService:
                 target = await loop.run_in_executor(None, self.backup_once)
                 if target is not None:
                     logger.info("Бэкап БД создан", extra={"backup": str(target)})
+                    await loop.run_in_executor(None, ship_offsite, self._offsite, target)
             except Exception:
                 logger.exception("Бэкап БД не удался")
             await asyncio.sleep(self._interval_seconds)
