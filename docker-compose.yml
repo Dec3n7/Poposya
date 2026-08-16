@@ -222,12 +222,12 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
-  # Изолированный рендер карточек (HTML → PNG через Chromium). Вынесен из бота:
-  # браузер под --no-sandbox — крупнейшая attack surface, и его компрометация не
-  # должна давать доступ к Discord-токену, БД или сети. Сидит ТОЛЬКО в render-сети
-  # (internal: true — без выхода в интернет), непривилегированный пользователь,
-  # cap_drop ALL, no-new-privileges. Принимает самодостаточный HTML от бота и
-  # отдаёт PNG. Наружу порт не публикуется.
+  # Изолированный рендер карточек (SVG → PNG через librsvg / rsvg-convert).
+  # Движок сменён с headless-Chromium на librsvg (B1, scale-300-guilds.md): образ
+  # ~250 МБ вместо 2.15 ГБ, десятки МБ RAM вместо ~500. Вынесен из бота: рендер не
+  # делит процесс с ботом и его секретами. Сидит ТОЛЬКО в render-сети (internal:
+  # true — без выхода в интернет), непривилегированный пользователь, cap_drop ALL,
+  # no-new-privileges. Принимает самодостаточный SVG от бота и отдаёт PNG.
   renderer:
     build: ./renderer
     restart: unless-stopped
@@ -235,15 +235,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # ФС контейнера только на чтение: браузер под --no-sandbox — крупнейшая attack
-    # surface, read-only rootfs лишает эксплойт возможности что-либо дописать в
-    # образ. Всё писчее — в эфемерный tmpfs /tmp (профиль Chromium, shared memory
-    # через --disable-dev-shm-usage). Браузер лежит в /ms-playwright (тоже ro, ок).
+    # ФС только на чтение: rsvg-convert ничего не пишет (stdin→stdout), кэш шрифтов
+    # вшит в образ (fc-cache при сборке). Всё писчее — в эфемерный tmpfs /tmp.
     read_only: true
     tmpfs:
       - /tmp
-    # Chromium прожорлив к памяти на старте страницы; 512M с запасом. OOM локален.
-    mem_limit: 512m
+    # librsvg лёгкий; 256M с запасом (было 512M под прожорливый Chromium).
+    mem_limit: 256m
     # Тюнинг рендера без пересборки образа (A2/A3, docs/plans/scale-300-guilds.md):
     # границы content-кэша PNG и кап одновременных рендеров. Дефолты — в коде
     # (server.py); .env лишь переопределяет. RENDER_CACHE_MAX_BYTES=0 гасит кэш.

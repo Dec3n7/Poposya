@@ -1,50 +1,35 @@
-# Изолированный сервис рендера карточек (HTML → PNG через Chromium).
-# Отдельный контейнер: браузер под --no-sandbox не делит процесс с ботом, не
-# видит Discord-токен/БД и сидит на internal-сети без интернета (см. compose).
-
-# Stage 1: builder — зависимости из lock с хэшами (--require-hashes: supply-chain)
-FROM python:3.12-slim AS builder
-WORKDIR /app
-COPY requirements.lock ./
-RUN python -m venv /app/.venv \
-    && /app/.venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /app/.venv/bin/pip install --no-cache-dir --require-hashes -r requirements.lock
-
-# Stage 2: runtime
+# Изолированный сервис рендера карточек: SVG → PNG через librsvg (rsvg-convert).
+# Раньше был headless-Chromium (Playwright, образ ~2.15 ГБ, ~4 ядра под бёрстом).
+# librsvg — лёгкий растеризатор SVG: образ ~250 МБ, десятки МБ RAM. Карточки-SVG
+# строит бот (эмодзи вшиты инлайн-Twemoji) и шлёт сюда — здесь только rsvg-convert.
 FROM python:3.12-slim
 
-# шрифты для Chromium-рендера: кириллический TTF (иначе «квадратики») + цветные
-# эмодзи для эмблем ачивок. Перенесены из образа бота — теперь браузер только тут.
+# librsvg (rsvg-convert) + шрифты: кириллица/латиница (DejaVu). Эмодзи-шрифт НЕ
+# нужен — эмодзи приходят инлайн-SVG. fc-cache строит кэш шрифтов в образ, чтобы
+# fontconfig не писал его в рантайме (совместимо с read-only rootfs).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        fonts-dejavu-core fonts-noto-color-emoji \
+        librsvg2-bin fonts-dejavu-core fontconfig \
+    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=builder /app/.venv ./.venv
-ENV PATH="/app/.venv/bin:$PATH" \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN playwright install-deps chromium
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # непривилегированный пользователь (UID отличается от бота — 10002)
 RUN groupadd --system --gid 10002 renderer \
-    && useradd --system --uid 10002 --gid renderer --home-dir /app --no-create-home renderer \
-    && mkdir -p /ms-playwright \
-    && chown -R renderer:renderer /app /ms-playwright
+    && useradd --system --uid 10002 --gid renderer --home-dir /app --no-create-home renderer
 USER renderer
 
-# браузер качаем под renderer в общий каталог (как у бота)
-RUN playwright install chromium
-
-# Код — ПОСЛЕДНИМ слоём: правки server.py/render_cache.py не должны
-# инвалидировать дорогую установку Chromium выше (иначе каждый деплой заново
-# тянет ~2 ГБ браузера — та самая хрупкость параллельной сборки из
-# docs/plans/scale-300-guilds.md). Файлы root-owned 644 — читаются под renderer.
-COPY server.py render_cache.py ./
-
-ENV PYTHONUNBUFFERED=1 \
+# HOME в tmpfs: если библиотека вдруг захочет кэш — пишет в /tmp, а не в ro-/app
+ENV HOME=/tmp \
+    PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1 \
     PYTHONDONTWRITEBYTECODE=1
+
+# код — последним слоём: правки не инвалидируют apt/pip выше
+COPY server.py render_cache.py ./
 
 EXPOSE 8090
 CMD ["python", "server.py"]

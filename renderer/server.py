@@ -1,13 +1,14 @@
-"""Изолированный сервис рендера карточек: HTML → PNG (Playwright + Chromium).
+"""Изолированный сервис рендера карточек: SVG → PNG (librsvg / rsvg-convert).
 
-Вынесен из процесса бота в отдельный контейнер намеренно: браузер под
---no-sandbox — самая крупная attack surface системы, и его компрометация НЕ
-должна давать доступ к Discord-токену, БД или сети. Контейнер сидит на internal-
-сети без выхода в интернет, принимает только POST /render с самодостаточным HTML
-(аватар уже вшит data-URI отправителем) и отдаёт PNG. Никаких секретов внутри.
+Вынесен из процесса бота намеренно: рендер карточек не должен делить процесс с
+ботом и его секретами. Контейнер сидит на internal-сети без выхода в интернет,
+принимает только POST /render с самодостаточным SVG (аватар уже вшит data-URI, а
+эмодзи — инлайн Twemoji отправителем) и отдаёт PNG. Никаких секретов внутри.
 
-Браузер поднимается один раз и переиспользуется (старт Chromium дорогой), на
-каждую карточку — лёгкая новая страница, которая всегда закрывается.
+Раньше движком был headless-Chromium (Playwright, образ 2.15 ГБ, ~4 ядра под
+бёрстом). Заменён на librsvg: карточки — SVG, растеризуются лёгким субпроцессом
+rsvg-convert (образ ~250 МБ, десятки МБ RAM). См. docs/plans/scale-300-guilds.md
+(B1). Контракт /render не изменился: поле `html` теперь несёт SVG.
 """
 
 from __future__ import annotations
@@ -15,17 +16,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING
 
 from aiohttp import web
 from render_cache import RenderCache, render_key
-
-if TYPE_CHECKING:
-    # Только для аннотаций: playwright есть лишь в образе renderer. Держать его
-    # импорт на верхнем уровне значило бы требовать playwright везде, где просто
-    # импортируют этот модуль (тесты кэша/admission на фейк-рендере, CI бота без
-    # renderer-зависимостей). Реальный импорт — лениво в _Renderer._ensure().
-    from playwright.async_api import Browser, Playwright
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("renderer")
@@ -33,6 +26,7 @@ logger = logging.getLogger("renderer")
 # предохранители на вход: сервис внутренний, но вход всё равно валидируем
 _MAX_HTML_BYTES = 4 * 1024 * 1024
 _MAX_DIM = 4000
+_RSVG_TIMEOUT_SECONDS = 15
 
 
 def _cache_from_env() -> RenderCache:
@@ -43,62 +37,49 @@ def _cache_from_env() -> RenderCache:
     return RenderCache(max_entries=entries, max_bytes=mbytes)
 
 
-# A3: admission control. Замер (perf-baseline.md) показал near-OOM при 8
-# одновременных рендерах — Chromium открывает страницу на каждый. Кап конкуррент-
-# ности держит память в узде: лишние запросы ждут слот короткое время, и если не
-# дождались — быстрый 503, по которому бот показывает embed-фолбэк (штатный путь
-# при сбое renderer), а не копит страницы до OOM.
-_MAX_CONCURRENCY = int(os.getenv("RENDER_MAX_CONCURRENCY", "3"))
+# A3: admission control. С librsvg рендер лёгкий, но кап на одновременные
+# субпроцессы rsvg-convert всё равно полезен — не даёт бёрсту расплодить процессы.
+# Лишние запросы ждут слот короткое время; не дождались — быстрый 503, по которому
+# бот показывает embed-фолбэк (штатный путь при сбое renderer). Cap можно поднять
+# выше прежних 3 — субпроцесс дешевле страницы Chromium.
+_MAX_CONCURRENCY = int(os.getenv("RENDER_MAX_CONCURRENCY", "4"))
 _QUEUE_TIMEOUT = float(os.getenv("RENDER_QUEUE_TIMEOUT_SECONDS", "10"))
 
 
 class _Renderer:
-    def __init__(self) -> None:
-        self._pw: Playwright | None = None
-        self._browser: Browser | None = None
-        self._lock = asyncio.Lock()
+    """Растеризатор SVG→PNG через rsvg-convert (librsvg). Каждая карточка —
+    короткий субпроцесс: SVG на stdin, PNG на stdout. Персистентного процесса нет
+    (в отличие от браузера) — старт дешёвый, состояние не копится."""
 
-    async def _ensure(self) -> Browser:
-        # Ленивый импорт: playwright требуется только при реальном подъёме
-        # Chromium, а не при импорте модуля (см. TYPE_CHECKING-блок выше).
-        from playwright.async_api import async_playwright
-
-        async with self._lock:
-            if self._browser is None:
-                self._pw = await async_playwright().start()
-                self._browser = await self._pw.chromium.launch(
-                    # --disable-dev-shm-usage: держать shared memory в /tmp, а не в
-                    # /dev/shm (64 МБ по умолчанию под docker — Chromium там падает).
-                    # Заодно совместимо с read_only-rootfs: пишем только в tmpfs /tmp.
-                    args=[
-                        "--no-sandbox",
-                        "--disable-gpu",
-                        "--hide-scrollbars",
-                        "--disable-dev-shm-usage",
-                    ]
-                )
-                logger.info("Chromium поднят")
-        assert self._browser is not None
-        return self._browser
-
-    async def render(self, html: str, width: int, height: int, scale: int) -> bytes:
-        browser = await self._ensure()
-        page = await browser.new_page(
-            viewport={"width": width, "height": height}, device_scale_factor=scale
+    async def render(self, svg: str, width: int, height: int, scale: int) -> bytes:
+        # -w/-h — размер растра (scale=2 → ретина); SVG сам масштабируется по
+        # своему viewBox. Без имён файлов rsvg-convert читает stdin и пишет stdout
+        # (важно на read-only rootfs: `-`/`--output -` он бы принял за файл /app/-).
+        proc = await asyncio.create_subprocess_exec(
+            "rsvg-convert",
+            "-w",
+            str(width * scale),
+            "-h",
+            str(height * scale),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         try:
-            await page.set_content(html, wait_until="networkidle")
-            return await page.screenshot(type="png")
-        finally:
-            await page.close()
+            out, err = await asyncio.wait_for(
+                proc.communicate(svg.encode("utf-8")), timeout=_RSVG_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            proc.kill()
+            raise RuntimeError("rsvg-convert timeout") from None
+        if proc.returncode != 0 or not out:
+            raise RuntimeError(
+                f"rsvg-convert упал ({proc.returncode}): {err.decode('utf-8', 'replace')[:200]}"
+            )
+        return out
 
     async def close(self) -> None:
-        if self._browser is not None:
-            await self._browser.close()
-            self._browser = None
-        if self._pw is not None:
-            await self._pw.stop()
-            self._pw = None
+        pass  # персистентного процесса нет — закрывать нечего
 
 
 def create_app(
@@ -108,7 +89,7 @@ def create_app(
     queue_timeout: float | None = None,
 ) -> web.Application:
     # renderer/cache/лимиты инъектируемы: тест подставляет фейк-рендер (без
-    # Chromium), свой кэш и малый кап; прод берёт настоящий браузер и env.
+    # librsvg), свой кэш и малый кап; прод берёт настоящий rsvg-рендер и env.
     renderer = _Renderer() if renderer is None else renderer
     cache = _cache_from_env() if cache is None else cache
     slots = max_concurrency if max_concurrency is not None else _MAX_CONCURRENCY
@@ -139,12 +120,12 @@ def create_app(
         if not (1 <= scale <= 4):
             return web.json_response({"error": "scale out of range"}, status=400)
 
-        # A2: content-addressed кэш. Ключ по HTML+размерам+scale; на попадании
-        # отдаём готовый PNG, минуя Chromium целиком.
+        # A2: content-addressed кэш. Ключ по SVG+размерам+scale; на попадании
+        # отдаём готовый PNG, минуя растеризатор целиком.
         key = render_key(html, width, height, scale)
         cached = cache.get(key)
         if cached is not None:
-            # HIT не трогает браузер — слот конкуррентности ему не нужен.
+            # HIT не трогает рендер — слот конкуррентности ему не нужен.
             return web.Response(body=cached, content_type="image/png", headers={"X-Cache": "HIT"})
 
         # A3: ждём слот ограниченное время; не дождались — 503 (→ embed-фолбэк).

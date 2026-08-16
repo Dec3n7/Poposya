@@ -1,16 +1,25 @@
-"""HTML-шаблоны карточек. Чистые строки-билдеры без discord/БД-зависимостей:
-на вход поля, на выход (html, width, height) для CardRenderer.
+"""SVG-шаблоны карточек. Чистые строки-билдеры без discord/БД-зависимостей:
+на вход поля, на выход (svg, width, height) для CardRenderer.
 
-Плейсхолдеры — `string.Template` (`$name`): доллар в CSS/HTML не встречается, а
-фигурные скобки `{}` (которых в CSS море) не мешают, в отличие от str.format.
-Пользовательский текст экранируется; эмодзи-эмблема — из каталога, доверенная.
+Движок рендера — librsvg (renderer-сервис растеризует SVG→PNG), не браузер.
+Поэтому карточки — SVG, а не HTML: гексы (`clipPath`), градиентная заливка текста
+и декоративные пути ложатся в SVG нативно и весят в разы меньше Chromium.
+
+Цветные эмодзи librsvg из шрифта не берёт, поэтому эмблемы вставляются как
+инлайн **Twemoji** SVG (вектор, детерминированно) из каталога `twemoji/`.
+Twemoji © Twitter, лицензия CC-BY 4.0.
+
+Пользовательский текст экранируется (`_esc`); SVG-текст не переносится сам —
+длинное усекаем (`_trim`) или бьём заранее (`_wrap`).
 """
 
 from __future__ import annotations
 
+import base64
 import html
+import re
 from dataclasses import dataclass
-from string import Template
+from pathlib import Path
 
 # Акценты по тирам: (основной, светлый для градиента/бликов).
 TIER_ACCENTS: dict[str, tuple[str, str]] = {
@@ -26,55 +35,123 @@ TIER_LABELS = {
     "legendary": "ЛЕГЕНДАРНАЯ",
 }
 
-ACH_W, ACH_H = 1200, 320  # карточка ачивки (широкий «игровой» тост, вариант B1)
-CARD_W, CARD_H = 1200, 420  # карточка /rank (тот же игровой язык)
+ACH_W, ACH_H = 1200, 320
+CARD_W, CARD_H = 1200, 420
+PREMIUM_W, PREMIUM_H = 1200, 800
 
-# ── Карточка ачивки: глянцевый гекс + эмодзи + нижняя лента по тиру ────────────
-_TEMPLATE = Template(
-    """<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:${w}px;height:${h}px}
-  body{font-family:"Segoe UI","Noto Color Emoji",system-ui,sans-serif;background:#0c0b14;
-    display:flex;align-items:center;justify-content:center}
-  .toast{position:relative;width:${cw}px;height:${ch}px;border-radius:26px;overflow:hidden;
-    display:flex;align-items:center;gap:40px;padding:0 56px 0 46px;
-    background:linear-gradient(135deg,#211f2c,#17151f);border:3px solid ${accent}}
-  .waves{position:absolute;inset:0;opacity:.5;pointer-events:none}
-  .hexwrap{position:relative;width:200px;height:220px;flex:none}
-  .hex{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
-    background:linear-gradient(160deg,${accent2},${accent})}
-  .gloss{position:absolute;top:0;left:0;right:0;height:50%;
-    background:linear-gradient(180deg,rgba(255,255,255,.32),rgba(255,255,255,0))}
-  .emoji{font-size:96px;line-height:1;position:relative;z-index:1;
-    filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
-  .ribbon{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
-    padding:6px 20px;border-radius:8px;font-weight:800;font-size:18px;letter-spacing:1px;
-    white-space:nowrap;color:#1c1a2b;background:linear-gradient(180deg,${accent2},${accent});
-    box-shadow:0 6px 14px rgba(0,0,0,.4)}
-  .body{flex:1;position:relative;z-index:1}
-  .kicker{font-weight:800;font-size:18px;letter-spacing:3px;text-transform:uppercase;color:${accent}}
-  .title{margin-top:12px;font-size:50px;font-weight:800;color:#f2f3fb}
-  .desc{margin-top:12px;font-size:23px;color:#9a9db8}
-</style></head><body>
-  <div class="toast">
-    <svg class="waves" viewBox="0 0 1160 280" preserveAspectRatio="none">
-      <g fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="14">
-        <path d="M-50 60 Q145 20 340 60 T730 60 T1120 60"/>
-        <path d="M-50 140 Q145 100 340 140 T730 140 T1120 140"/>
-        <path d="M-50 220 Q145 180 340 220 T730 220 T1120 220"/></g></svg>
-    <div class="hexwrap">
-      <div class="hex"><div class="gloss"></div><span class="emoji">${emoji}</span></div>
-      <div class="ribbon">${rarity}</div>
-    </div>
-    <div class="body">
-      <div class="kicker">Достижение открыто!</div>
-      <div class="title">${name}</div>
-      <div class="desc">${description}</div>
-    </div>
-  </div>
-</body></html>"""
+FONT = "DejaVu Sans"  # есть в образе renderer; кириллица + латиница
+
+_TWEMOJI_DIR = Path(__file__).parent / "twemoji"
+_emoji_cache: dict[str, str | None] = {}
+
+
+# ── помощники ─────────────────────────────────────────────────────────────────
+
+
+def _esc(text: str) -> str:
+    """Экранирование для SVG-текста (& < > и кавычки)."""
+    return html.escape(str(text))
+
+
+def _trim(text: str, limit: int) -> str:
+    text = str(text)
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _wrap(text: str, max_chars: int, max_lines: int = 2) -> list[str]:
+    """Жадный перенос по словам до max_chars на строку; лишнее в последней —
+    усекается многоточием. Приблизительно (по символам), но тексты короткие."""
+    words = str(text).split()
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        if cur and len(cur) + 1 + len(w) > max_chars:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+        if len(lines) == max_lines:
+            break
+    if cur and len(lines) < max_lines:
+        lines.append(cur)
+    if not lines:
+        return [""]
+    lines[-1] = _trim(lines[-1], max_chars)
+    return lines
+
+
+def _hex(rgb: tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*(max(0, min(255, c)) for c in rgb))
+
+
+def _lighten(rgb: tuple[int, int, int], amount: float = 0.4) -> str:
+    return _hex(tuple(int(c + (255 - c) * amount) for c in rgb))  # type: ignore[arg-type]
+
+
+def _emoji_key(char: str) -> str:
+    # codepoints без VS16 (fe0f), нижний hex, через дефис — как имена Twemoji
+    return "-".join(f"{ord(c):x}" for c in char if ord(c) != 0xFE0F)
+
+
+def _emoji_inner(char: str) -> str | None:
+    """Внутренние пути Twemoji-SVG (без внешнего <svg>, viewBox 0 0 36 36)."""
+    key = _emoji_key(char)
+    if key in _emoji_cache:
+        return _emoji_cache[key]
+    path = _TWEMOJI_DIR / f"{key}.svg"
+    inner: str | None = None
+    if path.exists():
+        raw = path.read_text(encoding="utf-8").strip()
+        inner = re.sub(r"</svg>\s*$", "", re.sub(r"^<svg[^>]*>", "", raw))
+    _emoji_cache[key] = inner
+    return inner
+
+
+def _emoji(char: str, cx: float, cy: float, size: float) -> str:
+    """Инлайн Twemoji, центр в (cx,cy), сторона box = size. Нет ассета → пусто."""
+    inner = _emoji_inner(char)
+    if inner is None:
+        return ""
+    x, y = cx - size / 2, cy - size / 2
+    return (
+        f'<svg x="{x:.1f}" y="{y:.1f}" width="{size:.1f}" height="{size:.1f}" '
+        f'viewBox="0 0 36 36">{inner}</svg>'
+    )
+
+
+def _hexagon(cx: float, cy: float, w: float, h: float) -> str:
+    """points шестиугольника (как clip-path:polygon(50% 0,100% 25%,...))."""
+    x0, y0 = cx - w / 2, cy - h / 2
+    pts = [
+        (x0 + w * 0.5, y0),
+        (x0 + w, y0 + h * 0.25),
+        (x0 + w, y0 + h * 0.75),
+        (x0 + w * 0.5, y0 + h),
+        (x0, y0 + h * 0.75),
+        (x0, y0 + h * 0.25),
+    ]
+    return " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
+
+
+def _base_defs(accent: str, accent2: str, uid: str) -> str:
+    """Общие градиенты карточки: фон, акцент(160deg), глянец."""
+    return f"""
+  <linearGradient id="bg{uid}" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#211f2c"/><stop offset="1" stop-color="#17151f"/></linearGradient>
+  <linearGradient id="acc{uid}" x1="0.1" y1="0" x2="0.9" y2="1">
+    <stop offset="0" stop-color="{accent2}"/><stop offset="1" stop-color="{accent}"/></linearGradient>
+  <linearGradient id="gloss{uid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>"""
+
+
+_WAVES = (
+    '<g fill="none" stroke="#ffffff" stroke-opacity="0.05" stroke-width="{sw}" opacity="0.5">'
+    '<path d="{p1}"/><path d="{p2}"/><path d="{p3}"/></g>'
 )
+
+
+# ── Карточка ачивки ───────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -86,192 +163,60 @@ class AchievementCard:
 
 
 def achievement_card_html(card: AchievementCard) -> tuple[str, int, int]:
-    """Карточка ачивки → (html, width, height) для CardRenderer."""
+    """Карточка ачивки → (svg, width, height)."""
     accent, accent2 = TIER_ACCENTS.get(card.tier, TIER_ACCENTS["common"])
-    html_str = _TEMPLATE.substitute(
-        w=ACH_W,
-        h=ACH_H,
-        cw=ACH_W - 40,
-        ch=ACH_H - 40,
-        accent=accent,
-        accent2=accent2,
-        rarity=TIER_LABELS.get(card.tier, card.tier.upper()),
-        emoji=card.icon,  # доверенная эмодзи из каталога
-        name=html.escape(card.name),
-        description=html.escape(card.description),
+    rarity = TIER_LABELS.get(card.tier, card.tier.upper())
+    w, h = ACH_W, ACH_H
+
+    # эмблема-гекс слева, тело справа
+    hx_cx, hx_cy, hx_w, hx_h = 166, 160, 200, 220
+    hexpts = _hexagon(hx_cx, hx_cy, hx_w, hx_h)
+    body_x = 306
+    waves = _WAVES.format(
+        sw=14,
+        p1="M-50 90 Q145 50 340 90 T730 90 T1120 90",
+        p2="M-50 170 Q145 130 340 170 T730 170 T1120 170",
+        p3="M-50 250 Q145 210 340 250 T730 250 T1120 250",
     )
-    return html_str, ACH_W, ACH_H
-
-
-# ── Карточка /premium: три колонки тарифов с подсветкой текущего ──────────────
-PREMIUM_W, PREMIUM_H = 1200, 800
-
-# акцент текущего тарифа для верхней плашки (основной, светлый)
-_PREMIUM_ACCENTS: dict[str, tuple[str, str]] = {
-    "free": ("#565a66", "#c9ccd4"),
-    "premium": ("#7c5cff", "#b7a6ff"),
-    "pro": ("#c79a2e", "#ffd98a"),
-}
-_PREMIUM_TITLES = {"free": "Free", "premium": "Premium", "pro": "Pro"}
-
-_PREMIUM_TEMPLATE = Template(
-    """<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:${w}px;height:${h}px}
-  body{font-family:"Segoe UI","Noto Color Emoji",system-ui,sans-serif;background:#0c0b14;
-    display:flex;align-items:center;justify-content:center}
-  .wrap{position:relative;width:${cw}px;height:${ch}px;border-radius:26px;overflow:hidden;
-    padding:40px 40px 34px;background:linear-gradient(135deg,#211f2c,#17151f);
-    border:3px solid ${curaccent}}
-  .waves{position:absolute;inset:0;opacity:.5;pointer-events:none}
-  .head{position:relative;z-index:1;display:flex;align-items:baseline;gap:18px;margin-bottom:26px}
-  .head .h1{font-size:44px;font-weight:800;color:#f2f3fb}
-  .head .now{font-size:22px;font-weight:700;color:#9a9db8}
-  .head .pill{padding:5px 16px;border-radius:999px;font-weight:800;font-size:20px;
-    letter-spacing:.5px;color:#12111a;background:linear-gradient(180deg,${curaccent2},${curaccent})}
-  .cols{position:relative;z-index:1;display:flex;gap:22px;height:560px}
-  .col{flex:1;position:relative;border-radius:20px;padding:24px 22px;
-    background:rgba(255,255,255,.03);border:2px solid rgba(255,255,255,.08)}
-  .col .name{font-size:30px;font-weight:800;color:#eef0fb}
-  .col .tag{font-size:18px;color:#8b8ea8;margin:4px 0 16px}
-  .col ul{list-style:none;display:flex;flex-direction:column;gap:11px}
-  .col li{font-size:20px;color:#c7cad9;line-height:1.25;padding-left:30px;position:relative}
-  .col li::before{content:"✓";position:absolute;left:0;top:0;font-weight:800}
-  .col.free li::before{color:#8a8fa3}
-  .col.premium li::before{color:#b7a6ff}
-  .col.pro li::before{color:#ffd98a}
-  .col.premium{border-color:#7c5cff55}
-  .col.pro{border-color:#c79a2e55}
-  .col.active.free{border-color:#c9ccd4;box-shadow:0 0 0 2px #c9ccd455,0 14px 34px rgba(0,0,0,.45)}
-  .col.active.premium{border-color:#b7a6ff;box-shadow:0 0 0 2px #7c5cff66,0 14px 34px rgba(0,0,0,.5)}
-  .col.active.pro{border-color:#ffd98a;box-shadow:0 0 0 2px #c79a2e66,0 14px 34px rgba(0,0,0,.5)}
-  .cur{position:absolute;top:-13px;right:16px;padding:4px 14px;border-radius:999px;
-    font-size:15px;font-weight:800;letter-spacing:1px;color:#12111a}
-  .col.active.free .cur{background:#c9ccd4}
-  .col.active.premium .cur{background:#b7a6ff}
-  .col.active.pro .cur{background:#ffd98a}
-  .foot{position:relative;z-index:1;margin-top:20px;text-align:center;color:#8b8ea8;font-size:18px}
-</style></head><body>
-  <div class="wrap">
-    <svg class="waves" viewBox="0 0 1160 700" preserveAspectRatio="none">
-      <g fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="14">
-        <path d="M-50 120 Q145 70 340 120 T730 120 T1120 120"/>
-        <path d="M-50 360 Q145 310 340 360 T730 360 T1120 360"/>
-        <path d="M-50 600 Q145 550 340 600 T730 600 T1120 600"/></g></svg>
-    <div class="head">
-      <span class="h1">Что открыто на сервере</span>
-      <span class="now">сейчас:</span><span class="pill">${curlabel}</span>
-    </div>
-    <div class="cols">
-      <div class="col free ${free_active}">${free_cur}
-        <div class="name">☕ Free</div><div class="tag">зашла в гости</div>
-        <ul><li>Модерация и апелляции</li><li>Базовое общение (с лимитом)</li>
-        <li>Музыка</li><li>Часть отношений</li><li>Находки изредка</li>
-        <li>Каморки (немного)</li></ul>
-      </div>
-      <div class="col premium ${premium_active}">${premium_cur}
-        <div class="name">🖤 Premium</div><div class="tag">свой дом</div>
-        <ul><li>Полная персона и память</li><li>Тайная комната, отношения целиком</li>
-        <li>Находки чаще, караоке и радио</li><li>/git и /steam, дайджест, ачивки</li>
-        <li>«Альбом», больше каморок и напоминаний</li>
-        <li>Панель edit, banwatch</li></ul>
-      </div>
-      <div class="col pro ${pro_active}">${pro_cur}
-        <div class="name">✂️👁🖤 Pro</div><div class="tag">сеть домов</div>
-        <ul><li>Всё из Premium</li><li>24/7-присутствие</li>
-        <li>Приоритет</li></ul>
-      </div>
-    </div>
-    <div class="foot">Подписку включает владелец бота в панели · команда /premium</div>
-  </div>
-</body></html>"""
-)
-
-
-def premium_card_html(tier: str) -> tuple[str, int, int]:
-    """Карточка /premium → (html, width, height). Подсвечивает колонку `tier`."""
-    tier = tier if tier in _PREMIUM_TITLES else "free"
-    accent, accent2 = _PREMIUM_ACCENTS[tier]
-    cur = '<div class="cur">ТЕКУЩИЙ</div>'
-    html_str = _PREMIUM_TEMPLATE.substitute(
-        w=PREMIUM_W,
-        h=PREMIUM_H,
-        cw=PREMIUM_W - 40,
-        ch=PREMIUM_H - 40,
-        curaccent=accent,
-        curaccent2=accent2,
-        curlabel=_PREMIUM_TITLES[tier],
-        free_active="active" if tier == "free" else "",
-        premium_active="active" if tier == "premium" else "",
-        pro_active="active" if tier == "pro" else "",
-        free_cur=cur if tier == "free" else "",
-        premium_cur=cur if tier == "premium" else "",
-        pro_cur=cur if tier == "pro" else "",
+    desc_lines = _wrap(card.description, 46, max_lines=2)
+    desc_svg = "".join(
+        f'<text x="{body_x}" y="{233 + i * 30}" font-family="{FONT}" font-size="23" '
+        f'fill="#9a9db8">{_esc(line)}</text>'
+        for i, line in enumerate(desc_lines)
     )
-    return html_str, PREMIUM_W, PREMIUM_H
+
+    return (
+        f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <defs>{_base_defs(accent, accent2, "a")}
+    <clipPath id="hexA"><polygon points="{hexpts}"/></clipPath></defs>
+  <rect x="0" y="0" width="{w}" height="{h}" fill="#0c0b14"/>
+  <rect x="20" y="20" width="{w - 40}" height="{h - 40}" rx="26" fill="url(#bga)"
+        stroke="{accent}" stroke-width="3"/>
+  <g clip-path="url(#hexA)">
+    <rect x="{hx_cx - hx_w / 2}" y="{hx_cy - hx_h / 2}" width="{hx_w}" height="{hx_h}" fill="url(#acca)"/>
+    <rect x="{hx_cx - hx_w / 2}" y="{hx_cy - hx_h / 2}" width="{hx_w}" height="{hx_h / 2}" fill="url(#glossa)"/>
+  </g>
+  {_emoji(card.icon, hx_cx, hx_cy - 8, 118)}
+  <g>
+    <rect x="{hx_cx - 92}" y="242" width="184" height="34" rx="8" fill="url(#acca)"/>
+    <text x="{hx_cx}" y="265" font-family="{FONT}" font-size="18" font-weight="bold"
+          fill="#1c1a2b" text-anchor="middle" letter-spacing="1">{_esc(rarity)}</text>
+  </g>
+  {waves}
+  <text x="{body_x}" y="118" font-family="{FONT}" font-size="18" font-weight="bold"
+        fill="{accent}" letter-spacing="3">ДОСТИЖЕНИЕ ОТКРЫТО!</text>
+  <text x="{body_x}" y="180" font-family="{FONT}" font-size="50" font-weight="bold"
+        fill="#f2f3fb">{_esc(_trim(card.name, 28))}</text>
+  {desc_svg}
+  <text x="{w - 34}" y="50" font-family="{FONT}" font-size="18" fill="#6a6d84"
+        text-anchor="end">(WIP)</text>
+</svg>""",
+        w,
+        h,
+    )
 
 
-# ── Карточка /rank: аватар в гексе + роль + статы + прогресс (игровой язык B1) ──
-_RANK_TEMPLATE = Template(
-    """<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:${w}px;height:${h}px}
-  body{font-family:"Segoe UI",system-ui,sans-serif;background:#0c0b14;
-    display:flex;align-items:center;justify-content:center}
-  .toast{position:relative;width:${cw}px;height:${ch}px;border-radius:26px;overflow:hidden;
-    display:flex;align-items:center;gap:44px;padding:0 60px 0 48px;
-    background:linear-gradient(135deg,#211f2c,#17151f);border:3px solid ${accent}}
-  .waves{position:absolute;inset:0;opacity:.5;pointer-events:none}
-  .hexwrap{position:relative;width:250px;height:274px;flex:none}
-  .hexborder{position:absolute;inset:0;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
-    background:linear-gradient(160deg,${accent2},${accent})}
-  .hex{position:absolute;inset:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;
-    clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:#201d3a}
-  .hex img{width:100%;height:100%;object-fit:cover}
-  .initial{font-size:120px;font-weight:800;color:${accent2}}
-  .gloss{position:absolute;top:0;left:0;right:0;height:46%;
-    background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0));pointer-events:none}
-  .ribbon{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-    padding:6px 20px;border-radius:8px;font-weight:800;font-size:19px;letter-spacing:1px;white-space:nowrap;
-    color:#1c1a2b;background:linear-gradient(180deg,${accent2},${accent});box-shadow:0 6px 14px rgba(0,0,0,.4)}
-  .body{flex:1;position:relative;z-index:1;display:flex;flex-direction:column;height:${ch}px;padding:44px 0}
-  .name{font-size:54px;font-weight:800;color:#f2f3fb;letter-spacing:.5px}
-  .roleline{margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .pill{display:inline-flex;align-items:center;padding:7px 18px;border-radius:999px;
-    border:1px solid ${accent}8c;background:${accent}1f;color:${accent2};font-weight:700;font-size:21px}
-  .flag{color:#a6a9c6;font-size:18px;font-weight:600}
-  .stats{margin-top:26px;display:flex;gap:48px}
-  .stat .num{font-size:44px;font-weight:800;background:linear-gradient(180deg,#e8eaff,${accent});
-    -webkit-background-clip:text;background-clip:text;color:transparent}
-  .stat .lbl{font-size:19px;color:#9a9db8;margin-top:-2px}
-  .track{margin-top:auto;height:24px;border-radius:12px;background:rgba(255,255,255,.07);overflow:hidden}
-  .fill{height:100%;border-radius:12px;width:${progress_pct}%;background:linear-gradient(90deg,${accent},${accent2})}
-  .ptext{margin-top:9px;text-align:right;color:#8b8ea8;font-size:19px}
-</style></head><body>
-  <div class="toast">
-    <svg class="waves" viewBox="0 0 1160 360" preserveAspectRatio="none">
-      <g fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="16">
-        <path d="M-50 80 Q145 30 340 80 T730 80 T1120 80"/>
-        <path d="M-50 180 Q145 130 340 180 T730 180 T1120 180"/>
-        <path d="M-50 280 Q145 230 340 280 T730 280 T1120 280"/></g></svg>
-    <div class="hexwrap">
-      <div class="hexborder"></div>
-      <div class="hex">${avatar}<div class="gloss"></div></div>
-      <div class="ribbon">УР. ${level}</div>
-    </div>
-    <div class="body">
-      <div class="name">${name}</div>
-      <div class="roleline"><span class="pill">${role}</span>${flags}</div>
-      <div class="stats">
-        <div class="stat"><div class="num">${points}</div><div class="lbl">очков</div></div>
-        ${deep_stat}
-      </div>
-      <div class="track"><div class="fill"></div></div>
-      <div class="ptext">${progress_text}</div>
-    </div>
-  </div>
-</body></html>"""
-)
+# ── Карточка /rank ────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -289,53 +234,214 @@ class RankCard:
     avatar: bytes | None = None  # PNG-байты аватара
 
 
-def _hex(rgb: tuple[int, int, int]) -> str:
-    return "#{:02x}{:02x}{:02x}".format(*(max(0, min(255, c)) for c in rgb))
-
-
-def _lighten(rgb: tuple[int, int, int], amount: float = 0.4) -> str:
-    return _hex(tuple(int(c + (255 - c) * amount) for c in rgb))  # type: ignore[arg-type]
-
-
 def rank_card_html(card: RankCard) -> tuple[str, int, int]:
-    """Карточка /rank → (html, width, height). Аватар встраивается data-URI —
-    внешних запросов у рендера нет."""
-    import base64
-
+    """Карточка /rank → (svg, width, height). Аватар встраивается data-URI."""
     accent = _hex(card.accent)
     accent2 = _lighten(card.accent)
+    w, h = CARD_W, CARD_H
+
+    hx_cx, hx_cy, hx_w, hx_h = 173, 210, 250, 274
+    outer = _hexagon(hx_cx, hx_cy, hx_w, hx_h)
+    inner = _hexagon(hx_cx, hx_cy, hx_w - 12, hx_h - 12)
     if card.avatar:
         b64 = base64.b64encode(card.avatar).decode()
-        avatar = f'<img src="data:image/png;base64,{b64}" alt="">'
+        avatar_el = (
+            f'<image x="{hx_cx - (hx_w - 12) / 2}" y="{hx_cy - (hx_h - 12) / 2}" '
+            f'width="{hx_w - 12}" height="{hx_h - 12}" preserveAspectRatio="xMidYMid slice" '
+            f'href="data:image/png;base64,{b64}"/>'
+        )
     else:
-        initial = (card.display_name[:1] or "?").upper()
-        avatar = f'<span class="initial">{html.escape(initial)}</span>'
+        initial = _esc((card.display_name[:1] or "?").upper())
+        avatar_el = (
+            f'<text x="{hx_cx}" y="{hx_cy + 42}" font-family="{FONT}" font-size="120" '
+            f'font-weight="bold" fill="{accent2}" text-anchor="middle">{initial}</text>'
+        )
+
+    body_x = 305
+    # флаги справа от пилюли роли
     flags = []
     if card.is_exclusive:
-        flags.append('<span class="flag">★ эксклюзив</span>')
+        flags.append("★ эксклюзив")
     if card.frozen:
-        flags.append('<span class="flag">заморожен</span>')
-    deep_stat = (
-        f'<div class="stat"><div class="num">{card.deep_dialogs}</div>'
-        f'<div class="lbl">глубоких диалогов</div></div>'
+        flags.append("заморожен")
+    flag_txt = "   ".join(flags)
+    role = _trim(card.role_name, 22)
+    pill_w = 40 + len(role) * 13
+    flag_svg = (
+        f'<text x="{body_x + pill_w + 24}" y="181" font-family="{FONT}" font-size="18" '
+        f'font-weight="bold" fill="#a6a9c6">{_esc(flag_txt)}</text>'
+        if flag_txt
+        else ""
+    )
+    # статы: очки + (опц.) глубокие диалоги, цифры с градиентной заливкой
+    stat2 = (
+        f'<text x="{body_x + 270}" y="272" font-family="{FONT}" font-size="44" '
+        f'font-weight="bold" fill="url(#numR)">{card.deep_dialogs}</text>'
+        f'<text x="{body_x + 270}" y="300" font-family="{FONT}" font-size="19" '
+        f'fill="#9a9db8">глубоких диалогов</text>'
         if card.deep_dialogs
         else ""
     )
-    html_str = _RANK_TEMPLATE.substitute(
-        w=CARD_W,
-        h=CARD_H,
-        cw=CARD_W - 40,
-        ch=CARD_H - 40,
-        accent=accent,
-        accent2=accent2,
-        avatar=avatar,
-        name=html.escape(card.display_name),
-        role=html.escape(card.role_name),
-        flags="".join(flags),
-        points=card.points,
-        level=card.level,
-        deep_stat=deep_stat,
-        progress_pct=round(max(0.0, min(1.0, card.progress)) * 100, 2),
-        progress_text=html.escape(card.progress_text),
+    pct = round(max(0.0, min(1.0, card.progress)) * 100, 2)
+    track_x, track_w = body_x, w - 60 - body_x
+    fill_w = track_w * pct / 100
+    waves = _WAVES.format(
+        sw=16,
+        p1="M-50 100 Q145 50 340 100 T730 100 T1120 100",
+        p2="M-50 210 Q145 160 340 210 T730 210 T1120 210",
+        p3="M-50 320 Q145 270 340 320 T730 320 T1120 320",
     )
-    return html_str, CARD_W, CARD_H
+
+    return (
+        f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <defs>{_base_defs(accent, accent2, "R")}
+    <linearGradient id="numR" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8eaff"/><stop offset="1" stop-color="{accent}"/></linearGradient>
+    <clipPath id="hexRin"><polygon points="{inner}"/></clipPath></defs>
+  <rect x="0" y="0" width="{w}" height="{h}" fill="#0c0b14"/>
+  <rect x="20" y="20" width="{w - 40}" height="{h - 40}" rx="26" fill="url(#bgR)"
+        stroke="{accent}" stroke-width="3"/>
+  {waves}
+  <polygon points="{outer}" fill="url(#accR)"/>
+  <polygon points="{inner}" fill="#201d3a"/>
+  <g clip-path="url(#hexRin)">{avatar_el}
+    <rect x="{hx_cx - (hx_w - 12) / 2}" y="{hx_cy - (hx_h - 12) / 2}" width="{hx_w - 12}"
+          height="{(hx_h - 12) / 2}" fill="url(#glossR)"/></g>
+  <rect x="{hx_cx - 75}" y="{hx_cy + (hx_h - 12) / 2 - 40}" width="150" height="34" rx="8" fill="url(#accR)"/>
+  <text x="{hx_cx}" y="{hx_cy + (hx_h - 12) / 2 - 17}" font-family="{FONT}" font-size="19"
+        font-weight="bold" fill="#1c1a2b" text-anchor="middle" letter-spacing="1">УР. {card.level}</text>
+  <text x="{body_x}" y="122" font-family="{FONT}" font-size="54" font-weight="bold"
+        fill="#f2f3fb">{_esc(_trim(card.display_name, 22))}</text>
+  <rect x="{body_x}" y="152" width="{pill_w}" height="42" rx="21" fill="{accent}20" stroke="{accent}" stroke-width="1"/>
+  <text x="{body_x + pill_w / 2}" y="180" font-family="{FONT}" font-size="21" font-weight="bold"
+        fill="{accent2}" text-anchor="middle">{_esc(role)}</text>
+  {flag_svg}
+  <text x="{body_x}" y="272" font-family="{FONT}" font-size="44" font-weight="bold"
+        fill="url(#numR)">{card.points}</text>
+  <text x="{body_x}" y="300" font-family="{FONT}" font-size="19" fill="#9a9db8">очков</text>
+  {stat2}
+  <rect x="{track_x}" y="336" width="{track_w}" height="24" rx="12" fill="#ffffff12"/>
+  <rect x="{track_x}" y="336" width="{fill_w:.1f}" height="24" rx="12" fill="url(#accR)"/>
+  <text x="{track_x + track_w}" y="380" font-family="{FONT}" font-size="19" fill="#8b8ea8"
+        text-anchor="end">{_esc(_trim(card.progress_text, 40))}</text>
+</svg>""",
+        w,
+        h,
+    )
+
+
+# ── Карточка /premium ─────────────────────────────────────────────────────────
+
+_PREMIUM_ACCENTS: dict[str, tuple[str, str]] = {
+    "free": ("#565a66", "#c9ccd4"),
+    "premium": ("#7c5cff", "#b7a6ff"),
+    "pro": ("#c79a2e", "#ffd98a"),
+}
+_PREMIUM_TITLES = {"free": "Free", "premium": "Premium", "pro": "Pro"}
+_PREMIUM_COLS = {
+    "free": (
+        "☕",
+        "Free",
+        "зашла в гости",
+        [
+            "Модерация и апелляции",
+            "Базовое общение (с лимитом)",
+            "Музыка",
+            "Часть отношений",
+            "Находки изредка",
+            "Каморки (немного)",
+        ],
+    ),
+    "premium": (
+        "🖤",
+        "Premium",
+        "свой дом",
+        [
+            "Полная персона и память",
+            "Тайная комната, отношения",
+            "Находки, караоке и радио",
+            "/git, /steam, дайджест, ачивки",
+            "«Альбом», больше каморок",
+            "Панель edit, banwatch",
+        ],
+    ),
+    "pro": (
+        "✂️",
+        "Pro",
+        "сеть домов",
+        [
+            "Всё из Premium",
+            "24/7-присутствие",
+            "Приоритет",
+        ],
+    ),
+}
+_PREMIUM_LI = {"free": "#8a8fa3", "premium": "#b7a6ff", "pro": "#ffd98a"}
+
+
+def premium_card_html(tier: str) -> tuple[str, int, int]:
+    """Карточка /premium → (svg, width, height). Подсвечивает колонку `tier`."""
+    tier = tier if tier in _PREMIUM_TITLES else "free"
+    accent, accent2 = _PREMIUM_ACCENTS[tier]
+    w, h = PREMIUM_W, PREMIUM_H
+    waves = _WAVES.format(
+        sw=14,
+        p1="M-50 150 Q145 100 340 150 T730 150 T1120 150",
+        p2="M-50 400 Q145 350 340 400 T730 400 T1120 400",
+        p3="M-50 640 Q145 590 340 640 T730 640 T1120 640",
+    )
+
+    cols_svg = []
+    col_w, gap, x0, y0, col_h = 360, 22, 40, 150, 560
+    for i, key in enumerate(("free", "premium", "pro")):
+        cx = x0 + i * (col_w + gap)
+        emoji, name, tagline, items = _PREMIUM_COLS[key]
+        active = key == tier
+        li_color = _PREMIUM_LI[key]
+        border = accent2 if active else "#ffffff14"
+        bw = 3 if active else 2
+        cur = (
+            f'<rect x="{cx + col_w - 130}" y="{y0 - 15}" width="120" height="28" rx="14" fill="{accent2}"/>'
+            f'<text x="{cx + col_w - 70}" y="{y0 + 4}" font-family="{FONT}" font-size="15" '
+            f'font-weight="bold" fill="#12111a" text-anchor="middle" letter-spacing="1">ТЕКУЩИЙ</text>'
+            if active
+            else ""
+        )
+        li_svg = "".join(
+            f'<text x="{cx + 50}" y="{y0 + 132 + j * 42}" font-family="{FONT}" font-size="19" '
+            f'fill="#c7cad9">{_esc(_trim(it, 30))}</text>'
+            f'<text x="{cx + 24}" y="{y0 + 132 + j * 42}" font-family="{FONT}" font-size="19" '
+            f'font-weight="bold" fill="{li_color}">✓</text>'
+            for j, it in enumerate(items)
+        )
+        cols_svg.append(
+            f'<rect x="{cx}" y="{y0}" width="{col_w}" height="{col_h}" rx="20" '
+            f'fill="#ffffff08" stroke="{border}" stroke-width="{bw}"/>'
+            f"{_emoji(emoji, cx + 40, y0 + 44, 40)}"
+            f'<text x="{cx + 68}" y="{y0 + 54}" font-family="{FONT}" font-size="30" '
+            f'font-weight="bold" fill="#eef0fb">{_esc(name)}</text>'
+            f'<text x="{cx + 24}" y="{y0 + 88}" font-family="{FONT}" font-size="18" '
+            f'fill="#8b8ea8">{_esc(tagline)}</text>'
+            f"{li_svg}{cur}"
+        )
+
+    return (
+        f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <defs>{_base_defs(accent, accent2, "P")}</defs>
+  <rect x="0" y="0" width="{w}" height="{h}" fill="#0c0b14"/>
+  <rect x="20" y="20" width="{w - 40}" height="{h - 40}" rx="26" fill="url(#bgP)"
+        stroke="{accent}" stroke-width="3"/>
+  {waves}
+  <text x="40" y="96" font-family="{FONT}" font-size="40" font-weight="bold"
+        fill="#f2f3fb">Что открыто на сервере</text>
+  <text x="605" y="96" font-family="{FONT}" font-size="22" font-weight="bold" fill="#9a9db8">сейчас:</text>
+  <rect x="712" y="72" width="{44 + len(_PREMIUM_TITLES[tier]) * 15}" height="34" rx="17" fill="url(#accP)"/>
+  <text x="{712 + (44 + len(_PREMIUM_TITLES[tier]) * 15) / 2}" y="96" font-family="{FONT}" font-size="20"
+        font-weight="bold" fill="#12111a" text-anchor="middle">{_PREMIUM_TITLES[tier]}</text>
+  {"".join(cols_svg)}
+  <text x="{w / 2}" y="748" font-family="{FONT}" font-size="18" fill="#8b8ea8"
+        text-anchor="middle">Подписку включает владелец бота в панели · команда /premium</text>
+</svg>""",
+        w,
+        h,
+    )

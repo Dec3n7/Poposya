@@ -1,49 +1,56 @@
-"""HTML-билдеры карточек — чистые строки (без запуска браузера).
+"""SVG-билдеры карточек — чистые строки (без запуска растеризатора).
 
-Проверяем подстановку полей, тир→акцент и экранирование пользовательского
-текста. Сам растр (Playwright→PNG) — интеграция, здесь не гоняется."""
+Проверяем подстановку полей, тир→акцент, экранирование пользовательского текста
+и инлайн Twemoji для эмодзи-эмблемы. Сам растр (librsvg→PNG) — интеграция, здесь
+не гоняется."""
 
 from src.infrastructure.render.cards import (
     TIER_ACCENTS,
     AchievementCard,
     RankCard,
     achievement_card_html,
+    premium_card_html,
     rank_card_html,
 )
 
 
-def test_achievement_card_html_has_fields_and_tier_accent():
-    html, w, h = achievement_card_html(
+def test_achievement_card_has_fields_tier_and_inline_emoji():
+    svg, w, h = achievement_card_html(
         AchievementCard(
             name="Меломан",
             description="Любовь к музыке.",
             tier="rare",
-            icon="🎵",
+            icon="🎵",  # 1f3b5 — есть в каталоге twemoji
         )
     )
     assert w > 0 and h > 0
-    assert "Меломан" in html and "Любовь к музыке." in html
-    assert "🎵" in html  # эмодзи-эмблема
-    assert "РЕДКАЯ" in html  # ярлык тира rare
-    assert TIER_ACCENTS["rare"][0] in html  # акцентный цвет тира
-    assert "Достижение открыто!" in html
+    assert svg.startswith("<svg")
+    assert "Меломан" in svg and "Любовь к музыке." in svg
+    assert "РЕДКАЯ" in svg  # ярлык тира rare
+    assert TIER_ACCENTS["rare"][0] in svg  # акцентный цвет тира
+    assert "ДОСТИЖЕНИЕ ОТКРЫТО!" in svg
+    # эмодзи вставлено как инлайн-Twemoji (вложенный <svg viewBox="0 0 36 36">),
+    # а не как сырой символ — librsvg цветной эмодзи-шрифт не рендерит
+    assert 'viewBox="0 0 36 36"' in svg
+    assert "🎵" not in svg
+    assert "(WIP)" in svg  # пометка «не финальный вид»
 
 
 def test_achievement_card_escapes_user_text():
-    html, _, _ = achievement_card_html(
+    svg, _, _ = achievement_card_html(
         AchievementCard(
             name="<script>alert(1)</script>",
             description="d",
             tier="common",
-            icon="✨",
+            icon="🔥",  # не в каталоге twemoji → эмблема пустая, карточка строится
         )
     )
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
+    assert "<script>" not in svg
+    assert "&lt;script&gt;" in svg
 
 
-def test_rank_card_html_initial_without_avatar():
-    html, w, h = rank_card_html(
+def test_rank_card_initial_without_avatar():
+    svg, w, h = rank_card_html(
         RankCard(
             display_name="Гость",
             points=700,
@@ -55,14 +62,16 @@ def test_rank_card_html_initial_without_avatar():
             deep_dialogs=3,
         )
     )
-    assert "Гость" in html and "700" in html and "На одной волне" in html
-    assert "width:50.0%" in html.replace(" ", "")  # прогресс-бар заполнен наполовину
-    assert 'class="initial"' in html  # без аватара — инициал
-    assert "глубоких диалогов" in html  # блок появляется при deep_dialogs>0
+    assert w > 0 and h > 0
+    assert "Гость" in svg and "700" in svg and "На одной волне" in svg
+    assert "700 / 950" in svg  # текст прогресса
+    assert "data:image/png;base64," not in svg  # без аватара
+    assert ">Г</text>" in svg  # инициал буквой
+    assert "глубоких диалогов" in svg  # блок при deep_dialogs>0
 
 
-def test_rank_card_html_embeds_avatar_data_uri():
-    html, _, _ = rank_card_html(
+def test_rank_card_embeds_avatar_data_uri():
+    svg, _, _ = rank_card_html(
         RankCard(
             display_name="A",
             points=0,
@@ -74,5 +83,20 @@ def test_rank_card_html_embeds_avatar_data_uri():
             avatar=b"\x89PNG\r\n\x1a\n",
         )
     )
-    assert "data:image/png;base64," in html
-    assert 'class="initial"' not in html
+    assert "data:image/png;base64," in svg
+    assert "<image" in svg
+
+
+def test_premium_card_highlights_current_tier():
+    svg, w, h = premium_card_html("premium")
+    assert w > 0 and h > 0
+    assert svg.startswith("<svg")
+    assert "Premium" in svg and "Free" in svg and "Pro" in svg
+    assert "ТЕКУЩИЙ" in svg  # бейдж текущего тарифа
+    # эмодзи заголовков колонок — инлайн Twemoji
+    assert 'viewBox="0 0 36 36"' in svg
+
+
+def test_premium_card_unknown_tier_falls_back_to_free():
+    svg, _, _ = premium_card_html("бред")
+    assert "ТЕКУЩИЙ" in svg  # какая-то колонка всё равно текущая (free)
