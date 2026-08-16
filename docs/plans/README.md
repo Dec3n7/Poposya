@@ -38,6 +38,8 @@
 | [MONETIZATION_IDEAS.md](MONETIZATION_IDEAS.md) | Продуктовые идеи и прайс монетизации (черновик) |
 | [Poposya_improvement_plan.md](Poposya_improvement_plan.md) | План улучшения и продуктовая оценка (источник [ADR-005](../adr/ADR-005-requirements-lock-source-of-truth.md), [ADR-006](../adr/ADR-006-feature-oriented-architecture.md)) |
 | [Poposya_WARDEN_Technical_Audit_v2.md](Poposya_WARDEN_Technical_Audit_v2.md) | Повторный техаудит (источник [ADR-011](../adr/ADR-011-durable-command-bridge.md), [ADR-013](../adr/ADR-013-warden-docker-socket-allowlist.md)) |
+| [perf-baseline.md](perf-baseline.md) | Замер производительности под нагрузкой + оценка ёмкости и VPS (2026-08-16) |
+| [scale-300-guilds.md](scale-300-guilds.md) | План масштабирования до 300 активных гильдий: рычаги, порядок, риск-матрица (2026-08-16) |
 | [WARDEN.md](WARDEN.md), [WARDEN V2.md](WARDEN%20V2.md) | Ранние design-спеки WARDEN (актуальная — в [WARDEN/DESIGN.md](../../../WARDEN/DESIGN.md); решение — [ADR-004](../adr/ADR-004-warden-independent.md)) |
 
 ## Вне кода
