@@ -21,6 +21,11 @@
 services:
   bot:
     build: .
+    # Общий образ с api (A5, docs/plans/scale-300-guilds.md): bot и api строят
+    # ОДИН и тот же Dockerfile и различаются лишь командой запуска (api — uvicorn).
+    # Единый тег `image:` заставляет BuildKit собрать образ один раз и обоих на
+    # него сослаться — вместо двух одинаковых образов по 1.3 ГБ на диске.
+    image: poposyap-app:latest
     restart: unless-stopped
     # Изоляция: процесс уже под непривилегированным пользователем (Dockerfile),
     # снимаем и все Linux-capabilities (нашему коду они не нужны) и запрещаем
@@ -90,6 +95,9 @@ services:
   # перезапустится. Порт наружу НЕ публикуется: снаружи всё через nginx (web).
   api:
     build: .
+    # Тот же образ, что у bot (A5): один build на двоих. Команда запуска api
+    # переопределяется ниже (uvicorn), поэтому общий образ различий не стирает.
+    image: poposyap-app:latest
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -215,6 +223,14 @@ services:
       - /tmp
     # Chromium прожорлив к памяти на старте страницы; 512M с запасом. OOM локален.
     mem_limit: 512m
+    # Тюнинг рендера без пересборки образа (A2/A3, docs/plans/scale-300-guilds.md):
+    # границы content-кэша PNG и кап одновременных рендеров. Дефолты — в коде
+    # (server.py); .env лишь переопределяет. RENDER_CACHE_MAX_BYTES=0 гасит кэш.
+    environment:
+      RENDER_CACHE_MAX_ENTRIES: ${RENDER_CACHE_MAX_ENTRIES:-512}
+      RENDER_CACHE_MAX_BYTES: ${RENDER_CACHE_MAX_BYTES:-268435456}
+      RENDER_MAX_CONCURRENCY: ${RENDER_MAX_CONCURRENCY:-3}
+      RENDER_QUEUE_TIMEOUT_SECONDS: ${RENDER_QUEUE_TIMEOUT_SECONDS:-10}
     networks:
       - render
     healthcheck:
