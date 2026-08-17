@@ -156,10 +156,15 @@ class Settings(BaseSettings):
     privacy_purge_interval_hours: int = 6
 
     # --- AI (Groq: OpenAI-совместимый API) ---
+    # Groq РОТИРУЕТ модели: старые (llama-3.3-70b-versatile / llama-3.1-8b-instant)
+    # сняты и отдают 404. compound/compound-mini возвращают чистый content (в
+    # отличие от reasoning-моделей gpt-oss/qwen, что текут <think>/пустой ответ).
+    # Актуальный список: GET https://api.groq.com/openai/v1/models. Переопределяется
+    # через AI_MODEL/AI_FALLBACK_MODEL в .env.
     groq_api_key: str = ""
-    ai_model: str = "llama-3.3-70b-versatile"
+    ai_model: str = "groq/compound"
     # надёжность: ретраи, резервная модель, circuit breaker (ТЗ 8.2–8.3)
-    ai_fallback_model: str = "llama-3.1-8b-instant"  # пусто = без фолбэка
+    ai_fallback_model: str = "groq/compound-mini"  # пусто = без фолбэка
     ai_retry_attempts: int = 3
     ai_retry_base_delay: float = 1.0
     ai_cb_failure_threshold: int = 5
