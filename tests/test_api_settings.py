@@ -1103,6 +1103,22 @@ async def test_settings_list_excludes_module_flags(client):
     assert "warn_threshold" in fields  # обычные настройки на месте
     assert "activity_album" not in fields  # тумблеры модулей — на вкладке «Модули»
     assert "activity_enabled" not in fields
+    assert "achievements_enabled" not in fields  # ачивки — тоже модуль, не «Настройки»
+
+
+async def test_achievements_module_exposed_and_toggleable(client):
+    # модуль «Достижения» доступен во вкладке «Модули» и выключается через PUT
+    mods = (await client.get(f"/api/guilds/{GUILD}/settings/modules")).json()
+    ach = next(m for m in mods if m["key"] == "achievements")
+    assert ach["master"]["key"] == "achievements_enabled"
+    assert ach["master"]["value"] is True and ach["description"]
+
+    r = await client.put(f"/api/guilds/{GUILD}/settings/achievements_enabled", json={"value": False})
+    assert r.status_code == 200 and r.json()["value"] is False
+
+    mods2 = (await client.get(f"/api/guilds/{GUILD}/settings/modules")).json()
+    ach2 = next(m for m in mods2 if m["key"] == "achievements")
+    assert ach2["master"]["value"] is False and ach2["master"]["is_override"] is True
 
 
 # --- профиль бота на сервере ------------------------------------------------
