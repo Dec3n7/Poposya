@@ -1113,7 +1113,9 @@ async def test_achievements_module_exposed_and_toggleable(client):
     assert ach["master"]["key"] == "achievements_enabled"
     assert ach["master"]["value"] is True and ach["description"]
 
-    r = await client.put(f"/api/guilds/{GUILD}/settings/achievements_enabled", json={"value": False})
+    r = await client.put(
+        f"/api/guilds/{GUILD}/settings/achievements_enabled", json={"value": False}
+    )
     assert r.status_code == 200 and r.json()["value"] is False
 
     mods2 = (await client.get(f"/api/guilds/{GUILD}/settings/modules")).json()
