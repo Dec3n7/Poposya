@@ -40,6 +40,9 @@ class GuildDTO(BaseModel):
     name: str
     icon: str | None = None
     perms: GuildPermsDTO
+    # сервер виден оператору бота только для выдачи подписки (он им не управляет).
+    # Фронт по флагу показывает урезанный вид: одна вкладка «Подписка», без настроек.
+    operator_only: bool = False
 
 
 class MeDTO(BaseModel):

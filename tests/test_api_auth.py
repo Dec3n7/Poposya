@@ -155,6 +155,65 @@ async def test_me_exposes_per_guild_permissions(client, mock_discord):
     }
 
 
+async def test_me_operator_sees_bot_guilds_they_dont_manage(mock_discord):
+    # Оператор бота видит ВСЕ серверы бота — включая те, которыми не управляет, —
+    # с флагом operator_only (панель покажет им лишь вкладку «Подписка»).
+    from src.api.bot_guilds import BotGuildMeta
+
+    container = build_api_container(make_settings(web_operator_ids=[42]))
+    # бот на 10/20 (юзер ими управляет) и на 99 (чужой — юзер им не управляет)
+    container.bot_guilds.prime(
+        {
+            10: BotGuildMeta(name="Manage", icon="i10"),
+            20: BotGuildMeta(name="Owner", icon=None),
+            99: BotGuildMeta(name="Чужой", icon="i99"),
+        }
+    )
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.get("/api/auth/login", follow_redirects=False)
+        state = client.cookies["poposya_oauth_state"]
+        await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+        data = (await client.get("/api/auth/me")).json()
+
+    assert data["is_operator"] is True
+    guilds = {g["id"]: g for g in data["guilds"]}
+    # управляемые (10, 20) + чужой сервер бота (99); НЕ 30 (там бота нет)
+    assert set(guilds) == {"10", "20", "99"}
+    assert guilds["10"]["operator_only"] is False
+    assert guilds["20"]["operator_only"] is False
+    # чужой сервер: помечен operator_only, имя/иконка из кэша бота, прав нет
+    assert guilds["99"]["operator_only"] is True
+    assert guilds["99"]["name"] == "Чужой"
+    assert guilds["99"]["icon"] == "https://cdn.discordapp.com/icons/99/i99.png?size=64"
+    assert guilds["99"]["perms"] == {
+        "can_ban": False,
+        "can_kick": False,
+        "can_moderate": False,
+        "can_manage_roles": False,
+    }
+
+
+async def test_me_non_operator_never_sees_operator_only_guilds(mock_discord):
+    # Обычному пользователю чужие серверы бота не показываем даже при том же кэше.
+    from src.api.bot_guilds import BotGuildMeta
+
+    container = build_api_container(make_settings())  # web_operator_ids пуст
+    container.bot_guilds.prime(
+        {10: BotGuildMeta(name="Manage", icon="i10"), 99: BotGuildMeta(name="Чужой", icon="i99")}
+    )
+    app = create_app(container)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.get("/api/auth/login", follow_redirects=False)
+        state = client.cookies["poposya_oauth_state"]
+        await client.get(f"/api/auth/callback?code=abc&state={state}", follow_redirects=False)
+        data = (await client.get("/api/auth/me")).json()
+
+    assert data["is_operator"] is False
+    # только управляемый сервер с ботом (10); 99 не утекает
+    assert {g["id"] for g in data["guilds"]} == {"10"}
+
+
 async def test_me_hides_guilds_without_bot(mock_discord):
     # бот только на сервере 10 -> сервер 20 (owner) в /me не попадёт
     container = build_api_container(make_settings())

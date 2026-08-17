@@ -174,22 +174,48 @@ async def me(
     # показываем только серверы, где реально есть бот (иначе настраивать нечего).
     # Если Discord недоступен — не блокируем вход, отдаём все управляемые.
     try:
-        bot_ids: set[int] | None = await container.bot_guilds.get()
+        bot_meta = await container.bot_guilds.get_meta()
     except discord_oauth.OAuthError:
-        bot_ids = None
-    guilds = [g for g in session.guilds if bot_ids is None or g.id in bot_ids]
+        bot_meta = None
+    bot_ids = set(bot_meta) if bot_meta is not None else None
+    managed = [g for g in session.guilds if bot_ids is None or g.id in bot_ids]
+    dtos = [
+        GuildDTO(
+            id=str(g.id),
+            name=g.name,
+            icon=guild_icon_url(g.id, g.icon),
+            perms=_guild_perms(session, g),
+        )
+        for g in managed
+    ]
+
+    is_operator = session.user_id in container.settings.web_operator_ids
+    # Оператору бота добавляем ВСЕ серверы бота, которыми он не управляет, —
+    # урезанным доступом (operator_only): панель покажет для них лишь вкладку
+    # «Подписка». Имя/иконку берём из кэша серверов бота: своего OAuth-доступа к
+    # ним у оператора нет. Границу всё равно стережёт require_operator на роутах.
+    if is_operator and bot_meta is not None:
+        managed_ids = {g.id for g in managed}
+        no_perms = GuildPermsDTO(
+            can_ban=False, can_kick=False, can_moderate=False, can_manage_roles=False
+        )
+        for gid, m in sorted(bot_meta.items(), key=lambda kv: kv[1].name.lower()):
+            if gid in managed_ids:
+                continue
+            dtos.append(
+                GuildDTO(
+                    id=str(gid),
+                    name=m.name or str(gid),
+                    icon=guild_icon_url(gid, m.icon),
+                    perms=no_perms,
+                    operator_only=True,
+                )
+            )
+
     return MeDTO(
         user_id=str(session.user_id),
         username=session.username,
         avatar=avatar_url(session.user_id, session.avatar),
-        guilds=[
-            GuildDTO(
-                id=str(g.id),
-                name=g.name,
-                icon=guild_icon_url(g.id, g.icon),
-                perms=_guild_perms(session, g),
-            )
-            for g in guilds
-        ],
-        is_operator=session.user_id in container.settings.web_operator_ids,
+        guilds=dtos,
+        is_operator=is_operator,
     )

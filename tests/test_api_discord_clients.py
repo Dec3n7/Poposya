@@ -11,7 +11,7 @@ from src.api import discord_guild as guild_module
 from src.api import discord_members as members_module
 from src.api import discord_oauth as oauth_module
 from src.api import discord_users as users_module
-from src.api.bot_guilds import BotGuildsCache, _fetch_bot_guild_ids
+from src.api.bot_guilds import BotGuildMeta, BotGuildsCache, _fetch_bot_guilds
 from src.api.discord_guild import fetch_guild_channels
 from src.api.discord_members import fetch_guild_members
 from src.api.discord_oauth import (
@@ -365,29 +365,30 @@ async def test_fetch_users_all_cached_skips_session(monkeypatch):
 # ===========================================================================
 
 
-async def test_fetch_bot_guild_ids_paginates(monkeypatch):
+async def test_fetch_bot_guilds_paginates(monkeypatch):
     page1 = [{"id": str(i)} for i in range(200)]  # ровно лимит -> будет вторая страница
-    page2 = [{"id": "900"}]  # < 200 -> последняя
+    page2 = [{"id": "900", "name": "Финал", "icon": "ic"}]  # < 200 -> последняя
     session = _FakeSession(queue=[_Resp(200, page1), _Resp(200, page2)])
     _patch(monkeypatch, bot_guilds_module, session)
-    ids = await _fetch_bot_guild_ids("bot-token")
-    assert 900 in ids and 0 in ids and 199 in ids
-    assert len(ids) == 201
+    meta = await _fetch_bot_guilds("bot-token")
+    assert 900 in meta and 0 in meta and 199 in meta
+    assert len(meta) == 201
+    assert meta[900] == BotGuildMeta(name="Финал", icon="ic")  # имя/иконка сохранены
     # курсор after второй страницы = id последнего элемента первой
     assert session.requests[1][2]["after"] == "199"
 
 
-async def test_fetch_bot_guild_ids_http_error_raises(monkeypatch):
+async def test_fetch_bot_guilds_http_error_raises(monkeypatch):
     session = _FakeSession(queue=[_Resp(401, None)])
     _patch(monkeypatch, bot_guilds_module, session)
     with pytest.raises(OAuthError, match="bot guilds fetch failed"):
-        await _fetch_bot_guild_ids("bot-token")
+        await _fetch_bot_guilds("bot-token")
 
 
-async def test_fetch_bot_guild_ids_empty(monkeypatch):
+async def test_fetch_bot_guilds_empty(monkeypatch):
     session = _FakeSession(queue=[_Resp(200, [])])
     _patch(monkeypatch, bot_guilds_module, session)
-    assert await _fetch_bot_guild_ids("bot-token") == set()
+    assert await _fetch_bot_guilds("bot-token") == {}
 
 
 async def test_cache_prime_serves_without_network():
@@ -430,9 +431,9 @@ async def test_cache_concurrent_get_fetches_once(monkeypatch):
         nonlocal calls
         calls += 1
         await asyncio.sleep(0)  # уступаем — даём второму дойти до лока
-        return {5}
+        return {5: BotGuildMeta(name="", icon=None)}
 
-    monkeypatch.setattr(bot_guilds_module, "_fetch_bot_guild_ids", fake_fetch)
+    monkeypatch.setattr(bot_guilds_module, "_fetch_bot_guilds", fake_fetch)
     cache = BotGuildsCache("bot-token", ttl_seconds=300)
     a, b = await asyncio.gather(cache.get(), cache.get())
     assert a == b == {5}

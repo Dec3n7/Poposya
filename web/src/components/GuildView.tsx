@@ -189,9 +189,15 @@ export function GuildView({
   onLogout: () => void;
 }) {
   // персона-вкладка видна только оператору бота (доступ к роутам всё равно
-  // стережёт require_operator на бэке; здесь — только видимость)
-  const tabs = me.is_operator ? [...TABS, ...OPERATOR_TABS] : TABS;
-  const tab: Tab = tabs.find((t) => t.id === tabProp)?.id ?? "overview";
+  // стережёт require_operator на бэке; здесь — только видимость).
+  // operator_only-сервер (оператор им не управляет) — лишь одна вкладка
+  // «Подписка»: остальные роуты для него всё равно 403 (require_guild_manager).
+  const tabs = guild.operator_only
+    ? OPERATOR_TABS.filter((t) => t.id === "subscription")
+    : me.is_operator
+      ? [...TABS, ...OPERATOR_TABS]
+      : TABS;
+  const tab: Tab = tabs.find((t) => t.id === tabProp)?.id ?? tabs[0].id;
   const active = tabs.find((t) => t.id === tab)!;
 
   const [summary, setSummary] = useState<GuildSummary | null>(null);

@@ -12,6 +12,9 @@ export interface Guild {
   name: string;
   icon: string | null;
   perms: GuildPerms;
+  // сервер виден оператору бота только для выдачи подписки (он им не управляет):
+  // панель показывает урезанный вид — одна вкладка «Подписка».
+  operator_only?: boolean;
 }
 
 export interface Me {
