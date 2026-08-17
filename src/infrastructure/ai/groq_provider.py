@@ -9,6 +9,15 @@ logger = logging.getLogger(__name__)
 
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Groq стоит за Cloudflare, который банит дефолтный UA aiohttp (Python/aiohttp)
+# с ошибкой 1010 («banned browser signature») → все запросы 403 независимо от
+# ключа. Браузерный User-Agent проходит. Проверено: с ним /models и completions
+# отвечают 200, без него — 403 cf-ray ... error code 1010.
+_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+)
+
 
 class GroqAIProvider(IAIProvider):
     """Groq — OpenAI-совместимый API; отдельный SDK не нужен, хватает aiohttp
@@ -44,7 +53,7 @@ class GroqAIProvider(IAIProvider):
             "temperature": self._temperature,
             "max_tokens": self._max_tokens,
         }
-        headers = {"Authorization": f"Bearer {self._api_key}"}
+        headers = {"Authorization": f"Bearer {self._api_key}", "User-Agent": _USER_AGENT}
         try:
             async with self._get_session().post(_GROQ_URL, json=payload, headers=headers) as resp:
                 if resp.status != 200:

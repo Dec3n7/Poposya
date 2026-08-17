@@ -34,6 +34,9 @@ async def test_groq_success(monkeypatch):
     assert capture["json"]["model"] == "llama"
     assert capture["json"]["messages"][0] == {"role": "system", "content": "system"}
     assert capture["headers"]["Authorization"] == "Bearer secret"
+    # браузерный User-Agent обязателен: Groq за Cloudflare банит дефолтный
+    # aiohttp-UA ошибкой 1010 → без него все запросы 403 независимо от ключа
+    assert "Mozilla" in capture["headers"]["User-Agent"]
 
 
 async def test_groq_429_is_retryable_with_retry_after(monkeypatch):
