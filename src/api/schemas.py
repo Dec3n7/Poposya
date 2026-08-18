@@ -202,3 +202,33 @@ class GuildPersonaDTO(BaseModel):
 
 class GuildPersonaAssign(BaseModel):
     persona_id: int
+
+
+# --- кастомная персона сервера под модерацией (0044) ---
+
+
+class PersonaDraftStateDTO(BaseModel):
+    """Состояние заявки сервера для админа: есть ли черновик и его статус, причина
+    отказа, есть ли активная подписка (без неё создать/отправить нельзя)."""
+
+    guild_id: str
+    has_premium: bool
+    draft_id: int | None = None  # id персоны-черновика (для редактора), если есть
+    status: str | None = None  # draft | pending | rejected | None
+    review_note: str = ""  # причина отказа (при status=rejected)
+    live_custom_id: int | None = None  # одобренная кастомная персона, сейчас в эфире
+
+
+class PersonaSubmissionDTO(BaseModel):
+    """Элемент очереди модерации у оператора."""
+
+    persona_id: int
+    guild_id: str
+    name: str
+    submitted_by: str
+    status: str
+    updated_at: str | None = None
+
+
+class SubmissionReject(BaseModel):
+    note: str = ""

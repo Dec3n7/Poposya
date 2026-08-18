@@ -50,6 +50,25 @@ export interface GuildPersona {
   persona_id: number; // что реально применяется (назначенная или дефолт)
 }
 
+// кастомная персона сервера под модерацией (0044)
+export interface PersonaDraftState {
+  guild_id: string;
+  has_premium: boolean;
+  draft_id: number | null; // id персоны-черновика для редактора, если есть
+  status: "draft" | "pending" | "rejected" | null;
+  review_note: string; // причина отказа (при status=rejected)
+  live_custom_id: number | null; // одобренная кастомная персона, сейчас в эфире
+}
+
+export interface PersonaSubmission {
+  persona_id: number;
+  guild_id: string;
+  name: string;
+  submitted_by: string;
+  status: string;
+  updated_at: string | null;
+}
+
 export interface PersonaImportIssue {
   key: string | null; // ключ фразы/атрибута; null если строка вообще не объект
   reason: string;

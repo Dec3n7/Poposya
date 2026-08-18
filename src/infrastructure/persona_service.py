@@ -535,6 +535,137 @@ class PersonaService(PhraseResolver):
             await session.commit()
         await self.reload()
 
+    # --- модерация кастомных персон серверов (0044) ---
+    #
+    # Заявка сервера — обычная персона со status draft/pending/rejected и
+    # owner_guild_id. Ключевая гарантия: такая персона НЕ назначена серверу, а бот
+    # резолвит промпт только у назначенной (_persona_for) → черновик невидим для
+    # живого бота. Правку живой (назначенной) персоны админ не делает: ему выдаётся
+    # черновик-дубль, а назначение переключает только approve оператора.
+
+    _SUBMISSION_STATUSES = ("draft", "pending", "rejected")
+
+    def library_personas(self) -> list[Persona]:
+        """Персоны библиотеки оператора: одобренные и без владельца-гильдии.
+        Заявки серверов сюда не попадают — им место в очереди модерации."""
+        return [
+            p
+            for p in self._personas.values()
+            if p.status == "approved" and p.owner_guild_id is None
+        ]
+
+    def pending_submissions(self) -> list[Persona]:
+        """Заявки серверов на проверке — очередь модерации оператора."""
+        return [p for p in self._personas.values() if p.status == "pending"]
+
+    def guild_submission(self, guild_id: int) -> Persona | None:
+        """Заявка сервера в работе (draft/pending/rejected), если есть."""
+        return next(
+            (
+                p
+                for p in self._personas.values()
+                if p.owner_guild_id == guild_id and p.status in self._SUBMISSION_STATUSES
+            ),
+            None,
+        )
+
+    def guild_live_custom(self, guild_id: int) -> Persona | None:
+        """Одобренная кастомная персона, СЕЙЧАС назначенная серверу (если есть)."""
+        pid = self._assignments.get(guild_id)
+        if pid is None:
+            return None
+        persona = self._personas.get(pid)
+        if persona and persona.status == "approved" and persona.owner_guild_id == guild_id:
+            return persona
+        return None
+
+    async def create_guild_draft(self, guild_id: int, submitted_by: int) -> Persona:
+        """Черновик кастомной персоны сервера. Если заявка уже в работе — вернуть
+        её. Иначе создать дубль СЕЙЧАС живущей на сервере персоны (стартовая точка
+        правок: промпты, личность и все override-фразы) со status=draft и владельцем-
+        гильдией. Серверу НЕ назначаем — до одобрения бот её не видит."""
+        existing = self.guild_submission(guild_id)
+        if existing is not None:
+            return existing
+        source = self._persona_for(guild_id)  # что сейчас применяется на сервере
+        async with self._session_factory() as session:
+            repo = SqlAlchemyPersonaRepository(session)
+            created = await repo.create(
+                Persona(
+                    id=0,
+                    name=(f"{source.name} (заявка)" if source else "Персона сервера"),
+                    is_default=False,
+                    prompt=source.prompt if source else "",
+                    chime_prompt=source.chime_prompt if source else "",
+                    attributes=dict(source.attributes) if source else {},
+                    status="draft",
+                    owner_guild_id=guild_id,
+                    submitted_by=submitted_by,
+                )
+            )
+            if source is not None:
+                for phrase in self._phrases.get(source.id, {}).values():
+                    await repo.set_phrase(
+                        PersonaPhrase(created.id, phrase.key, phrase.value, phrase.mode)
+                    )
+            await self._notify(session)
+            await session.commit()
+        await self.reload()
+        return created
+
+    async def submit_for_review(self, persona_id: int) -> None:
+        persona = self._require_submission(persona_id)
+        if persona.status not in ("draft", "rejected"):
+            raise ValueError("отправить на проверку можно только черновик")
+        await self._update_meta(persona_id, status="pending", review_note="")
+
+    async def approve_submission(self, persona_id: int) -> Persona:
+        """Одобрить заявку: назначить её серверу (включить) и удалить прежнюю
+        одобренную кастомную персону этого сервера, если была. Прежнюю живую
+        персону админ не трогал — она работала до этого момента."""
+        persona = self._require_submission(persona_id)
+        if persona.status != "pending":
+            raise ValueError("одобрить можно только заявку на проверке")
+        guild_id = persona.owner_guild_id
+        assert guild_id is not None
+        superseded = [
+            p
+            for p in self._personas.values()
+            if p.owner_guild_id == guild_id and p.status == "approved" and p.id != persona_id
+        ]
+        async with self._session_factory() as session:
+            repo = SqlAlchemyPersonaRepository(session)
+            await repo.update(persona_id, {"status": "approved", "review_note": ""})
+            await repo.assign(guild_id, persona_id)  # включаем на сервере
+            for old in superseded:
+                await repo.delete(old.id)
+            await self._notify(session)
+            await session.commit()
+        await self.reload()
+        return self._personas[persona_id]
+
+    async def reject_submission(self, persona_id: int, note: str) -> None:
+        persona = self._require_submission(persona_id)
+        if persona.status != "pending":
+            raise ValueError("отклонить можно только заявку на проверке")
+        await self._update_meta(persona_id, status="rejected", review_note=note)
+
+    def _require_submission(self, persona_id: int) -> Persona:
+        persona = self._personas.get(persona_id)
+        if persona is None or persona.owner_guild_id is None:
+            raise ValueError("это не заявка сервера")
+        return persona
+
+    async def _update_meta(self, persona_id: int, **fields: object) -> None:
+        """Записать модерационные поля (status/owner/submitted_by/review_note) в
+        обход allowed-set update_persona (тот только для контента)."""
+        async with self._session_factory() as session:
+            repo = SqlAlchemyPersonaRepository(session)
+            await repo.update(persona_id, fields)
+            await self._notify(session)
+            await session.commit()
+        await self.reload()
+
     # --- перенос библиотеки (замена «версий» и бэкапа) ---
 
     def export_persona(self, persona_id: int) -> dict:

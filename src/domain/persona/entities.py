@@ -16,6 +16,13 @@ class Persona:
     prompt: str = ""
     chime_prompt: str = ""
     attributes: dict[str, object] = field(default_factory=dict)
+    # модерация кастомных персон серверов (0044). approved = библиотека оператора /
+    # дефолт / одобренная кастомная (может быть назначена). draft/pending/rejected =
+    # заявка сервера в работе (owner_guild_id задан, серверу НЕ назначается).
+    status: str = "approved"
+    owner_guild_id: int | None = None
+    submitted_by: int | None = None
+    review_note: str = ""
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

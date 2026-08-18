@@ -28,6 +28,10 @@ def _to_persona(row: PersonaModel) -> Persona:
         prompt=row.prompt,
         chime_prompt=row.chime_prompt,
         attributes=json.loads(row.attributes) if row.attributes else {},
+        status=row.status,
+        owner_guild_id=row.owner_guild_id,
+        submitted_by=row.submitted_by,
+        review_note=row.review_note,
         created_at=row.created_at.replace(tzinfo=UTC) if row.created_at else None,
         updated_at=row.updated_at.replace(tzinfo=UTC) if row.updated_at else None,
     )
@@ -77,6 +81,10 @@ class SqlAlchemyPersonaRepository(IPersonaRepository):
             prompt=persona.prompt,
             chime_prompt=persona.chime_prompt,
             attributes=json.dumps(persona.attributes, ensure_ascii=False),
+            status=persona.status,
+            owner_guild_id=persona.owner_guild_id,
+            submitted_by=persona.submitted_by,
+            review_note=persona.review_note,
             created_at=now,
             updated_at=now,
         )
@@ -96,6 +104,16 @@ class SqlAlchemyPersonaRepository(IPersonaRepository):
             row.chime_prompt = str(fields["chime_prompt"])
         if "attributes" in fields:
             row.attributes = json.dumps(fields["attributes"], ensure_ascii=False)
+        if "status" in fields:
+            row.status = str(fields["status"])
+        if "owner_guild_id" in fields:
+            val = fields["owner_guild_id"]
+            row.owner_guild_id = val if isinstance(val, int) else None
+        if "submitted_by" in fields:
+            val = fields["submitted_by"]
+            row.submitted_by = val if isinstance(val, int) else None
+        if "review_note" in fields:
+            row.review_note = str(fields["review_note"])
         row.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     async def delete(self, persona_id: int) -> None:

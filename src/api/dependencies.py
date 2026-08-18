@@ -22,6 +22,7 @@ from src.api.security import (
     decode_session,
     encode_session,
 )
+from src.application.interfaces.entitlements import PlanTier
 
 # методы без побочных эффектов не гейтим свежестью прав (чтения всегда проходят)
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
@@ -131,6 +132,44 @@ def require_operator(
     container = get_container(request)
     if session.user_id not in container.settings.web_operator_ids:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "только оператор бота")
+    return session
+
+
+def assert_guild_premium(container: ApiContainer, guild_id: int) -> None:
+    """Функция только для серверов с активной подпиской: эффективный тариф ≥
+    Premium. При выключенном enforcement (default=pro) проходят все — консистентно
+    с «все получают максимум»; при default=free — только сервер с активной
+    Premium/Pro-подпиской."""
+    tier, _expires, _active = container.entitlements.current(guild_id)
+    if tier < PlanTier.PREMIUM:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED, "нужна активная подписка сервера (Premium)"
+        )
+
+
+async def require_persona_editor(
+    persona_id: int,
+    request: Request,
+    session: Session = Depends(current_session),
+) -> Session:
+    """Право править персону в панели. Оператор — любую. Менеджер сервера — только
+    СВОЮ заявку: персона с owner_guild_id этого сервера и статусом НЕ approved (то
+    есть не назначенную серверу → бот её не видит) и только при активной подписке.
+    Так админ редактирует свой черновик, но не живую персону и не чужую."""
+    container = get_container(request)
+    if session.user_id in container.settings.web_operator_ids:
+        return session
+    persona = container.persona.get(persona_id)
+    if persona is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "персона не найдена")
+    owner = persona.owner_guild_id
+    if owner is None or persona.status == "approved":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "только оператор бота")
+    if not session.can_manage(owner):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "нет прав на этот сервер")
+    assert_perms_fresh(request, container, session)
+    await _assert_bot_present(request, owner)
+    assert_guild_premium(container, owner)
     return session
 
 

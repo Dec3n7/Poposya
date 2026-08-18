@@ -28,9 +28,11 @@ import type {
   Overview,
   PermCatalog,
   PersonaDetail,
+  PersonaDraftState,
   PersonaIdentity,
   PersonaImportResult,
   PersonaPhrase,
+  PersonaSubmission,
   PersonaSummary,
   PhraseChange,
   PersonDetail,
@@ -444,6 +446,23 @@ export const api = {
     req<GuildPersona>(`/api/guilds/${guildId}/persona`, {
       method: "PUT",
       body: JSON.stringify({ persona_id: personaId }),
+    }),
+  // кастомная персона сервера под модерацией (админ сервера, premium)
+  personaDraft: (guildId: string): Promise<PersonaDraftState> =>
+    req<PersonaDraftState>(`/api/guilds/${guildId}/persona/draft`),
+  createPersonaDraft: (guildId: string): Promise<PersonaDraftState> =>
+    req<PersonaDraftState>(`/api/guilds/${guildId}/persona/draft`, { method: "POST" }),
+  submitPersonaDraft: (guildId: string): Promise<PersonaDraftState> =>
+    req<PersonaDraftState>(`/api/guilds/${guildId}/persona/draft/submit`, { method: "POST" }),
+  // очередь модерации (только оператор)
+  personaSubmissions: (): Promise<PersonaSubmission[]> =>
+    req<PersonaSubmission[]>("/api/persona-submissions"),
+  approvePersonaSubmission: (personaId: number): Promise<GuildPersona> =>
+    req<GuildPersona>(`/api/persona-submissions/${personaId}/approve`, { method: "POST" }),
+  rejectPersonaSubmission: (personaId: number, note: string): Promise<void> =>
+    req<void>(`/api/persona-submissions/${personaId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
     }),
   // тарифы серверов (только оператор): просмотр/выдача/снятие подписки
   entitlement: (guildId: string): Promise<Subscription> =>

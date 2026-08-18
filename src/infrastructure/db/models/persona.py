@@ -19,6 +19,14 @@ class PersonaModel(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     chime_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     attributes: Mapped[str] = mapped_column(Text, nullable=False, default="{}")  # JSON
+    # модерация кастомных персон серверов (миграция 0044). Персона оператора/дефолт
+    # = approved, owner_guild_id NULL. Заявка сервера: status draft/pending/rejected
+    # + owner_guild_id; НЕ назначается серверу, пока не approved (бот читает только
+    # назначенные — черновик невидим для живого бота).
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="approved")
+    owner_guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    submitted_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(nullable=False)
     updated_at: Mapped[datetime] = mapped_column(nullable=False)
 

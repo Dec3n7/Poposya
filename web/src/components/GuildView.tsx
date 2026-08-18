@@ -15,6 +15,7 @@ import { Modules } from "./Modules";
 import { Music } from "./Music";
 import { People } from "./People";
 import { Persona } from "./Persona";
+import { PersonaCustom } from "./PersonaCustom";
 import { Subscription } from "./Subscription";
 import { Roles } from "./Roles";
 import { Warden } from "./Warden";
@@ -192,11 +193,14 @@ export function GuildView({
   // стережёт require_operator на бэке; здесь — только видимость).
   // operator_only-сервер (оператор им не управляет) — лишь одна вкладка
   // «Подписка»: остальные роуты для него всё равно 403 (require_guild_manager).
+  // обычный админ сервера (не оператор) тоже получает вкладку «Персона» — но это
+  // кастомная персона его сервера под модерацией (PersonaCustom), а не библиотека.
+  const personaTab = OPERATOR_TABS.filter((t) => t.id === "persona");
   const tabs = guild.operator_only
     ? OPERATOR_TABS.filter((t) => t.id === "subscription")
     : me.is_operator
       ? [...TABS, ...OPERATOR_TABS]
-      : TABS;
+      : [...TABS, ...personaTab];
   const tab: Tab = tabs.find((t) => t.id === tabProp)?.id ?? tabs[0].id;
   const active = tabs.find((t) => t.id === tab)!;
 
@@ -401,7 +405,8 @@ export function GuildView({
             {tab === "modules" && <Modules guild={guild} />}
             {tab === "settings" && <GuildSettings guild={guild} />}
             {tab === "subscription" && <Subscription guild={guild} />}
-            {tab === "persona" && <Persona guild={guild} />}
+            {tab === "persona" &&
+              (me.is_operator ? <Persona guild={guild} /> : <PersonaCustom guild={guild} />)}
             {tab === "warden" && <Warden />}
           </ErrorBoundary>
         </div>

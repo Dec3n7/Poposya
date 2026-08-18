@@ -12,6 +12,7 @@ import type {
 import { Collapsible } from "./Collapsible";
 import { Dropdown } from "./Dropdown";
 import { PersonaPhrases } from "./PersonaPhrases";
+import { PersonaQueue } from "./PersonaQueue";
 import { RulesPublish } from "./RulesPublish";
 import { SkeletonRows } from "./Skeleton";
 
@@ -245,6 +246,12 @@ export function Persona({ guild }: { guild: Guild }) {
 
       {error && <div className="error-banner">{error}</div>}
       {note && <div className="ok-banner">{note}</div>}
+
+      {/* очередь модерации кастомных персон серверов (0044) */}
+      <PersonaQueue
+        onOpen={(id) => setSelectedId(id)}
+        onChanged={() => loadList().catch(() => undefined)}
+      />
 
       {importReport && (
         <div className="card persona-import-report">

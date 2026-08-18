@@ -8,25 +8,36 @@ require_operator: серверные админы сюда не ходят. Ау
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from src.api.audit import record_audit
-from src.api.dependencies import get_container, require_operator
+from src.api.dependencies import (
+    assert_guild_premium,
+    current_session,
+    get_container,
+    require_guild_manager,
+    require_operator,
+    require_persona_editor,
+)
 from src.api.schemas import (
     GuildPersonaAssign,
     GuildPersonaDTO,
     PersonaCreate,
     PersonaDetailDTO,
+    PersonaDraftStateDTO,
     PersonaIdentityDTO,
     PersonaIdentityUpdate,
     PersonaImportReportDTO,
     PersonaImportResultDTO,
     PersonaPhraseDTO,
     PersonaRename,
+    PersonaSubmissionDTO,
     PersonaSummaryDTO,
     PhraseChangeDTO,
     PhraseReplace,
     PhraseUpdate,
     PromptUpdate,
+    SubmissionReject,
 )
 from src.api.security import Session
+from src.application.interfaces.entitlements import PlanTier
 from src.application.persona.registry import DEFAULT_ATTRIBUTES, PHRASE_SPECS
 from src.domain.persona.entities import Persona
 from src.infrastructure.persona_service import PersonaService
@@ -72,7 +83,9 @@ async def list_personas(
     _op: Session = Depends(require_operator), container=Depends(get_container)
 ) -> list[PersonaSummaryDTO]:
     service: PersonaService = container.persona
-    return [_summary(service, p) for p in service.all_personas()]
+    # только библиотека оператора: заявки серверов (owner_guild_id) сюда не
+    # попадают — они в очереди модерации /persona-submissions
+    return [_summary(service, p) for p in service.library_personas()]
 
 
 @router.post("/personas", response_model=PersonaDetailDTO, status_code=status.HTTP_201_CREATED)
@@ -167,7 +180,7 @@ async def import_persona(
 @router.get("/personas/{persona_id}", response_model=PersonaDetailDTO)
 async def get_persona(
     persona_id: int,
-    _op: Session = Depends(require_operator),
+    _ed: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaDetailDTO:
     service: PersonaService = container.persona
@@ -178,7 +191,7 @@ async def get_persona(
 async def rename_persona(
     persona_id: int,
     body: PersonaRename,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaDetailDTO:
     service: PersonaService = container.persona
@@ -198,7 +211,7 @@ async def rename_persona(
 @router.delete("/personas/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_persona(
     persona_id: int,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> Response:
     service: PersonaService = container.persona
@@ -215,7 +228,7 @@ async def delete_persona(
 async def set_prompt(
     persona_id: int,
     body: PromptUpdate,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaDetailDTO:
     service: PersonaService = container.persona
@@ -236,7 +249,7 @@ async def set_prompt(
 async def set_chime_prompt(
     persona_id: int,
     body: PromptUpdate,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaDetailDTO:
     service: PersonaService = container.persona
@@ -274,7 +287,7 @@ def _identity_dto(service: PersonaService, persona_id: int) -> PersonaIdentityDT
 @router.get("/personas/{persona_id}/identity", response_model=PersonaIdentityDTO)
 async def get_identity(
     persona_id: int,
-    _op: Session = Depends(require_operator),
+    _ed: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaIdentityDTO:
     service: PersonaService = container.persona
@@ -286,7 +299,7 @@ async def get_identity(
 async def set_identity(
     persona_id: int,
     body: PersonaIdentityUpdate,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaIdentityDTO:
     service: PersonaService = container.persona
@@ -326,7 +339,7 @@ def _phrase_dto(service: PersonaService, persona_id: int, key: str) -> PersonaPh
 @router.get("/personas/{persona_id}/phrases", response_model=list[PersonaPhraseDTO])
 async def list_phrases(
     persona_id: int,
-    _op: Session = Depends(require_operator),
+    _ed: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> list[PersonaPhraseDTO]:
     """Весь каталог фраз персоны в порядке реестра (фронт группирует по
@@ -340,7 +353,7 @@ async def list_phrases(
 async def replace_phrases(
     persona_id: int,
     body: PhraseReplace,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> list[PhraseChangeDTO]:
     service: PersonaService = container.persona
@@ -370,7 +383,7 @@ async def set_phrase(
     persona_id: int,
     key: str,
     body: PhraseUpdate,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaPhraseDTO:
     service: PersonaService = container.persona
@@ -396,7 +409,7 @@ async def set_phrase(
 async def reset_phrase(
     persona_id: int,
     key: str,
-    op: Session = Depends(require_operator),
+    op: Session = Depends(require_persona_editor),
     container=Depends(get_container),
 ) -> PersonaPhraseDTO:
     service: PersonaService = container.persona
@@ -452,3 +465,144 @@ async def assign_guild_persona(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
     await record_audit(container, guild_id, op.user_id, "persona.assign", target=body.persona_id)
     return GuildPersonaDTO(guild_id=str(guild_id), persona_id=body.persona_id)
+
+
+# =========================================================================
+# Кастомная персона сервера под модерацией (0044). Заявка админа — обычная
+# персона со status draft/pending/rejected и owner_guild_id; серверу НЕ назначена,
+# пока оператор не одобрит. Правку черновика ведёт обычный редактор персон под
+# require_persona_editor. Здесь — жизненный цикл заявки: создать/статус/submit
+# (сервер, premium) и очередь approve/reject (оператор).
+# =========================================================================
+
+
+def _draft_state(service: PersonaService, guild_id: int, has_premium: bool) -> PersonaDraftStateDTO:
+    sub = service.guild_submission(guild_id)
+    live = service.guild_live_custom(guild_id)
+    return PersonaDraftStateDTO(
+        guild_id=str(guild_id),
+        has_premium=has_premium,
+        draft_id=sub.id if sub else None,
+        status=sub.status if sub else None,
+        review_note=sub.review_note if sub else "",
+        live_custom_id=live.id if live else None,
+    )
+
+
+@router.get("/guilds/{guild_id}/persona/draft", response_model=PersonaDraftStateDTO)
+async def get_persona_draft(
+    guild_id: int = Depends(require_guild_manager),
+    container=Depends(get_container),
+) -> PersonaDraftStateDTO:
+    """Состояние кастомной персоны сервера для админа: есть ли заявка, её статус и
+    причина отказа, есть ли активная подписка (без неё подать нельзя)."""
+    service: PersonaService = container.persona
+    tier, _e, _a = container.entitlements.current(guild_id)
+    return _draft_state(service, guild_id, has_premium=tier >= PlanTier.PREMIUM)
+
+
+@router.post(
+    "/guilds/{guild_id}/persona/draft",
+    response_model=PersonaDraftStateDTO,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_persona_draft(
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container=Depends(get_container),
+) -> PersonaDraftStateDTO:
+    """Создать черновик кастомной персоны сервера (premium-only). Дубль текущей
+    живой персоны как старт; дальше правится обычным редактором персон."""
+    assert_guild_premium(container, guild_id)
+    service: PersonaService = container.persona
+    draft = await service.create_guild_draft(guild_id, session.user_id)
+    await record_audit(
+        container, guild_id, session.user_id, "persona.draft_create", target=draft.id
+    )
+    return _draft_state(service, guild_id, has_premium=True)
+
+
+@router.post("/guilds/{guild_id}/persona/draft/submit", response_model=PersonaDraftStateDTO)
+async def submit_persona_draft(
+    guild_id: int = Depends(require_guild_manager),
+    session: Session = Depends(current_session),
+    container=Depends(get_container),
+) -> PersonaDraftStateDTO:
+    """Отправить черновик сервера на модерацию оператору."""
+    assert_guild_premium(container, guild_id)
+    service: PersonaService = container.persona
+    sub = service.guild_submission(guild_id)
+    if sub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "черновик не найден")
+    try:
+        await service.submit_for_review(sub.id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    await record_audit(container, guild_id, session.user_id, "persona.draft_submit", target=sub.id)
+    return _draft_state(service, guild_id, has_premium=True)
+
+
+# --- очередь модерации (оператор) ---
+
+
+def _submission_dto(persona: Persona) -> PersonaSubmissionDTO:
+    return PersonaSubmissionDTO(
+        persona_id=persona.id,
+        guild_id=str(persona.owner_guild_id or 0),
+        name=persona.name,
+        submitted_by=str(persona.submitted_by or 0),
+        status=persona.status,
+        updated_at=persona.updated_at.isoformat() if persona.updated_at else None,
+    )
+
+
+@router.get("/persona-submissions", response_model=list[PersonaSubmissionDTO])
+async def list_persona_submissions(
+    _op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> list[PersonaSubmissionDTO]:
+    """Очередь модерации: заявки серверов на проверке."""
+    service: PersonaService = container.persona
+    return [_submission_dto(p) for p in service.pending_submissions()]
+
+
+@router.post("/persona-submissions/{persona_id}/approve", response_model=GuildPersonaDTO)
+async def approve_persona_submission(
+    persona_id: int,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> GuildPersonaDTO:
+    """Одобрить заявку: персона назначается серверу (включается)."""
+    service: PersonaService = container.persona
+    try:
+        approved = await service.approve_submission(persona_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    guild_id = approved.owner_guild_id or _GLOBAL
+    await record_audit(container, guild_id, op.user_id, "persona.approve", target=persona_id)
+    return GuildPersonaDTO(guild_id=str(guild_id), persona_id=persona_id)
+
+
+@router.post("/persona-submissions/{persona_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+async def reject_persona_submission(
+    persona_id: int,
+    body: SubmissionReject,
+    op: Session = Depends(require_operator),
+    container=Depends(get_container),
+) -> Response:
+    """Отклонить заявку с причиной — она вернётся админу как «отклонено»."""
+    service: PersonaService = container.persona
+    persona = _require(service, persona_id)
+    try:
+        await service.reject_submission(persona_id, body.note)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    await record_audit(
+        container,
+        persona.owner_guild_id or _GLOBAL,
+        op.user_id,
+        "persona.reject",
+        target=persona_id,
+        details={"note": body.note},
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
