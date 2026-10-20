@@ -38,3 +38,9 @@ Discord ─┐                        ┌─ React Web Panel
 - **Риски / что осталось открытым:** безопасность сессий и ревалидация Discord-
   прав (не доверять 24-часовому снимку прав), CSRF-токен для публичной панели —
   см. Technical_Audit_v2 §44–45.
+
+  _Обновление (2026-10-21):_ оба пункта закрыты кодом — CSRF-guard
+  (`src/api/app.py`, middleware `csrf_origin_guard`: Origin/Referer +
+  double-submit `X-CSRF-Token`) и ревалидация Discord-прав
+  (`src/api/dependencies.py`, `assert_perms_fresh()` по TTL `web_perm_ttl_minutes`,
+  без омоложения снимка при продлении сессии; server-side revoke по epoch).

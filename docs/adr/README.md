@@ -78,3 +78,10 @@
 | [012](ADR-012-web-panel-reuses-domain.md) | Веб-панель — второй клиент того же домена через API | Accepted |
 | [013](ADR-013-warden-docker-socket-allowlist.md) | Доступ WARDEN к Docker — через фильтрующий socket-proxy | Accepted |
 | [014](ADR-014-entitlement-grant-and-billing.md) | Ручная/ключевая выдача тарифа; платёжка — идемпотентным webhook позже | Accepted |
+| [015](ADR-015-news-sources-valorant.md) | Новости игр Riot (Valorant/LoL/TFT/Wild Rift/2XKO) — независимая вертикаль `/riot` через `__NEXT_DATA__`; steam не трогаем | Accepted |
+| [016](ADR-016-unified-news-poller.md) | Все новостные трекеры — через единый `NewsPoller`; локальные циклы в когах удаляются | Accepted |
+| [017](ADR-017-broad-exception-policy.md) | Broad exception — только на operational-границе с recovery и логированием | Accepted |
+| [018](ADR-018-health-schema-versioning.md) | Health-схема бот↔WARDEN версионируется (`health_schema_version`) и закреплена contract-тестами | Accepted |
+| [019](ADR-019-hidden-achievements-and-hooks.md) | Скрытые ачивки — класс с полем `hidden`; вторая волна — аддитивные события шины | Accepted |
+| [020](ADR-020-dm-home-guild.md) | DM-фичи отношений — через явно выбранную «домашнюю» гильдию профиля | Accepted |
+| [021](ADR-021-render-static-dynamic-card-split.md) | Карточки — статичная подложка (ассеты) + дешёвый composite динамики (A6) | Accepted |

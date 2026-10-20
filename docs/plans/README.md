@@ -29,7 +29,7 @@
 | [persona_library_plan.md](persona_library_plan.md) | Библиотеки персон: 1 персонаж = 1 библиотека | ✅ Реализовано | — |
 | [Poposya_ideas.md](Poposya_ideas.md) | Банк идей «живой персоны» | ✅ Реализовано | — |
 | [Poposya_ideas2.md](Poposya_ideas2.md) | Идеи участия персоны в жизни сервера | ✅ Реализовано | — |
-| [achievements.md](achievements.md) | Ачивки сервера с рендер-карточками | 🟡 Черновик | — |
+| [achievements.md](achievements.md) | Ачивки сервера с рендер-карточками | 🟢 MVP в коде, вторая волна — по ADR | [ADR-019](../adr/ADR-019-hidden-achievements-and-hooks.md) |
 
 ## Идеи и оценки
 
@@ -39,7 +39,7 @@
 | [Poposya_improvement_plan.md](Poposya_improvement_plan.md) | План улучшения и продуктовая оценка (источник [ADR-005](../adr/ADR-005-requirements-lock-source-of-truth.md), [ADR-006](../adr/ADR-006-feature-oriented-architecture.md)) |
 | [Poposya_WARDEN_Technical_Audit_v2.md](Poposya_WARDEN_Technical_Audit_v2.md) | Повторный техаудит (источник [ADR-011](../adr/ADR-011-durable-command-bridge.md), [ADR-013](../adr/ADR-013-warden-docker-socket-allowlist.md)) |
 | [perf-baseline.md](perf-baseline.md) | Замер производительности под нагрузкой + оценка ёмкости и VPS (2026-08-16) |
-| [scale-300-guilds.md](scale-300-guilds.md) | План масштабирования до 300 активных гильдий: рычаги, порядок, риск-матрица (2026-08-16) |
+| [scale-300-guilds.md](scale-300-guilds.md) | План масштабирования до 300 активных гильдий: рычаги, порядок, риск-матрица (2026-08-16) | Источник [ADR-021](../adr/ADR-021-render-static-dynamic-card-split.md) |
 | [WARDEN.md](WARDEN.md), [WARDEN V2.md](WARDEN%20V2.md) | Ранние design-спеки WARDEN (актуальная — в [WARDEN/DESIGN.md](../../../WARDEN/DESIGN.md); решение — [ADR-004](../adr/ADR-004-warden-independent.md)) |
 
 ## Вне кода
@@ -47,7 +47,6 @@
 - **Хостинг** — вынести бота на постоянный сервер.
 - **Настоящий TLS** — заменить самоподписанный сертификат панели на выданный CA
   (см. [web/TLS.md](../../web/TLS.md)).
-- **Ачивки** — [achievements.md](achievements.md), каталог обсуждается.
 
 > Контент-ассеты (системный промпт персоны, текст правил сервера) переехали из
 > `docs/` в [../content/](../content/).
