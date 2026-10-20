@@ -191,6 +191,7 @@ class PoposyaBot(commands.Bot):
         from src.infrastructure.discord.cogs.onboarding import OnboardingCog
         from src.infrastructure.discord.cogs.premium import PremiumCog
         from src.infrastructure.discord.cogs.privacy import PrivacyCog
+        from src.infrastructure.discord.cogs.riot import RiotCog
         from src.infrastructure.discord.cogs.role_mirror import RoleMirrorCog
         from src.infrastructure.discord.cogs.secret_room import SecretRoomCog
         from src.infrastructure.discord.cogs.staykick import StayKickCog
@@ -233,6 +234,16 @@ class PoposyaBot(commands.Bot):
             SteamCog(
                 self,
                 self.container.steam,
+                self.container.settings,
+                gs,
+                persona=persona,
+                entitlements=entitlements,
+            )
+        )
+        await self.add_cog(
+            RiotCog(
+                self,
+                self.container.riot,
                 self.container.settings,
                 gs,
                 persona=persona,

@@ -47,6 +47,7 @@ from src.infrastructure.db.repositories.relationship import (
     SqlAlchemySecretRoomRepository,
 )
 from src.infrastructure.db.repositories.repos import SqlAlchemyTrackedRepoRepository
+from src.infrastructure.db.repositories.riot import SqlAlchemyTrackedRiotGameRepository
 from src.infrastructure.db.repositories.roles import SqlAlchemyRoleRepository
 from src.infrastructure.db.repositories.staykick import SqlAlchemyPendingKickRepository
 from src.infrastructure.db.repositories.steam import SqlAlchemyTrackedGameRepository
@@ -102,6 +103,7 @@ class SqlAlchemyUnitOfWork(IUnitOfWork):
         self.roles = SqlAlchemyRoleRepository(self._session)
         self.tracked_repos = SqlAlchemyTrackedRepoRepository(self._session)
         self.tracked_games = SqlAlchemyTrackedGameRepository(self._session)
+        self.riot_games = SqlAlchemyTrackedRiotGameRepository(self._session)
         self.server_bans = SqlAlchemyServerBanRepository(self._session)
         self.achievements = SqlAlchemyAchievementRepository(self._session)
         self._events = []

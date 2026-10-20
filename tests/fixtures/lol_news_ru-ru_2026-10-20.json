@@ -1,0 +1,140 @@
+{
+  "props": {
+    "pageProps": {
+      "page": {
+        "baseUrl": "https://www.leagueoflegends.com",
+        "locale": "ru-ru",
+        "url": "https://www.leagueoflegends.com/ru-ru/news/",
+        "blades": [
+          {
+            "fragmentId": "hero",
+            "items": []
+          },
+          {
+            "fragmentId": "news",
+            "items": [
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/6d3f4fed564252b2e0145b179108675508cf5f19-1920x1080.jpg?accountingTag=LoL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#362952",
+                    "secondary": "#ECDCF9",
+                    "label": "#140A29"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/6d3f4fed564252b2e0145b179108675508cf5f19-1920x1080.jpg?accountingTag=LoL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#362952",
+                    "secondary": "#ECDCF9",
+                    "label": "#140A29"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "Изменения обновления 26.21",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "/ru-ru/news/game-updates/league-of-legends-patch-26-21-notes"
+                  }
+                },
+                "analytics": {
+                  "contentId": "patchNote.2d70ed59-50b9-46d7-8146-08aec3258d93.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "WK5o6CvqIU2w03cLtxVA3D",
+                  "publishDate": "2026-10-20T18:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "game-updates",
+                  "title": "Новости об игре",
+                  "description": "Главный источник всех новостей об игре."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "True Damage стильно выходят на сцену! Также вас ждет множество изменений, которые коснутся УП, \"Хаоса\", Classic и \"Арены\"."
+                },
+                "publishedAt": "2026-10-20T18:00:00.000Z"
+              },
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/4ff15ecf542cc15ec8caa4cbdf0b64070d68388d-1920x1080.jpg?accountingTag=LoL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#331A24",
+                    "secondary": "#0f127a",
+                    "label": "#040102"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/4ff15ecf542cc15ec8caa4cbdf0b64070d68388d-1920x1080.jpg?accountingTag=LoL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#331A24",
+                    "secondary": "#0f127a",
+                    "label": "#040102"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "Музыкальное видео гимна ЧМ-2026",
+                "action": {
+                  "type": "youtube_video",
+                  "payload": {
+                    "url": "https://www.youtube.com/watch?v=mlFxxNsExJc",
+                    "youtubeId": "mlFxxNsExJc",
+                    "videoLengthInSeconds": 257
+                  }
+                },
+                "analytics": {
+                  "contentId": "f66af711-fcc3-45d2-b143-0807ad521234.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "66wEnJlWzQVI5sGL9lyqhv",
+                  "publishDate": "2026-10-09T01:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "media",
+                  "title": "Медиа",
+                  "description": "Кинематографические ролики, музыка и другой медиа-контент, а также истории их создания."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "Решимость будущих легенд."
+                },
+                "publishedAt": "2026-10-09T01:00:00.000Z"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

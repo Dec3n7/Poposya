@@ -1,0 +1,141 @@
+{
+  "props": {
+    "pageProps": {
+      "page": {
+        "baseUrl": "https://playvalorant.com",
+        "locale": "ru-ru",
+        "url": "https://playvalorant.com/ru-ru/news/",
+        "blades": [
+          {
+            "fragmentId": "hero",
+            "items": []
+          },
+          {
+            "fragmentId": "news",
+            "items": [
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/0f362cf441de50476d2f2a32af5320e7e2b7daee-1920x1080.jpg?accountingTag=VAL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#09120C",
+                    "secondary": "#FFE6D6",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/0f362cf441de50476d2f2a32af5320e7e2b7daee-1920x1080.jpg?accountingTag=VAL",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#09120C",
+                    "secondary": "#FFE6D6",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "Новая коллекция VALORANT x POP MART",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "https://www.popmart.com/us/products/8962",
+                    "isExternal": true
+                  }
+                },
+                "analytics": {
+                  "contentId": "3d9c4233-2117-4619-a6f5-cc86e53a2da6.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "GfRSevhjBrGIgsHEaUwljT",
+                  "publishDate": "2026-10-15T15:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "riotstore",
+                  "title": "Merch",
+                  "description": "Browse official merchandise and shop the latest collections in store."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "Пополните коллекцию как в игре, так и в жизни. Уже доступно в POP MART."
+                },
+                "publishedAt": "2026-10-15T15:00:00.000Z"
+              },
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/549e358e98eb8249c230b805a493bb11ec65b765-3840x2160.jpg?accountingTag=VAL",
+                  "dimensions": {
+                    "width": 3840,
+                    "height": 2160,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#26162D",
+                    "secondary": "#F9F9DC",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/549e358e98eb8249c230b805a493bb11ec65b765-3840x2160.jpg?accountingTag=VAL",
+                  "dimensions": {
+                    "width": 3840,
+                    "height": 2160,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#26162D",
+                    "secondary": "#F9F9DC",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "VOCÊ É BRABA // Фильм о VALORANT Game Changers Championship 2026",
+                "action": {
+                  "type": "youtube_video",
+                  "payload": {
+                    "url": "https://www.youtube.com/watch?v=69sKYwsxUM8",
+                    "youtubeId": "69sKYwsxUM8",
+                    "videoLengthInSeconds": 109
+                  }
+                },
+                "analytics": {
+                  "contentId": "9d1e51d6-0889-4a0c-abfd-b66ed4cd68e1.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "WK5o6CvqIU2w03cLtxV59j",
+                  "publishDate": "2026-10-20T15:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "esports",
+                  "title": "Киберспорт",
+                  "description": "Сцена для профессиональных игроков VALORANT со всего мира."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "VCT Game Changers Championship 2026 в прямом эфире из Сан-Паулу, Бразилия, с 22 октября по 1 ноября."
+                },
+                "publishedAt": "2026-10-20T15:00:00.000Z"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

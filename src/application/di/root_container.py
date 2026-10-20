@@ -19,6 +19,7 @@ from src.application.moderation.di import ModerationContainer
 from src.application.music.di import MusicContainer
 from src.application.relationship.di import RelationshipContainer
 from src.application.repos.di import ReposContainer
+from src.application.riot.di import RiotContainer
 from src.application.roles.di import RolesContainer
 from src.application.steam.di import SteamContainer
 from src.application.tempvoice.di import TempVoiceContainer
@@ -44,6 +45,7 @@ class RootContainer:
     roles: RolesContainer
     repos: ReposContainer
     steam: SteamContainer
+    riot: RiotContainer
     banwatch: BanwatchContainer
     appeals: AppealsContainer
     achievements: AchievementsContainer
@@ -603,6 +605,50 @@ def build_root_container(settings: Settings) -> RootContainer:
         poll_news=PollNewsUseCase(uow_factory, steam_client),
     )
 
+    # --- Riot-игры: страница новостей (__NEXT_DATA__) + use cases ---
+    from src.application.riot.use_cases import (
+        AddTrackedGameUseCase as AddRiotGameUseCase,
+    )
+    from src.application.riot.use_cases import (
+        CountTrackedGamesUseCase as CountRiotGamesUseCase,
+    )
+    from src.application.riot.use_cases import (
+        FetchLatestNewsUseCase,
+    )
+    from src.application.riot.use_cases import (
+        GetTrackedGameUseCase as GetRiotGameUseCase,
+    )
+    from src.application.riot.use_cases import (
+        ListTrackedGamesUseCase as ListRiotGamesUseCase,
+    )
+    from src.application.riot.use_cases import (
+        MarkAnnouncedUseCase as MarkRiotAnnouncedUseCase,
+    )
+    from src.application.riot.use_cases import (
+        PollNewsUseCase as PollRiotNewsUseCase,
+    )
+    from src.application.riot.use_cases import (
+        RemoveTrackedGameUseCase as RemoveRiotGameUseCase,
+    )
+    from src.infrastructure.riot.client import RiotNewsClient
+
+    riot_client = RiotNewsClient()
+    riot = RiotContainer(
+        fetch_news=FetchLatestNewsUseCase(riot_client),
+        get_game=GetRiotGameUseCase(uow_factory),
+        list_games=ListRiotGamesUseCase(uow_factory),
+        count_games=CountRiotGamesUseCase(uow_factory),
+        add_game=AddRiotGameUseCase(uow_factory),
+        remove_game=RemoveRiotGameUseCase(uow_factory),
+        mark_announced=MarkRiotAnnouncedUseCase(uow_factory),
+        poll_news=PollRiotNewsUseCase(
+            uow_factory,
+            riot_client,
+            settings_provider=settings_reader,
+            default_locale=settings.riot_locale,
+        ),
+    )
+
     # --- кросс-серверные баны: сбор со всех серверов + показ модератору ---
     from src.application.banwatch.use_cases import (
         CheckUserUseCase,
@@ -658,6 +704,7 @@ def build_root_container(settings: Settings) -> RootContainer:
         roles=roles,
         repos=repos,
         steam=steam,
+        riot=riot,
         banwatch=banwatch,
         appeals=appeals,
         achievements=achievements,

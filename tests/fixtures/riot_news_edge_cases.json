@@ -1,0 +1,71 @@
+{
+  "props": {
+    "pageProps": {
+      "page": {
+        "baseUrl": "https://playvalorant.com",
+        "locale": "ru-ru",
+        "url": "https://playvalorant.com/ru-ru/news/",
+        "blades": [
+          {
+            "fragmentId": "news",
+            "items": [
+              {
+                "title": "Новость без contentId",
+                "description": "<p>Текст новости.</p>",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "/ru-ru/news/no-id/"
+                  }
+                },
+                "category": {
+                  "machineName": "news",
+                  "title": "Новости"
+                },
+                "publishedAt": "2026-10-18T09:30:00+03:00"
+              },
+              {
+                "title": "Новость без ссылки",
+                "description": {
+                  "type": "html",
+                  "body": "<p>Только текст.</p>"
+                },
+                "action": {
+                  "type": "weblink",
+                  "payload": {}
+                },
+                "publishedAt": "2026-10-17T08:00:00Z"
+              },
+              {
+                "title": "Без даты",
+                "description": "<p>x</p>",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "/ru-ru/news/broken/"
+                  }
+                },
+                "category": "news"
+              },
+              {
+                "title": "Описание строкой и категория строкой",
+                "description": "<p>Legacy-формат: строка.</p>",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "/ru-ru/news/legacy/"
+                  }
+                },
+                "category": "game_updates",
+                "publishedAt": "2026-10-16T08:00:00Z",
+                "media": {
+                  "url": "https://cdn.example/valorant/banner.jpg"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

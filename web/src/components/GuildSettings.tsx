@@ -30,6 +30,7 @@ const SECTIONS: { title: string; match: (k: string) => boolean }[] = [
   { title: "Киноклуб", match: (k) => k.startsWith("cinema_") },
   { title: "GitHub-репозитории", match: (k) => k.startsWith("git_") },
   { title: "Steam-игры", match: (k) => k.startsWith("steam_") },
+  { title: "Riot-игры", match: (k) => k.startsWith("riot_") },
   { title: "Еженедельный дайджест", match: (k) => k.startsWith("digest_") },
   { title: "Находки", match: (k) => k.startsWith("finds_") },
   { title: "Музыка", match: (k) => k.startsWith("music_") },

@@ -37,6 +37,7 @@ from src.domain.relationship.repository import (
     ISecretRoomRepository,
 )
 from src.domain.repos.repository import ITrackedRepoRepository
+from src.domain.riot.repository import ITrackedRiotGameRepository
 from src.domain.roles.repository import IRoleRepository
 from src.domain.staykick.repository import IPendingKickRepository
 from src.domain.steam.repository import ITrackedGameRepository
@@ -78,6 +79,7 @@ class IUnitOfWork(ABC):
     roles: IRoleRepository
     tracked_repos: ITrackedRepoRepository
     tracked_games: ITrackedGameRepository
+    riot_games: ITrackedRiotGameRepository
     server_bans: IServerBanRepository
     achievements: IAchievementRepository
 

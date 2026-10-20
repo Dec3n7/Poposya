@@ -1,0 +1,140 @@
+{
+  "props": {
+    "pageProps": {
+      "page": {
+        "baseUrl": "https://teamfighttactics.leagueoflegends.com",
+        "locale": "ru-ru",
+        "url": "https://teamfighttactics.leagueoflegends.com/ru-ru/news/",
+        "blades": [
+          {
+            "fragmentId": "hero",
+            "items": []
+          },
+          {
+            "fragmentId": "news",
+            "items": [
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/d3a74fd1c3aa575c3a50af069576fa6e4d96ce3f-1920x1080.jpg?accountingTag=TFT",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#B88E00",
+                    "secondary": "#332930",
+                    "label": "#1B180F"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/d3a74fd1c3aa575c3a50af069576fa6e4d96ce3f-1920x1080.jpg?accountingTag=TFT",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#B88E00",
+                    "secondary": "#332930",
+                    "label": "#1B180F"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "Все самое важное о региональных финалах",
+                "action": {
+                  "type": "weblink",
+                  "payload": {
+                    "url": "/ru-ru/news/esports/regional-finals-2026-everything-you-need-to-know"
+                  }
+                },
+                "analytics": {
+                  "contentId": "78ffe0d9-1999-49bd-8afd-9aef4cd36f89.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "cm2bS90wckmFWt5dS7F0Re",
+                  "publishDate": "2026-10-20T14:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "esports",
+                  "title": "Киберспорт",
+                  "description": "Сцена для профессиональных игроков Teamfight Tactics со всего мира."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "Лучшие игроки каждого региона будут сражаться друг с другом 23–25 октября и с 30 октября по 1 ноября"
+                },
+                "publishedAt": "2026-10-20T14:00:00.000Z"
+              },
+              {
+                "media": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/17cf0688958112582998567c6c8849e1685db1a3-1920x1080.jpg?accountingTag=TFT",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#231212",
+                    "secondary": "#E2DCF9",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "imageMedia": {
+                  "type": "image",
+                  "provider": "sanity",
+                  "url": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/17cf0688958112582998567c6c8849e1685db1a3-1920x1080.jpg?accountingTag=TFT",
+                  "dimensions": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspectRatio": 1.7777777777777777
+                  },
+                  "colors": {
+                    "primary": "#231212",
+                    "secondary": "#E2DCF9",
+                    "label": "#000000"
+                  },
+                  "mimeType": "image/jpeg"
+                },
+                "title": "Следите за правками | Разработка TFT",
+                "action": {
+                  "type": "youtube_video",
+                  "payload": {
+                    "url": "https://www.youtube.com/watch?v=Iz7AYA8X9Ak",
+                    "youtubeId": "Iz7AYA8X9Ak",
+                    "videoLengthInSeconds": 302
+                  }
+                },
+                "analytics": {
+                  "contentId": "cf96cd6e-7fb1-46ce-8763-b5dbf5410e56.ru-ru",
+                  "contentLocale": "ru-ru",
+                  "rev": "WK5o6CvqIU2w03cLtxV7rz",
+                  "publishDate": "2026-10-20T17:00:00.000Z",
+                  "placementSourcing": "listed"
+                },
+                "category": {
+                  "machineName": "dev",
+                  "title": "Уголок разработчиков",
+                  "description": "Взгляд изнутри на различные аспекты разработки Teamfight Tactics."
+                },
+                "description": {
+                  "type": "html",
+                  "body": "Впереди много работы. Джефф рассказывает о проблемах перехода на новый движок и планах на будущее."
+                },
+                "publishedAt": "2026-10-20T17:00:00.000Z"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

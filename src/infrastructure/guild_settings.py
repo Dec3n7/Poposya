@@ -114,6 +114,9 @@ _LABELS: dict[str, tuple[str, str]] = {
     # Steam-игры
     "steam_forum_channel": ("Форум новостей Steam (0=выкл)", ""),
     "steam_manager_role": ("Роль-менеджер /steam (ID/имя; пусто = только админ)", ""),
+    # Riot-игры
+    "riot_forum_channel": ("Форум новостей Riot (0=выкл)", ""),
+    "riot_locale": ("Локаль новостей Riot", ""),
     # дайджест
     "digest_channel": ("Канал недельного дайджеста (0=выкл)", ""),
     # апелляции
@@ -148,6 +151,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "finds_enabled": ("Находки (весь модуль)", ""),
     "git_enabled": ("GitHub-репозитории (весь модуль)", ""),
     "steam_enabled": ("Steam-игры (весь модуль)", ""),
+    "riot_enabled": ("Riot-игры (весь модуль)", ""),
     # тумблеры модуля «Модерация»
     "moderation_enabled": ("Модерация (весь модуль)", ""),
     "moderation_antispam": ("Антиспам (авто-мут за флуд)", ""),
@@ -366,6 +370,17 @@ FEATURE_MODULES: tuple[ModuleSpec, ...] = (
             "Команда /steam подписывает игры Steam: бот заводит по каждой тред в "
             "форум-канале и постит туда официальные новости — обновления, патчи, "
             "анонсы — с картинкой. Форум задаётся настройкой steam_forum_channel."
+        ),
+    ),
+    ModuleSpec(
+        key="riot",
+        label="Riot-игры",
+        master="riot_enabled",
+        subs=(),
+        description=(
+            "Команда /riot подписывает игры Riot (сейчас Valorant): бот заводит игре "
+            "тред в форум-канале и постит туда новости с сайта игры. Форум задаётся "
+            "настройкой riot_forum_channel, язык — riot_locale."
         ),
     ),
     ModuleSpec(

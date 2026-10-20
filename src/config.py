@@ -321,6 +321,7 @@ class Settings(BaseSettings):
     finds_enabled: bool = True
     git_enabled: bool = True
     steam_enabled: bool = True
+    riot_enabled: bool = True
     banwatch_enabled: bool = True
     # кросс-серверные баны: с какого числа серверов участник считается «отмеченным»
     banwatch_threshold: int = 3
@@ -420,6 +421,13 @@ class Settings(BaseSettings):
     steam_manager_role: str = ""
     # форум-канал для тредов игр (дефолт-зеркало guild-настройки; 0 = выкл)
     steam_forum_channel: int = 0
+
+    # --- Riot-игры (/riot) ---
+    riot_poll_interval_minutes: int = 120  # как часто опрашивать новости игр
+    # форум-канал для тредов игр (дефолт-зеркало guild-настройки; 0 = выкл)
+    riot_forum_channel: int = 0
+    # локаль новостной страницы (общая на семью Riot)
+    riot_locale: str = "ru-ru"
     digest_channel: int = 0  # канал недельного дайджеста (0 = не постить)
     appeals_channel: int = 0  # канал очереди апелляций (0 = обжалование выключено)
 
