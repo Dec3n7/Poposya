@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { LiquidButton } from "./LiquidButton";
 
 export function Login({ sessionExpired = false }: { sessionExpired?: boolean }) {
   return (
@@ -14,9 +15,9 @@ export function Login({ sessionExpired = false }: { sessionExpired?: boolean }) 
             Сессия истекла — войди снова.
           </div>
         )}
-        <a className="btn primary login-btn" href={api.loginUrl()}>
+        <LiquidButton href={api.loginUrl()} className="login-btn">
           Войти через Discord
-        </a>
+        </LiquidButton>
       </div>
     </div>
   );

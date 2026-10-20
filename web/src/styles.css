@@ -215,6 +215,339 @@ a {
   }
 }
 
+/* --- liquid glass button (примерка 2026-10-20) ---
+   Призматическая стеклянная кнопка: бегущий блик по кромке (mix-blend screen),
+   conic-кант с вращающимися зацепами, объёмная тень отдельным слоем и 3D-щелчок
+   при нажатии. Структура: .btn-lq-wrap > button.btn-lq > span (лейбл)
+   + .btn-lq-shadow. Всё в em — размер целиком задаёт font-size кнопки
+   (.small или кастомный, см. .login-btn). Адаптация демо под тёмную тему:
+   текст светлый, кант из белых бликов, тени глубже. */
+@property --angle-1 {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: -75deg;
+}
+@property --angle-2 {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: -45deg;
+}
+
+.btn-lq-wrap {
+  --lq-time: 400ms;
+  --lq-ease: cubic-bezier(0.25, 1, 0.5, 1);
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 999vw;
+  background: transparent;
+  pointer-events: none;
+  transition: transform var(--lq-time) var(--lq-ease);
+}
+
+.btn-lq-shadow {
+  --shadow-cuttoff-fix: 2em;
+  position: absolute;
+  width: calc(100% + var(--shadow-cuttoff-fix));
+  height: calc(100% + var(--shadow-cuttoff-fix));
+  top: calc(0% - var(--shadow-cuttoff-fix) / 2);
+  left: calc(0% - var(--shadow-cuttoff-fix) / 2);
+  filter: blur(clamp(2px, 0.125em, 12px));
+  overflow: visible;
+  pointer-events: none;
+}
+.btn-lq-shadow::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 999vw;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.25));
+  width: calc(100% - var(--shadow-cuttoff-fix) - 0.25em);
+  height: calc(100% - var(--shadow-cuttoff-fix) - 0.25em);
+  top: calc(var(--shadow-cuttoff-fix) - 0.5em);
+  left: calc(var(--shadow-cuttoff-fix) - 0.875em);
+  padding: 0.125em;
+  box-sizing: border-box;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  transition: all var(--lq-time) var(--lq-ease);
+  overflow: visible;
+  opacity: 1;
+}
+
+.btn-lq {
+  --border-width: clamp(1px, 0.0625em, 3px);
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  border-radius: 999vw;
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0.05)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.3),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.18),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--glass-rim);
+  backdrop-filter: blur(clamp(1px, 0.125em, 4px)) saturate(160%);
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 4px)) saturate(160%);
+  transition: all var(--lq-time) var(--lq-ease);
+}
+.btn-lq:hover {
+  transform: scale(0.975);
+  backdrop-filter: blur(0.01em) saturate(160%);
+  -webkit-backdrop-filter: blur(0.01em) saturate(160%);
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.3),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.22),
+    0 0.15em 0.05em -0.1em rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+.btn-lq:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 3px;
+}
+.btn-lq:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+.btn-lq:disabled:hover {
+  transform: none;
+  backdrop-filter: blur(clamp(1px, 0.125em, 4px)) saturate(160%);
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 4px)) saturate(160%);
+}
+
+.btn-lq > span {
+  position: relative;
+  display: block;
+  user-select: none;
+  color: inherit;
+  text-shadow: 0 0.15em 0.05em rgba(0, 0, 0, 0.4);
+  transition: all var(--lq-time) var(--lq-ease);
+  padding-inline: 1.25em;
+  padding-block: 0.6em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-lq:hover > span {
+  text-shadow: 0.025em 0.025em 0.025em rgba(0, 0, 0, 0.45);
+}
+
+/* бегущий блик: полоса белого скользит по лейблу на hover/active */
+.btn-lq > span::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  box-sizing: border-box;
+  border-radius: 999vw;
+  overflow: clip;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 40% 50%,
+    rgba(255, 255, 255, 0) 55%
+  );
+  z-index: 3;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  transition:
+    background-position calc(var(--lq-time) * 1.25) var(--lq-ease),
+    --angle-2 calc(var(--lq-time) * 1.25) var(--lq-ease);
+}
+.btn-lq:hover > span::after {
+  background-position: 25% 50%;
+}
+.btn-lq:active > span::after {
+  background-position: 50% 15%;
+  --angle-2: -15deg;
+}
+
+/* кант: вращающийся conic-блик по периметру (mask-composite: exclude) */
+.btn-lq::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: 999vw;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background:
+    conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(255, 255, 255, 0.65),
+      rgba(255, 255, 255, 0) 5% 40%,
+      rgba(255, 255, 255, 0.65) 50%,
+      rgba(255, 255, 255, 0) 60% 95%,
+      rgba(255, 255, 255, 0.65)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08));
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  transition:
+    all var(--lq-time) var(--lq-ease),
+    --angle-1 500ms ease;
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+.btn-lq:hover::after {
+  --angle-1: -125deg;
+}
+.btn-lq:active::after {
+  --angle-1: -75deg;
+}
+
+/* варианты */
+.btn-lq.primary {
+  color: #fff;
+  background: linear-gradient(
+    -75deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    color-mix(in srgb, var(--accent-hover) 75%, transparent),
+    color-mix(in srgb, var(--accent) 55%, transparent)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.25),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.28),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.5),
+    0 0 0 1px color-mix(in srgb, var(--accent-hover) 40%, transparent),
+    0 0.5em 1.5em -0.5em var(--accent-ring);
+}
+.btn-lq.primary:hover {
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.25),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.32),
+    0 0.15em 0.05em -0.1em rgba(0, 0, 0, 0.55),
+    0 0 0 1px color-mix(in srgb, var(--accent-hover) 65%, transparent),
+    0 0.5em 1.75em -0.4em var(--accent-ring);
+}
+.btn-lq.danger {
+  color: var(--danger);
+  background: linear-gradient(
+    -75deg,
+    color-mix(in srgb, var(--danger) 28%, transparent),
+    color-mix(in srgb, var(--danger) 45%, transparent),
+    color-mix(in srgb, var(--danger) 28%, transparent)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.3),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.12),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.5),
+    0 0 0 1px color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.btn-lq.small {
+  font-size: 13px;
+}
+.btn-lq.small > span {
+  padding-inline: 1em;
+  padding-block: 0.5em;
+}
+
+/* реагирование тени на hover/active */
+.btn-lq-wrap:has(.btn-lq:hover) .btn-lq-shadow {
+  filter: blur(clamp(2px, 0.0625em, 6px));
+}
+.btn-lq-wrap:has(.btn-lq:hover) .btn-lq-shadow::after {
+  top: calc(var(--shadow-cuttoff-fix) - 0.875em);
+}
+.btn-lq-wrap:has(.btn-lq:active) {
+  transform: rotate3d(1, 0, 0, 25deg);
+}
+.btn-lq-wrap:has(.btn-lq:active) .btn-lq {
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.3),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.2),
+    0 0.125em 0.125em -0.125em rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--glass-rim),
+    0 0.225em 0.05em 0 rgba(0, 0, 0, 0.25),
+    0 0.25em 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 0.25em 0.05em 0 rgba(0, 0, 0, 0.3);
+}
+.btn-lq-wrap:has(.btn-lq:active) .btn-lq-shadow {
+  filter: blur(clamp(2px, 0.125em, 12px));
+}
+.btn-lq-wrap:has(.btn-lq:active) .btn-lq-shadow::after {
+  top: calc(var(--shadow-cuttoff-fix) - 0.5em);
+  opacity: 0.75;
+}
+.btn-lq-wrap:has(.btn-lq:active) > span {
+  text-shadow: 0.025em 0.25em 0.05em rgba(0, 0, 0, 0.45);
+}
+
+/* тач: зацепы кромки не анимируем (углы фиксированы), таргет — 44px */
+@media (hover: none) and (pointer: coarse) {
+  .btn-lq > span::after,
+  .btn-lq:active > span::after {
+    --angle-2: -45deg;
+  }
+  .btn-lq::after,
+  .btn-lq:hover::after,
+  .btn-lq:active::after {
+    --angle-1: -75deg;
+  }
+  .btn-lq.small {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-lq-wrap,
+  .btn-lq,
+  .btn-lq > span,
+  .btn-lq > span::after,
+  .btn-lq::after,
+  .btn-lq-shadow,
+  .btn-lq-shadow::after {
+    transition: none;
+  }
+  .btn-lq:hover,
+  .btn-lq-wrap:has(.btn-lq:active) {
+    transform: none;
+  }
+}
+
 /* --- misc --- */
 .muted {
   color: var(--fg-dim);
@@ -943,9 +1276,13 @@ textarea {
   font-size: 34px;
   filter: drop-shadow(0 0 18px var(--accent-ring));
 }
-.login-btn {
-  display: inline-block;
+/* liquid glass-кнопка на логине: крупнее базовой (em-скейлинг всей кнопки),
+   отступ задаём через обёртку — на inner-элементе margin ломает позиционирование тени */
+.login-card .btn-lq-wrap {
   margin-top: var(--sp-2);
+}
+.login-btn {
+  font-size: 16px;
 }
 .login-notice {
   margin-top: var(--sp-3);
