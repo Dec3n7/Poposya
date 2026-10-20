@@ -5,7 +5,6 @@
 доменная логика (что считать новым релизом, отметки) — в use cases. Фоновый
 цикл опроса запускается на on_ready и отменяется в cog_unload (как в находках)."""
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import cast
@@ -14,6 +13,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.application.news.poller import NewsPoller
 from src.application.repos.di import ReposContainer
 from src.application.repos.use_cases import RepoUpdate
 from src.config import Settings
@@ -58,8 +58,11 @@ class GitCog(commands.Cog):
         self.gs = guild_settings
         self.entitlements = entitlements
         self.persona = persona if persona is not None else RegistryPersona()
-        self._loop_started = False
-        self._tasks: list[asyncio.Task] = []
+        self._poller = NewsPoller(
+            name="GitHub-трекер",
+            interval_seconds=self._interval_seconds,
+            tick=self._run_poll,
+        )
 
     # --- инфраструктура кога ---
 
@@ -73,8 +76,7 @@ class GitCog(commands.Cog):
         return await require_tier(interaction, self.entitlements, "git_enabled")
 
     def cog_unload(self) -> None:  # type: ignore[override]  # discord.py допускает и sync
-        for task in self._tasks:
-            task.cancel()
+        self._poller.stop()
 
     @property
     def _interval_seconds(self) -> int:
@@ -90,22 +92,9 @@ class GitCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        if self._loop_started:
+        if self._poller.started:
             return
-        self._loop_started = True
-        self._tasks.append(asyncio.create_task(self._poll_loop()))
-        logger.info(
-            "GitHub-трекер: цикл опроса запущен (интервал %d мин)",
-            self.settings.github_poll_interval_minutes,
-        )
-
-    async def _poll_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self._interval_seconds)
-            try:
-                await self._run_poll()
-            except Exception:
-                logger.exception("Опрос релизов упал на такте — продолжаю")
+        self._poller.start()
 
     async def _run_poll(self) -> None:
         updates = await self.repos.poll_releases.execute()

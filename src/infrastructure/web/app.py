@@ -21,6 +21,11 @@ _LAG_PROBE_SECONDS = 0.05
 # заголовок доступа к /health/full, когда включён токен
 _HEALTH_FULL_HEADER = "X-Health-Token"
 
+# Версия health-схемы для контракта бот↔WARDEN (ADR-018). Растёт при любом
+# обратно-несовместимом изменении состава/типов/смысла полей ответа. Обратно
+# совместимые добавления (новое поле метрики/проверки) версию не поднимают.
+HEALTH_SCHEMA_VERSION = 1
+
 
 class HealthChecker:
     """Реестр проверок здоровья (ТЗ 9.3). Упавшая проверка — это False,
@@ -120,6 +125,7 @@ def create_web_app(health_checker: HealthChecker, full_token: str = "") -> web.A
         return web.json_response(
             {
                 "status": "healthy" if all(checks.values()) else "unhealthy",
+                "health_schema_version": HEALTH_SCHEMA_VERSION,
                 "checks": checks,
                 "metrics": metrics,
                 "uptime_seconds": health_checker.uptime_seconds(),

@@ -5,6 +5,23 @@ on:
   pull_request:
 
 jobs:
+  # requirements.lock — единственный источник истины для деплоя (ADR-005): прод
+  # собирается только из него через --require-hashes. Если requirements.txt
+  # изменили, а лок не перегенерировали, образ соберётся со старыми версиями —
+  # и это выяснится лишь в проде. Гейт регенерирует лок из requirements.txt в том
+  # же образе python:3.12-slim (хэши платформозависимы) и падает при расхождении.
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate lock and check it matches requirements.txt
+        run: |
+          docker run --rm -v "$PWD":/w -w /w python:3.12-slim bash -c \
+            "pip install --quiet pip-tools && pip-compile --generate-hashes --quiet -o requirements.lock requirements.txt"
+          git diff --exit-code requirements.lock \
+            || { echo "::error::requirements.lock рассинхронизирован с requirements.txt — перегенерируйте лок (см. RUNBOOK, «Обновление зависимостей»)"; exit 1; }
+
   quality:
     runs-on: ubuntu-latest
     steps:
