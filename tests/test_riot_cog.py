@@ -96,7 +96,9 @@ async def test_add_race_answers_friendly_and_deletes_duplicate_thread():
             )
         ),
         get_game=SimpleNamespace(execute=AsyncMock(return_value=None)),
-        add_game=SimpleNamespace(execute=AsyncMock(side_effect=GameAlreadyTrackedError("valorant"))),
+        add_game=SimpleNamespace(
+            execute=AsyncMock(side_effect=GameAlreadyTrackedError("valorant"))
+        ),
     )
     cog = make_cog(container)
 

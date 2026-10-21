@@ -115,9 +115,7 @@ def test_edge_skips_broken_item_without_date():
 
 def test_edge_gid_fallbacks():
     items = {n.title: n for n in parse_next_data(load("riot_news_edge_cases.json")).items}
-    assert items["Новость без contentId"].gid == (
-        "https://playvalorant.com/ru-ru/news/no-id/"
-    )
+    assert items["Новость без contentId"].gid == ("https://playvalorant.com/ru-ru/news/no-id/")
     hashed = items["Новость без ссылки"].gid
     assert len(hashed) == 16 and hashed.isalnum()
 

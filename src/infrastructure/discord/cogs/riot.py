@@ -180,10 +180,7 @@ class RiotCog(commands.Cog):
     @riot_group.command(name="add", description="Отслеживать новости игры Riot")
     @app_commands.describe(game="Игра Riot (по умолчанию Valorant)")
     @app_commands.choices(
-        game=[
-            app_commands.Choice(name=game_label(RiotGame(key)), value=key)
-            for key in GAMES
-        ]
+        game=[app_commands.Choice(name=game_label(RiotGame(key)), value=key) for key in GAMES]
     )
     async def riot_add(
         self, interaction: discord.Interaction, game: str = RiotGame.VALORANT.value
@@ -284,11 +281,7 @@ class RiotCog(commands.Cog):
                     exc_info=True,
                 )
 
-        no_news = (
-            ""
-            if snapshot.latest_news
-            else "\nНовостей пока нет — сообщу, когда появятся."
-        )
+        no_news = "" if snapshot.latest_news else "\nНовостей пока нет — сообщу, когда появятся."
         await interaction.followup.send(
             f"Отслеживаю **{snapshot.name}** → {created.thread.mention}.{no_news}",
             ephemeral=True,

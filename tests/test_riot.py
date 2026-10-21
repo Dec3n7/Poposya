@@ -173,9 +173,7 @@ def test_all_games_registered():
 
 def test_news_url_per_game():
     assert news_url(RiotGame.VALORANT, "ru-ru") == "https://playvalorant.com/ru-ru/news/"
-    assert news_url(RiotGame.LOL, "ru-ru") == (
-        "https://www.leagueoflegends.com/ru-ru/news/"
-    )
+    assert news_url(RiotGame.LOL, "ru-ru") == ("https://www.leagueoflegends.com/ru-ru/news/")
     assert news_url(RiotGame.TWO_XKO, "en-us") == "https://2xko.riotgames.com/en-us/news/"
 
 
