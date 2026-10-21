@@ -85,3 +85,4 @@
 | [019](ADR-019-hidden-achievements-and-hooks.md) | Скрытые ачивки — класс с полем `hidden`; вторая волна — аддитивные события шины | Accepted |
 | [020](ADR-020-dm-home-guild.md) | DM-фичи отношений — через явно выбранную «домашнюю» гильдию профиля | Accepted |
 | [021](ADR-021-render-static-dynamic-card-split.md) | Карточки — статичная подложка (ассеты) + дешёвый composite динамики (A6) | Accepted |
+| [022](ADR-022-asclepius-self-healing.md) | **ASCLÉPIUS** — самовосстанавливающаяся архитектура Poposya + WARDEN (immutable-образы, Integrity Guard, recovery state machine, backup) | Proposed |
