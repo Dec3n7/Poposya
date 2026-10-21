@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+  <defs>
+    <linearGradient id="band4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3f52"/><stop offset="1" stop-color="#1d2130"/>
+    </linearGradient>
+    <linearGradient id="cup4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9db0d6"/><stop offset="1" stop-color="#5c6d96"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="18" cy="32.4" rx="9" ry="2" fill="#000" opacity="0.18"/>
+  <path d="M18 4.4c3.6 0 6.3 2.6 6.3 6.2v3.4H11.7v-3.4c0-3.6 2.7-6.2 6.3-6.2z" fill="url(#cup4)"/>
+  <path d="M11.7 11.2c-2.6.2-4.3 2-4.3 4.6 0 2.7 1.9 4.6 4.9 4.8M24.3 11.2c2.6.2 4.3 2 4.3 4.6 0 2.7-1.9 4.6-4.9 4.8" fill="none" stroke="#8b9ac0" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M10.4 22.6h15.2c.8 0 1.4.8 1.2 1.6l-.5 2.1c-.3 1.2-1.3 2-2.5 2H12.2c-1.2 0-2.2-.8-2.5-2l-.5-2.1c-.2-.8.4-1.6 1.2-1.6z" fill="url(#band4)"/>
+  <path d="M13.2 15.6c.6 2 1.8 3 3 3M22.8 15.6c-.6 2-1.8 3-3 3" fill="none" stroke="#c6d2ec" stroke-width="1.3" stroke-linecap="round" opacity="0.7"/>
+</svg>

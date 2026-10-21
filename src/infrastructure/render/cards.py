@@ -6,7 +6,8 @@
 и декоративные пути ложатся в SVG нативно и весят в разы меньше Chromium.
 
 Цветные эмодзи librsvg из шрифта не берёт, поэтому эмблемы вставляются как
-инлайн **Twemoji** SVG (вектор, детерминированно) из каталога `twemoji/`.
+инлайн-вектор: собственные SVG из каталога `icons/` (ключ = имя файла), с
+фолбэком на **Twemoji** SVG из каталога `twemoji/` (для эмодзи-значений).
 Twemoji © Twitter, лицензия CC-BY 4.0.
 
 Пользовательский текст экранируется (`_esc`); SVG-текст не переносится сам —
@@ -42,7 +43,8 @@ PREMIUM_W, PREMIUM_H = 1200, 800
 FONT = "DejaVu Sans"  # есть в образе renderer; кириллица + латиница
 
 _TWEMOJI_DIR = Path(__file__).parent / "twemoji"
-_emoji_cache: dict[str, str | None] = {}
+_ICONS_DIR = Path(__file__).parent / "icons"
+_icon_cache: dict[str, str | None] = {}
 
 
 # ── помощники ─────────────────────────────────────────────────────────────────
@@ -93,23 +95,32 @@ def _emoji_key(char: str) -> str:
     return "-".join(f"{ord(c):x}" for c in char if ord(c) != 0xFE0F)
 
 
-def _emoji_inner(char: str) -> str | None:
-    """Внутренние пути Twemoji-SVG (без внешнего <svg>, viewBox 0 0 36 36)."""
-    key = _emoji_key(char)
-    if key in _emoji_cache:
-        return _emoji_cache[key]
-    path = _TWEMOJI_DIR / f"{key}.svg"
+def _svg_inner(raw: str) -> str:
+    """Внутренние пути чужого SVG (без внешнего <svg>)."""
+    return re.sub(r"</svg>\s*$", "", re.sub(r"^<svg[^>]*>", "", raw.strip()))
+
+
+def _resolve_icon(key: str) -> str | None:
+    """Внутренние пути иконки по ключу: сначала `icons/<key>.svg`, затем
+    фолбэк на Twemoji (`<codepoint>.svg`, если ключ — эмодзи-символ).
+    Нет ассета → None."""
+    if key in _icon_cache:
+        return _icon_cache[key]
     inner: str | None = None
-    if path.exists():
-        raw = path.read_text(encoding="utf-8").strip()
-        inner = re.sub(r"</svg>\s*$", "", re.sub(r"^<svg[^>]*>", "", raw))
-    _emoji_cache[key] = inner
+    custom = _ICONS_DIR / f"{key}.svg"
+    if custom.exists():
+        inner = _svg_inner(custom.read_text(encoding="utf-8"))
+    else:
+        twemoji = _TWEMOJI_DIR / f"{_emoji_key(key) if not key.isascii() else key}.svg"
+        if twemoji.exists():
+            inner = _svg_inner(twemoji.read_text(encoding="utf-8"))
+    _icon_cache[key] = inner
     return inner
 
 
-def _emoji(char: str, cx: float, cy: float, size: float) -> str:
-    """Инлайн Twemoji, центр в (cx,cy), сторона box = size. Нет ассета → пусто."""
-    inner = _emoji_inner(char)
+def _icon(key: str, cx: float, cy: float, size: float) -> str:
+    """Инлайн иконки, центр в (cx,cy), сторона box = size. Нет ассета → пусто."""
+    inner = _resolve_icon(key)
     if inner is None:
         return ""
     x, y = cx - size / 2, cy - size / 2
@@ -196,7 +207,7 @@ def achievement_card_html(card: AchievementCard) -> tuple[str, int, int]:
     <rect x="{hx_cx - hx_w / 2}" y="{hx_cy - hx_h / 2}" width="{hx_w}" height="{hx_h}" fill="url(#acca)"/>
     <rect x="{hx_cx - hx_w / 2}" y="{hx_cy - hx_h / 2}" width="{hx_w}" height="{hx_h / 2}" fill="url(#glossa)"/>
   </g>
-  {_emoji(card.icon, hx_cx, hx_cy - 8, 118)}
+  {_icon(card.icon, hx_cx, hx_cy - 8, 118)}
   <g>
     <rect x="{hx_cx - 92}" y="242" width="184" height="34" rx="8" fill="url(#acca)"/>
     <text x="{hx_cx}" y="265" font-family="{FONT}" font-size="18" font-weight="bold"
@@ -417,7 +428,7 @@ def premium_card_html(tier: str) -> tuple[str, int, int]:
         cols_svg.append(
             f'<rect x="{cx}" y="{y0}" width="{col_w}" height="{col_h}" rx="20" '
             f'fill="#ffffff08" stroke="{border}" stroke-width="{bw}"/>'
-            f"{_emoji(emoji, cx + 40, y0 + 44, 40)}"
+            f"{_icon(emoji, cx + 40, y0 + 44, 40)}"
             f'<text x="{cx + 68}" y="{y0 + 54}" font-family="{FONT}" font-size="30" '
             f'font-weight="bold" fill="#eef0fb">{_esc(name)}</text>'
             f'<text x="{cx + 24}" y="{y0 + 88}" font-family="{FONT}" font-size="18" '

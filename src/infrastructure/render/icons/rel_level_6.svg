@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+  <defs>
+    <linearGradient id="heart6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4c63"/><stop offset="1" stop-color="#16141f"/>
+    </linearGradient>
+    <linearGradient id="shine6" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b9a6ff" stop-opacity="0.9"/><stop offset="1" stop-color="#6f5fae" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="18" cy="30.8" rx="9" ry="2.2" fill="#000" opacity="0.22"/>
+  <path d="M18 30.4S6.4 23.6 6.4 15.4a6.2 6.2 0 0 1 11.6-3.3 6.2 6.2 0 0 1 11.6 3.3c0 8.2-11.6 15-11.6 15z" fill="url(#heart6)"/>
+  <path d="M11.4 11.6a4.4 4.4 0 0 1 4.6-2.6" fill="none" stroke="url(#shine6)" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M24 20.4l.7 1.7 1.8.2-1.4 1.2.4 1.8-1.5-.9-1.5.9.4-1.8-1.4-1.2 1.8-.2z" fill="#c9b8ff" opacity="0.85"/>
+</svg>

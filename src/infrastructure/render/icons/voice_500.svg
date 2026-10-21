@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+  <defs>
+    <linearGradient id="roofA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9d7a"/><stop offset="1" stop-color="#c94f38"/>
+    </linearGradient>
+    <linearGradient id="wallA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe0b0"/><stop offset="1" stop-color="#d9a86a"/>
+    </linearGradient>
+    <linearGradient id="doorA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5a2b"/><stop offset="1" stop-color="#5a381a"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="18" cy="31.6" rx="11" ry="2.2" fill="#000" opacity="0.2"/>
+  <path d="M18 5.6l12.4 10.2H5.6z" fill="url(#roofA)"/>
+  <rect x="8.4" y="15.6" width="19.2" height="14" fill="url(#wallA)"/>
+  <rect x="15.6" y="21" width="4.8" height="8.6" rx="0.8" fill="url(#doorA)"/>
+  <circle cx="19.4" cy="25.6" r="0.7" fill="#ffe6a3"/>
+  <rect x="11" y="18.6" width="3.4" height="3.4" rx="0.6" fill="#7fb6e6"/>
+  <rect x="21.6" y="18.6" width="3.4" height="3.4" rx="0.6" fill="#7fb6e6"/>
+  <path d="M11 18.6h3.4v3.4M21.6 18.6H25v3.4" stroke="#5f88b8" stroke-width="0.7"/>
+  <circle cx="18" cy="12.4" r="1.6" fill="#ffe6a3" opacity="0.9"/>
+</svg>
