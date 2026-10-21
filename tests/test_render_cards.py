@@ -1,17 +1,23 @@
 """SVG-билдеры карточек — чистые строки (без запуска растеризатора).
 
 Проверяем подстановку полей, тир→акцент, экранирование пользовательского текста
-и инлайн Twemoji для эмодзи-эмблемы. Сам растр (librsvg→PNG) — интеграция, здесь
-не гоняется."""
+и инлайн-эмблему (собственная иконка `icons/<key>.svg`, фолбэк на Twemoji).
+Сам растр (librsvg→PNG) — интеграция, здесь не гоняется."""
 
+from pathlib import Path
+
+from src.domain.achievements.catalog import CATALOG
 from src.infrastructure.render.cards import (
     TIER_ACCENTS,
     AchievementCard,
     RankCard,
+    _resolve_icon,
     achievement_card_html,
     premium_card_html,
     rank_card_html,
 )
+
+_ICONS_DIR = Path(__file__).resolve().parents[1] / "src" / "infrastructure" / "render" / "icons"
 
 
 def test_achievement_card_has_fields_tier_and_inline_emoji():
@@ -20,7 +26,7 @@ def test_achievement_card_has_fields_tier_and_inline_emoji():
             name="Меломан",
             description="Любовь к музыке.",
             tier="rare",
-            icon="🎵",  # 1f3b5 — есть в каталоге twemoji
+            icon="🎵",  # эмодзи-значение → фолбэк на Twemoji 1f3b5
         )
     )
     assert w > 0 and h > 0
@@ -29,11 +35,20 @@ def test_achievement_card_has_fields_tier_and_inline_emoji():
     assert "РЕДКАЯ" in svg  # ярлык тира rare
     assert TIER_ACCENTS["rare"][0] in svg  # акцентный цвет тира
     assert "ДОСТИЖЕНИЕ ОТКРЫТО!" in svg
-    # эмодзи вставлено как инлайн-Twemoji (вложенный <svg viewBox="0 0 36 36">),
+    # эмодзи вставлено как инлайн-вектор (вложенный <svg viewBox="0 0 36 36">),
     # а не как сырой символ — librsvg цветной эмодзи-шрифт не рендерит
     assert 'viewBox="0 0 36 36"' in svg
     assert "🎵" not in svg
     assert "(WIP)" in svg  # пометка «не финальный вид»
+
+
+def test_achievement_card_inlines_custom_icon():
+    svg, _, _ = achievement_card_html(
+        AchievementCard(name="X", description="d", tier="common", icon="rel_exclusive")
+    )
+    # собственная иконка ачивки: ключ = имя файла icons/<key>.svg
+    assert 'viewBox="0 0 36 36"' in svg
+    assert "rel_exclusive" not in svg  # вставлены пути, а не ключ
 
 
 def test_achievement_card_escapes_user_text():
@@ -42,7 +57,7 @@ def test_achievement_card_escapes_user_text():
             name="<script>alert(1)</script>",
             description="d",
             tier="common",
-            icon="🔥",  # не в каталоге twemoji → эмблема пустая, карточка строится
+            icon="🔥",  # не в каталоге → эмблема пустая, карточка строится
         )
     )
     assert "<script>" not in svg
@@ -100,3 +115,16 @@ def test_premium_card_highlights_current_tier():
 def test_premium_card_unknown_tier_falls_back_to_free():
     svg, _, _ = premium_card_html("бред")
     assert "ТЕКУЩИЙ" in svg  # какая-то колонка всё равно текущая (free)
+
+
+def test_resolve_icon_custom_file_then_twemoji_then_none():
+    assert _resolve_icon("rel_exclusive") is not None  # own asset
+    assert _resolve_icon("🎵") is not None  # fallback → twemoji
+    assert _resolve_icon("no_such_key") is None  # unknown → empty emblem
+
+
+def test_every_catalog_icon_resolves_to_asset():
+    for a in CATALOG:
+        assert _resolve_icon(a.icon) is not None, a.id
+        # у собственных иконок есть файл на диске
+        assert (_ICONS_DIR / f"{a.icon}.svg").exists(), a.id

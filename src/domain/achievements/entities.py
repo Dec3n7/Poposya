@@ -48,7 +48,7 @@ class Achievement:
     name: str
     description: str
     tier: Tier
-    icon: str  # ключ иконки в рендере карточки (ICONS в render/cards.py)
+    icon: str  # ключ ассета: render/icons/<icon>.svg (фолбэк — Twemoji)
     stat_label: str
     stat: Callable[[UserStats], int]
     unlocked: Callable[[UserStats], bool]
